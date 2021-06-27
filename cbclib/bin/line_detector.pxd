@@ -1,4 +1,3 @@
-#cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False, cdivision=True, embedsignature=True
 cdef extern from "lsd.h":
     int LineSegmentDetection(double **out, int *n_out, double *img, int img_x, int img_y,
                              double scale, double sigma_scale,

@@ -39,6 +39,21 @@
 /*----------------------------------------------------------------------------*/
 /** LSD Full Interface
 
+    @param out         Pointer to a double array of size 7 x n_out, containing the list
+                       of line segments detected. The array contains first
+                       7 values of line segment number 1, then the 7 values
+                       of line segment number 2, and so on, and it finish
+                       by the 7 values of line segment number n_out.
+                       The seven values are:
+                       - x1,y1,x2,y2,width,p,-log10(NFA)
+                       .
+                       for a line segment from coordinates (x1,y1) to (x2,y2),
+                       a width 'width', an angle precision of p in (0,1) given
+                       by angle_tolerance/180 degree, and NFA value 'NFA'.
+                       If 'out' is the returned pointer, the 7 values of
+                       line segment number 'n+1' are obtained with
+                       'out[7*n+0]' to 'out[7*n+6]'.
+
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
 
@@ -120,7 +135,19 @@
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            A double array of size 7 x n_out, containing the list
+    @return            LSD returns 0 if it finished normally, -1 othrewise.
+ */
+int LineSegmentDetection( double ** out, int * n_out,
+                          double * img, int X, int Y,
+                          double scale, double sigma_scale, double quant,
+                          double ang_th, double log_eps, double density_th,
+                          int n_bins,
+                          int ** reg_img, int * reg_x, int * reg_y );
+
+/*----------------------------------------------------------------------------*/
+/** LSD Simple Interface with Scale and Region output.
+
+    @param out         Pointer to a double array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -134,16 +161,6 @@
                        If 'out' is the returned pointer, the 7 values of
                        line segment number 'n+1' are obtained with
                        'out[7*n+0]' to 'out[7*n+6]'.
- */
-double * LineSegmentDetection( int * n_out,
-                               double * img, int X, int Y,
-                               double scale, double sigma_scale, double quant,
-                               double ang_th, double log_eps, double density_th,
-                               int n_bins,
-                               int ** reg_img, int * reg_x, int * reg_y );
-
-/*----------------------------------------------------------------------------*/
-/** LSD Simple Interface with Scale and Region output.
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
@@ -188,7 +205,16 @@ double * LineSegmentDetection( int * n_out,
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            A double array of size 7 x n_out, containing the list
+    @return            LSD returns 0 if it finished normally, -1 othrewise.
+ */
+int lsd_scale_region( double ** out, int * n_out,
+                      double * img, int X, int Y, double scale,
+                      int ** reg_img, int * reg_x, int * reg_y );
+
+/*----------------------------------------------------------------------------*/
+/** LSD Simple Interface with Scale
+
+    @param out         Pointer to a double array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -202,13 +228,6 @@ double * LineSegmentDetection( int * n_out,
                        If 'out' is the returned pointer, the 7 values of
                        line segment number 'n+1' are obtained with
                        'out[7*n+0]' to 'out[7*n+6]'.
- */
-double * lsd_scale_region( int * n_out,
-                           double * img, int X, int Y, double scale,
-                           int ** reg_img, int * reg_x, int * reg_y );
-
-/*----------------------------------------------------------------------------*/
-/** LSD Simple Interface with Scale
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
@@ -229,7 +248,14 @@ double * lsd_scale_region( int * n_out,
                        is applied.
                        Suggested value: 0.8
 
-    @return            A double array of size 7 x n_out, containing the list
+    @return            LSD returns 0 if it finished normally, -1 othrewise.
+ */
+int lsd_scale(double ** out, int * n_out, double * img, int X, int Y, double scale);
+
+/*----------------------------------------------------------------------------*/
+/** LSD Simple Interface
+
+    @param out         Pointer to a double array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -243,11 +269,6 @@ double * lsd_scale_region( int * n_out,
                        If 'out' is the returned pointer, the 7 values of
                        line segment number 'n+1' are obtained with
                        'out[7*n+0]' to 'out[7*n+6]'.
- */
-double * lsd_scale(int * n_out, double * img, int X, int Y, double scale);
-
-/*----------------------------------------------------------------------------*/
-/** LSD Simple Interface
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
@@ -260,22 +281,9 @@ double * lsd_scale(int * n_out, double * img, int X, int Y, double scale);
 
     @param Y           Y size of the image: the number of rows.
 
-    @return            A double array of size 7 x n_out, containing the list
-                       of line segments detected. The array contains first
-                       7 values of line segment number 1, then the 7 values
-                       of line segment number 2, and so on, and it finish
-                       by the 7 values of line segment number n_out.
-                       The seven values are:
-                       - x1,y1,x2,y2,width,p,-log10(NFA)
-                       .
-                       for a line segment from coordinates (x1,y1) to (x2,y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance/180 degree, and NFA value 'NFA'.
-                       If 'out' is the returned pointer, the 7 values of
-                       line segment number 'n+1' are obtained with
-                       'out[7*n+0]' to 'out[7*n+6]'.
+    @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-double * lsd(int * n_out, double * img, int X, int Y);
+int lsd(double ** out, int * n_out, double * img, int X, int Y);
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/

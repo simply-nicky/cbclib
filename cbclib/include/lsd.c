@@ -159,7 +159,6 @@ struct point {int x,y;};
 static void error(char * msg)
 {
   fprintf(stderr,"LSD Error: %s\n",msg);
-  exit(EXIT_FAILURE);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -416,6 +415,17 @@ typedef struct image_int_s
   int * data;
   unsigned int xsize,ysize;
 } * image_int;
+
+/*----------------------------------------------------------------------------*/
+/** Free memory used in image_int 'i'.
+ */
+static void free_image_int(image_int i)
+{
+  if( i == NULL || i->data == NULL )
+    error("free_image_int: invalid input image.");
+  free( (void *) i->data );
+  free( (void *) i );
+}
 
 /*----------------------------------------------------------------------------*/
 /** Create a new image_int of size 'xsize' times 'ysize'.
@@ -2022,16 +2032,14 @@ static int refine( struct point * reg, int * reg_size, image_double modgrad,
 /*----------------------------------------------------------------------------*/
 /** LSD full interface.
  */
-double * LineSegmentDetection( int * n_out,
-                               double * img, int X, int Y,
-                               double scale, double sigma_scale, double quant,
-                               double ang_th, double log_eps, double density_th,
-                               int n_bins,
-                               int ** reg_img, int * reg_x, int * reg_y )
+int LineSegmentDetection( double ** out, int * n_out,
+                          double * img, int X, int Y,
+                          double scale, double sigma_scale, double quant,
+                          double ang_th, double log_eps, double density_th,
+                          int n_bins, int ** reg_img, int * reg_x, int * reg_y )
 {
   image_double image;
-  ntuple_list out = new_ntuple_list(7);
-  double * return_value;
+  ntuple_list out_buf = new_ntuple_list(7);
   image_double scaled_image,angles,modgrad;
   image_char used;
   image_int region = NULL;
@@ -2046,15 +2054,15 @@ double * LineSegmentDetection( int * n_out,
 
 
   /* check parameters */
-  if( img == NULL || X <= 0 || Y <= 0 ) error("invalid image input.");
-  if( scale <= 0.0 ) error("'scale' value must be positive.");
-  if( sigma_scale <= 0.0 ) error("'sigma_scale' value must be positive.");
-  if( quant < 0.0 ) error("'quant' value must be positive.");
+  if( img == NULL || X <= 0 || Y <= 0 ) {error("invalid image input."); return -1;}
+  if( scale <= 0.0 ) {error("'scale' value must be positive."); return -1;}
+  if( sigma_scale <= 0.0 ) {error("'sigma_scale' value must be positive."); return -1;}
+  if( quant < 0.0 ) {error("'quant' value must be positive."); return -1;}
   if( ang_th <= 0.0 || ang_th >= 180.0 )
-    error("'ang_th' value must be in the range (0,180).");
+    {error("'ang_th' value must be in the range (0,180)."); return -1;}
   if( density_th < 0.0 || density_th > 1.0 )
-    error("'density_th' value must be in the range [0,1].");
-  if( n_bins <= 0 ) error("'n_bins' value must be positive.");
+    {error("'density_th' value must be in the range [0,1]."); return -1;}
+  if( n_bins <= 0 ) {error("'n_bins' value must be positive."); return -1;}
 
 
   /* angle tolerance */
@@ -2158,7 +2166,7 @@ double * LineSegmentDetection( int * n_out,
           }
 
         /* add line segment found to output */
-        add_7tuple( out, rec.x1, rec.y1, rec.x2, rec.y2,
+        add_7tuple( out_buf, rec.x1, rec.y1, rec.x2, rec.y2,
                          rec.width, rec.p, log_nfa );
 
         /* add region number to 'region' image if needed */
@@ -2180,38 +2188,44 @@ double * LineSegmentDetection( int * n_out,
 
   /* return the result */
   if( reg_img != NULL && reg_x != NULL && reg_y != NULL )
-    {
-      if( region == NULL ) error("'region' should be a valid image.");
-      *reg_img = region->data;
-      if( region->xsize > (unsigned int) INT_MAX ||
-          region->xsize > (unsigned int) INT_MAX )
-        error("region image to big to fit in INT sizes.");
-      *reg_x = (int) (region->xsize);
-      *reg_y = (int) (region->ysize);
+  {
+    if( region == NULL ) error("'region' should be a valid image.");
+    *reg_img = region->data;
+    if( region->xsize > (unsigned int) INT_MAX ||
+        region->xsize > (unsigned int) INT_MAX )
+      error("region image to big to fit in INT sizes.");
+    *reg_x = (int) (region->xsize);
+    *reg_y = (int) (region->ysize);
 
-      /* free the 'region' structure.
-         we cannot use the function 'free_image_int' because we need to keep
-         the memory with the image data to be returned by this function. */
-      free( (void *) region );
-    }
-  if( out->size > (unsigned int) INT_MAX )
-    error("too many detections to fit in an INT.");
-  *n_out = (int) (out->size);
+    /* free the 'region' structure.
+        we cannot use the function 'free_image_int' because we need to keep
+        the memory with the image data to be returned by this function. */
+    free( (void *) region );
+  }
+  
+  if( out != NULL && n_out != NULL)
+  {
+    if( out_buf->size > (unsigned int) INT_MAX )
+      error("too many detections to fit in an INT.");
+    *n_out = (int) (out_buf->size);
 
-  return_value = out->values;
-  free( (void *) out );  /* only the 'ntuple_list' structure must be freed,
-                            but the 'values' pointer must be keep to return
-                            as a result. */
+    *out = out_buf->values;
+    free( (void *) out_buf );  /* only the 'ntuple_list' structure must be freed,
+                              but the 'values' pointer must be keep to return
+                              as a result. */
+    
+  }
+  else free_ntuple_list( out_buf );
 
-  return return_value;
+  return 0;
 }
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
  */
-double * lsd_scale_region( int * n_out,
-                           double * img, int X, int Y, double scale,
-                           int ** reg_img, int * reg_x, int * reg_y )
+int lsd_scale_region( double ** out, int * n_out,
+                      double * img, int X, int Y, double scale,
+                      int ** reg_img, int * reg_x, int * reg_y )
 {
   /* LSD parameters */
   double sigma_scale = 0.6; /* Sigma for Gaussian filter is computed as
@@ -2224,7 +2238,7 @@ double * lsd_scale_region( int * n_out,
   int n_bins = 1024;        /* Number of bins in pseudo-ordering of gradient
                                modulus.                                       */
 
-  return LineSegmentDetection( n_out, img, X, Y, scale, sigma_scale, quant,
+  return LineSegmentDetection( out, n_out, img, X, Y, scale, sigma_scale, quant,
                                ang_th, log_eps, density_th, n_bins,
                                reg_img, reg_x, reg_y );
 }
@@ -2232,19 +2246,19 @@ double * lsd_scale_region( int * n_out,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale.
  */
-double * lsd_scale(int * n_out, double * img, int X, int Y, double scale)
+int lsd_scale(double ** out, int * n_out, double * img, int X, int Y, double scale)
 {
-  return lsd_scale_region(n_out,img,X,Y,scale,NULL,NULL,NULL);
+  return lsd_scale_region(out, n_out, img, X, Y, scale, NULL, NULL, NULL);
 }
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface.
  */
-double * lsd(int * n_out, double * img, int X, int Y)
+int lsd(double ** out, int * n_out, double * img, int X, int Y)
 {
   /* LSD parameters */
   double scale = 0.8;       /* Scale the image by Gaussian filter to 'scale'. */
 
-  return lsd_scale(n_out,img,X,Y,scale);
+  return lsd_scale(out, n_out, img, X, Y, scale);
 }
 /*----------------------------------------------------------------------------*/

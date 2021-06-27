@@ -1,7 +1,6 @@
-#cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False, cdivision=True, embedsignature=True
 cimport numpy as np
 import numpy as np
-from libc.stdlib cimport free, malloc, calloc
+from libc.stdlib cimport free
 from cpython.ref cimport Py_INCREF
 
 # Numpy must be initialized. When using numpy from C or Cython you must
@@ -99,15 +98,3 @@ cdef class LSD:
         cdef np.ndarray reg_img = ArrayWrapper.from_ptr(<void *>_reg_img).to_ndarray(2, reg_dims, np.NPY_INT32)
 
         return {'lines': out, 'labels': reg_img}
-
-
-def test():
-    cdef void *buffer = calloc(10, sizeof(double))
-    if buffer is NULL:
-        raise MemoryError()
-
-    cdef ArrayWrapper wrapper = ArrayWrapper.from_ptr(buffer)
-    cdef np.npy_intp *dims = [10,]
-    cdef np.ndarray arr = wrapper.to_ndarray(1, dims, np.NPY_FLOAT64)
-
-    return arr
