@@ -1,1 +1,1 @@
-import .bin
+from . import bin

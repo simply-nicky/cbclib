@@ -6,11 +6,13 @@ def make_ext(modname, pyxfilename):
     import sys
     import Cython.Compiler.Options
     Cython.Compiler.Options.annotate = True
-    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/lsd.c",],
+    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/lsd.c",
+                                          'cbclib/include/pocket_fft.c', 'cbclib/include/array.c',
+                                          'cbclib/include/fft_functions.c', 'cbclib/include/median.c'],
                      language="c",
                      extra_compile_args=['-fopenmp', '-std=c99'],
                      extra_link_args=['-lgomp'],
-                     libraries=[],
+                     libraries=['fftw3', 'fftw3_omp'],
                      library_dirs=[os.path.join(sys.prefix, 'lib'),
                                    '/usr/local/lib'],
                      include_dirs=[numpy.get_include(),

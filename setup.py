@@ -1,7 +1,7 @@
 import os
 import sys
-from distutils.core import Extension
 from setuptools import setup, find_packages
+from distutils.core import Extension
 import numpy
 
 try:
@@ -22,9 +22,12 @@ extension_args = {'language': 'c',
                                    os.path.join(sys.prefix, 'include'),
                                    os.path.join(os.path.dirname(__file__), 'cbclib/include')]}
 
-src_files = ['cbclib/include/lsd.c',]
+src_files = ['cbclib/include/pocket_fft.c', 'cbclib/include/array.c',
+             'cbclib/include/fft_functions.c', 'cbclib/include/median.c']
 extensions = [Extension(name='cbclib.bin.line_detector',
-                        sources=['cbclib/bin/line_detecotr' + ext,] + src_files, **extension_args),]
+                        sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c'], **extension_args),
+              Extension(name='cbclib.bin.data_processing',
+                        sources=['cbclib/bin/data_processing' + ext,] + src_files, **extension_args)]
 
 if USE_CYTHON:
     extensions = cythonize(extensions, annotate=True, language_level="3",

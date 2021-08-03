@@ -417,17 +417,6 @@ typedef struct image_int_s
 } * image_int;
 
 /*----------------------------------------------------------------------------*/
-/** Free memory used in image_int 'i'.
- */
-static void free_image_int(image_int i)
-{
-  if( i == NULL || i->data == NULL )
-    error("free_image_int: invalid input image.");
-  free( (void *) i->data );
-  free( (void *) i );
-}
-
-/*----------------------------------------------------------------------------*/
 /** Create a new image_int of size 'xsize' times 'ysize'.
  */
 static image_int new_image_int(unsigned int xsize, unsigned int ysize)

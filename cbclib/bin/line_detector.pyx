@@ -1,6 +1,6 @@
 cimport numpy as np
 import numpy as np
-from libc.stdlib cimport free
+from libc.stdlib cimport free, malloc, calloc
 from cpython.ref cimport Py_INCREF
 
 # Numpy must be initialized. When using numpy from C or Cython you must
@@ -42,6 +42,16 @@ cdef class ArrayWrapper:
         return ndarray
 
 cdef class LSD:
+    """LSD  is a class for performing the streak detection
+    on digital images with Line Segment Detector algorithm [LSD]_.
+
+    References
+    ----------
+    .. [LSD] "LSD: a Line Segment Detector" by Rafael Grompone von Gioi,
+             Jeremie Jakubowicz, Jean-Michel Morel, and Gregory Randall,
+             Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
+             http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
+    """
     cdef double _scale
     cdef double _sigma_scale
     cdef double _log_eps
@@ -52,8 +62,48 @@ cdef class LSD:
         self._log_eps = log_eps
 
     def __init__(self, scale=0.8, sigma_scale=0.6, log_eps=0):
-        """Line Segment Detector.
+        """Create a LSD object for streak detection on digital images.
+
+        Parameters
+        ----------
+        scale : float, optional
+            When different from 1.0, LSD will scale the input image
+            by 'scale' factor by Gaussian filtering, before detecting
+            line segments. Default value is 0.8.
+        sigma_scale : float, optional
+            When `scale` is different from 1.0, the sigma of the Gaussian
+            filter is :code:`sigma = sigma_scale / scale`, if scale is less
+            than 1.0, and :code:`sigma = sigma_scale` otherwise. Default
+            value is 0.6.
+        log_eps : float, optional
+            Detection threshold, accept if -log10(NFA) > log_eps.
+            The larger the value, the more strict the detector is, and will
+            result in less detections. The value -log10(NFA) is equivalent
+            but more intuitive than NFA:
+
+            * -1.0 gives an average of 10 false detections on noise.
+            *  0.0 gives an average of 1 false detections on noise.
+            *  1.0 gives an average of 0.1 false detections on nose.
+            *  2.0 gives an average of 0.01 false detections on noise.
+            Default value is 0.0.
         """
+
+    @staticmethod
+    cdef np.ndarray _scale_image(np.ndarray image):
+    """LSD works with digital values in the range [0, 255]."""
+        cdef double *data = <double *>np.PyArray_DATA(image)
+        cdef np.npy_intp size = np.PyArray_SIZE(image)
+        cdef int i
+        cdef double _min = data[0]
+        cdef double _max = data[0]
+        for i in range(size):
+            if data[i] > _max:
+                _max = data[i]
+            if data[i] < _min:
+                _min = data[i]
+        for i in range(size):
+            data[i] = (data[i] - _min) / (_max - _min) * 255.
+        return image
 
     @staticmethod
     cdef np.ndarray _check_image(np.ndarray image):
@@ -68,7 +118,35 @@ cdef class LSD:
         return image
 
     cpdef dict detect(self, np.ndarray image):
+        """Perform the streak detection on `image`.
+
+        Parameters
+        ----------
+        image : np.ndarray
+            2D array of the digital image.
+        
+        Returns
+        -------
+        dict
+            :class:`dict` with the following fields:
+
+            * `lines` : An array of the detected lines. Each line is
+            comprised of 7 parameters as follows:
+
+                * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's
+                  ends.
+                * `width` : Line's width.
+                * `p` : Angle precision [0, 1] given by angle tolerance
+                  over 180 degree.
+                * `-log10(NFA)` : Number of false alarms.
+            
+            * `labels` : image where each pixel indicates the line
+              segment to which it belongs. Unused pixels have the value
+              0, while the used ones have the number of the line segment,
+              numbered in the same order as in `lines`.
+        """
         image = LSD._check_image(image)
+        image = LSD._scale_image(image)
 
         cdef double *_img = <double *>np.PyArray_DATA(image)
         cdef int _img_x = <int>image.shape[1]
