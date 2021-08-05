@@ -32,7 +32,7 @@ void free_array(array arr)
     free(arr);
 }
 
-void unravel_index(size_t *coord, int idx, array arr)
+void unravel_index(int *coord, int idx, array arr)
 {
     int _idx = idx;
     for (int n = 0; n < arr->ndim; n++)
@@ -42,12 +42,12 @@ void unravel_index(size_t *coord, int idx, array arr)
     }
 }
 
-int ravel_index(size_t *coord, array arr)
+int ravel_index(int *coord, array arr)
 {
     int idx = 0;
     for (int n = 0; n < arr->ndim; n++)
     {
-        idx += arr->strides[n] * arr->item_size * coord[n];
+        idx += arr->strides[n] * coord[n];
     }
     return idx;
 }
@@ -264,33 +264,29 @@ void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval
     }
 }
 
-void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *cval)
+int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval)
 {
-    int index;
-    size_t *close = (size_t *)malloc(arr->ndim * sizeof(size_t));
+    /* kkkkkkkk|abcd|kkkkkkkk */
+    if (mode == EXTEND_CONSTANT)
+    {
+            memcpy(out, cval, arr->item_size);
+            return 1;
+    }
+
+    int *close = (int *)malloc(arr->ndim * sizeof(int));
     size_t dist;
 
     switch (mode)
     {
-        /* kkkkkkkk|abcd|kkkkkkkk */
-        case EXTEND_CONSTANT:
-
-            memcpy(out, cval, arr->item_size);
-
-            break;
-
         /* aaaaaaaa|abcd|dddddddd */
         case EXTEND_NEAREST:
 
             for (int n = 0; n < arr->ndim; n++)
             {
-                if (coord[n] >= arr->dims[n]) close[n] = arr->dims[n] - 1;
+                if (coord[n] >= (int)arr->dims[n]) close[n] = arr->dims[n] - 1;
                 else if (coord[n] < 0) close[n] = 0;
                 else close[n] = coord[n];
             }
-
-            index = ravel_index(close, arr);
-            memcpy(out, arr->data + index * arr->item_size, arr->item_size);
 
             break;
 
@@ -299,7 +295,7 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
 
             for (int n = 0; n < arr->ndim; n++)
             {
-                if (coord[n] >= arr->dims[n])
+                if (coord[n] >= (int)arr->dims[n])
                 {
                     close[n] = arr->dims[n] - 1;
                     dist = coord[n] - arr->dims[n] + 1;
@@ -310,13 +306,10 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
                 {
                     close[n] = 0; dist = -coord[n];
 
-                    while(dist-- && close[n] < arr->dims[n]) close[n]++;
+                    while(dist-- && close[n] < (int)arr->dims[n]) close[n]++;
                 }
                 else close[n] = coord[n];
             }
-
-            index = ravel_index(close, arr);
-            memcpy(out, arr->data + index * arr->item_size, arr->item_size);
 
             break;
 
@@ -325,7 +318,7 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
 
             for (int n = 0; n < arr->ndim; n++)
             {
-                if (coord[n] >= arr->dims[n])
+                if (coord[n] >= (int)arr->dims[n])
                 {
                     close[n] = arr->dims[n] - 1;
                     dist = coord[n] - arr->dims[n];
@@ -336,13 +329,10 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
                 {
                     close[n] = 0; dist = -coord[n] - 1;
 
-                    while(dist-- && close[n] < arr->dims[n]) close[n]++;
+                    while(dist-- && close[n] < (int)arr->dims[n]) close[n]++;
                 }
                 else close[n] = coord[n];
             }
-
-            index = ravel_index(close, arr);
-            memcpy(out, arr->data + index * arr->item_size, arr->item_size);
 
             break;
 
@@ -351,12 +341,12 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
 
             for (int n = 0; n < arr->ndim; n++)
             {
-                if (coord[n] >= arr->dims[n])
+                if (coord[n] >= (int)arr->dims[n])
                 {
                     close[n] = 0;
                     dist = coord[n] - arr->dims[n];
 
-                    while(dist-- && close[n] < arr->dims[n]) close[n]++;
+                    while(dist-- && close[n] < (int)arr->dims[n]) close[n]++;
                 }
                 else if (coord[n] < 0)
                 {
@@ -368,16 +358,21 @@ void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *c
                 else close[n] = coord[n];
             }
 
-            index = ravel_index(close, arr);
-            memcpy(out, arr->data + index * arr->item_size, arr->item_size);
-
             break;
 
         default:
             ERROR("extend_point: invalid extend mode.");
     }
 
+    int index = ravel_index(close, arr);
     free(close);
+
+    if (((unsigned char *)mask->data)[index])
+    {
+        memcpy(out, arr->data + index * arr->item_size, arr->item_size);
+        return 1;
+    }
+    else return 0;
 
 }
 

@@ -16,8 +16,8 @@ typedef struct array_s *array;
 array new_array(int ndim, size_t *dims, size_t item_size, void *data);
 void free_array(array arr);
 
-void unravel_index(size_t *coord, int idx, array arr);
-int ravel_index(size_t *coord, array arr);
+void unravel_index(int *coord, int idx, array arr);
+int ravel_index(int *coord, array arr);
 
 typedef struct line_s
 {
@@ -49,7 +49,7 @@ typedef enum
 } EXTEND_MODE;
 
 void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval);
-void extend_point(void *out, size_t *coord, array arr, EXTEND_MODE mode, void *cval);
+int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
 
 // Array search
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,

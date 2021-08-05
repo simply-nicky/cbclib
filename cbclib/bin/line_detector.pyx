@@ -90,7 +90,7 @@ cdef class LSD:
 
     @staticmethod
     cdef np.ndarray _scale_image(np.ndarray image):
-    """LSD works with digital values in the range [0, 255]."""
+        """LSD works with digital values in the range [0, 255]."""
         cdef double *data = <double *>np.PyArray_DATA(image)
         cdef np.npy_intp size = np.PyArray_SIZE(image)
         cdef int i

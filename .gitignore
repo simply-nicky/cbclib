@@ -2,6 +2,10 @@
 /figures/
 /results/
 /logs/
+/cbclib/include/*.d
+/cbclib/include/*.o
+/cbclib/include/*.out
+/cbclib/include/*.so
 dev.ipynb
 
 #jupyter checkpoints

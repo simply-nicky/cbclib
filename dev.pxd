@@ -14,13 +14,9 @@ cdef extern from "median.h":
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
-    # int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, int ndim,
-    #                     unsigned long *dims, unsigned long item_size, int axis, unsigned long window,
-    #                     int mode, void *cval, int (*compar)(void*, void*), unsigned threads) nogil
-
-    int median_filter_c "median_filter" (void *out, void *data, int ndim, unsigned long *dims,
-                        unsigned long item_size, unsigned long *fsize, int mode, void *cval,
-                        int (*compar)(void*, void*), unsigned threads) nogil
+    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, int ndim,
+                        unsigned long *dims, unsigned long item_size, unsigned long *fsize, int mode,
+                        void *cval, int (*compar)(void*, void*), unsigned threads) nogil
 
 cdef enum:
     EXTEND_CONSTANT = 0

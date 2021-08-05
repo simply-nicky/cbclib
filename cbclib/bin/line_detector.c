@@ -1216,6 +1216,7 @@ static struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_ArrayWrapper *__pyx_
  */
 
 struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_LSD {
+  PyArrayObject *(*_scale_image)(PyArrayObject *);
   PyArrayObject *(*_check_image)(PyArrayObject *);
   PyObject *(*detect)(struct __pyx_obj_6cbclib_3bin_13line_detector_LSD *, PyArrayObject *, int __pyx_skip_dispatch);
 };
@@ -1591,6 +1592,9 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
                                int py_line, const char *filename);
 
 /* CIntToPy.proto */
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_Py_intptr_t(Py_intptr_t value);
+
+/* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value);
 
 /* RealImag.proto */
@@ -1691,14 +1695,14 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value);
     #endif
 #endif
 
+/* CIntFromPy.proto */
+static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
+
 /* CIntToPy.proto */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_long(long value);
 
 /* CIntFromPy.proto */
 static CYTHON_INLINE long __Pyx_PyInt_As_long(PyObject *);
-
-/* CIntFromPy.proto */
-static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *);
 
 /* FastTypeChecks.proto */
 #if CYTHON_COMPILING_IN_CPYTHON
@@ -1721,6 +1725,7 @@ static int __Pyx_InitStrings(__Pyx_StringTabEntry *t);
 
 static struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_from_ptr(void *__pyx_v_data); /* proto*/
 static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_to_ndarray(struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *__pyx_v_self, int __pyx_v_ndim, npy_intp *__pyx_v_dims, int __pyx_v_type_num); /* proto*/
+static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__scale_image(PyArrayObject *__pyx_v_image); /* proto*/
 static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyArrayObject *__pyx_v_image); /* proto*/
 static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_obj_6cbclib_3bin_13line_detector_LSD *__pyx_v_self, PyArrayObject *__pyx_v_image, int __pyx_skip_dispatch); /* proto*/
 
@@ -1774,6 +1779,7 @@ int __pyx_module_is_main_cbclib__bin__line_detector = 0;
 
 /* Implementation of 'cbclib.bin.line_detector' */
 static PyObject *__pyx_builtin_TypeError;
+static PyObject *__pyx_builtin_range;
 static PyObject *__pyx_builtin_ValueError;
 static PyObject *__pyx_builtin_RuntimeError;
 static PyObject *__pyx_builtin_ImportError;
@@ -1786,6 +1792,7 @@ static const char __pyx_k_test[] = "__test__";
 static const char __pyx_k_image[] = "image";
 static const char __pyx_k_lines[] = "lines";
 static const char __pyx_k_numpy[] = "numpy";
+static const char __pyx_k_range[] = "range";
 static const char __pyx_k_scale[] = "scale";
 static const char __pyx_k_detect[] = "detect";
 static const char __pyx_k_import[] = "__import__";
@@ -1851,6 +1858,7 @@ static PyObject *__pyx_kp_u_numpy_core_multiarray_failed_to;
 static PyObject *__pyx_kp_u_numpy_core_umath_failed_to_impor;
 static PyObject *__pyx_n_s_pyx_state;
 static PyObject *__pyx_n_s_pyx_vtable;
+static PyObject *__pyx_n_s_range;
 static PyObject *__pyx_n_s_reduce;
 static PyObject *__pyx_n_s_reduce_cython;
 static PyObject *__pyx_n_s_reduce_ex;
@@ -2548,6 +2556,182 @@ static int __pyx_pf_6cbclib_3bin_13line_detector_3LSD_2__init__(CYTHON_UNUSED st
 /* "cbclib/bin/line_detector.pyx":92
  * 
  *     @staticmethod
+ *     cdef np.ndarray _scale_image(np.ndarray image):             # <<<<<<<<<<<<<<
+ *         """LSD works with digital values in the range [0, 255]."""
+ *         cdef double *data = <double *>np.PyArray_DATA(image)
+ */
+
+static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__scale_image(PyArrayObject *__pyx_v_image) {
+  double *__pyx_v_data;
+  npy_intp __pyx_v_size;
+  int __pyx_v_i;
+  double __pyx_v__min;
+  double __pyx_v__max;
+  PyArrayObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  npy_intp __pyx_t_1;
+  npy_intp __pyx_t_2;
+  int __pyx_t_3;
+  int __pyx_t_4;
+  __Pyx_RefNannySetupContext("_scale_image", 0);
+
+  /* "cbclib/bin/line_detector.pyx":94
+ *     cdef np.ndarray _scale_image(np.ndarray image):
+ *         """LSD works with digital values in the range [0, 255]."""
+ *         cdef double *data = <double *>np.PyArray_DATA(image)             # <<<<<<<<<<<<<<
+ *         cdef np.npy_intp size = np.PyArray_SIZE(image)
+ *         cdef int i
+ */
+  __pyx_v_data = ((double *)PyArray_DATA(__pyx_v_image));
+
+  /* "cbclib/bin/line_detector.pyx":95
+ *         """LSD works with digital values in the range [0, 255]."""
+ *         cdef double *data = <double *>np.PyArray_DATA(image)
+ *         cdef np.npy_intp size = np.PyArray_SIZE(image)             # <<<<<<<<<<<<<<
+ *         cdef int i
+ *         cdef double _min = data[0]
+ */
+  __pyx_v_size = PyArray_SIZE(__pyx_v_image);
+
+  /* "cbclib/bin/line_detector.pyx":97
+ *         cdef np.npy_intp size = np.PyArray_SIZE(image)
+ *         cdef int i
+ *         cdef double _min = data[0]             # <<<<<<<<<<<<<<
+ *         cdef double _max = data[0]
+ *         for i in range(size):
+ */
+  __pyx_v__min = (__pyx_v_data[0]);
+
+  /* "cbclib/bin/line_detector.pyx":98
+ *         cdef int i
+ *         cdef double _min = data[0]
+ *         cdef double _max = data[0]             # <<<<<<<<<<<<<<
+ *         for i in range(size):
+ *             if data[i] > _max:
+ */
+  __pyx_v__max = (__pyx_v_data[0]);
+
+  /* "cbclib/bin/line_detector.pyx":99
+ *         cdef double _min = data[0]
+ *         cdef double _max = data[0]
+ *         for i in range(size):             # <<<<<<<<<<<<<<
+ *             if data[i] > _max:
+ *                 _max = data[i]
+ */
+  __pyx_t_1 = __pyx_v_size;
+  __pyx_t_2 = __pyx_t_1;
+  for (__pyx_t_3 = 0; __pyx_t_3 < __pyx_t_2; __pyx_t_3+=1) {
+    __pyx_v_i = __pyx_t_3;
+
+    /* "cbclib/bin/line_detector.pyx":100
+ *         cdef double _max = data[0]
+ *         for i in range(size):
+ *             if data[i] > _max:             # <<<<<<<<<<<<<<
+ *                 _max = data[i]
+ *             if data[i] < _min:
+ */
+    __pyx_t_4 = (((__pyx_v_data[__pyx_v_i]) > __pyx_v__max) != 0);
+    if (__pyx_t_4) {
+
+      /* "cbclib/bin/line_detector.pyx":101
+ *         for i in range(size):
+ *             if data[i] > _max:
+ *                 _max = data[i]             # <<<<<<<<<<<<<<
+ *             if data[i] < _min:
+ *                 _min = data[i]
+ */
+      __pyx_v__max = (__pyx_v_data[__pyx_v_i]);
+
+      /* "cbclib/bin/line_detector.pyx":100
+ *         cdef double _max = data[0]
+ *         for i in range(size):
+ *             if data[i] > _max:             # <<<<<<<<<<<<<<
+ *                 _max = data[i]
+ *             if data[i] < _min:
+ */
+    }
+
+    /* "cbclib/bin/line_detector.pyx":102
+ *             if data[i] > _max:
+ *                 _max = data[i]
+ *             if data[i] < _min:             # <<<<<<<<<<<<<<
+ *                 _min = data[i]
+ *         for i in range(size):
+ */
+    __pyx_t_4 = (((__pyx_v_data[__pyx_v_i]) < __pyx_v__min) != 0);
+    if (__pyx_t_4) {
+
+      /* "cbclib/bin/line_detector.pyx":103
+ *                 _max = data[i]
+ *             if data[i] < _min:
+ *                 _min = data[i]             # <<<<<<<<<<<<<<
+ *         for i in range(size):
+ *             data[i] = (data[i] - _min) / (_max - _min) * 255.
+ */
+      __pyx_v__min = (__pyx_v_data[__pyx_v_i]);
+
+      /* "cbclib/bin/line_detector.pyx":102
+ *             if data[i] > _max:
+ *                 _max = data[i]
+ *             if data[i] < _min:             # <<<<<<<<<<<<<<
+ *                 _min = data[i]
+ *         for i in range(size):
+ */
+    }
+  }
+
+  /* "cbclib/bin/line_detector.pyx":104
+ *             if data[i] < _min:
+ *                 _min = data[i]
+ *         for i in range(size):             # <<<<<<<<<<<<<<
+ *             data[i] = (data[i] - _min) / (_max - _min) * 255.
+ *         return image
+ */
+  __pyx_t_1 = __pyx_v_size;
+  __pyx_t_2 = __pyx_t_1;
+  for (__pyx_t_3 = 0; __pyx_t_3 < __pyx_t_2; __pyx_t_3+=1) {
+    __pyx_v_i = __pyx_t_3;
+
+    /* "cbclib/bin/line_detector.pyx":105
+ *                 _min = data[i]
+ *         for i in range(size):
+ *             data[i] = (data[i] - _min) / (_max - _min) * 255.             # <<<<<<<<<<<<<<
+ *         return image
+ * 
+ */
+    (__pyx_v_data[__pyx_v_i]) = ((((__pyx_v_data[__pyx_v_i]) - __pyx_v__min) / (__pyx_v__max - __pyx_v__min)) * 255.);
+  }
+
+  /* "cbclib/bin/line_detector.pyx":106
+ *         for i in range(size):
+ *             data[i] = (data[i] - _min) / (_max - _min) * 255.
+ *         return image             # <<<<<<<<<<<<<<
+ * 
+ *     @staticmethod
+ */
+  __Pyx_XDECREF(((PyObject *)__pyx_r));
+  __Pyx_INCREF(((PyObject *)__pyx_v_image));
+  __pyx_r = __pyx_v_image;
+  goto __pyx_L0;
+
+  /* "cbclib/bin/line_detector.pyx":92
+ * 
+ *     @staticmethod
+ *     cdef np.ndarray _scale_image(np.ndarray image):             # <<<<<<<<<<<<<<
+ *         """LSD works with digital values in the range [0, 255]."""
+ *         cdef double *data = <double *>np.PyArray_DATA(image)
+ */
+
+  /* function exit code */
+  __pyx_L0:;
+  __Pyx_XGIVEREF((PyObject *)__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cbclib/bin/line_detector.pyx":109
+ * 
+ *     @staticmethod
  *     cdef np.ndarray _check_image(np.ndarray image):             # <<<<<<<<<<<<<<
  *         cdef int ndim = image.ndim
  *         if ndim != 2:
@@ -2567,7 +2751,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __Pyx_RefNannySetupContext("_check_image", 0);
   __Pyx_INCREF((PyObject *)__pyx_v_image);
 
-  /* "cbclib/bin/line_detector.pyx":93
+  /* "cbclib/bin/line_detector.pyx":110
  *     @staticmethod
  *     cdef np.ndarray _check_image(np.ndarray image):
  *         cdef int ndim = image.ndim             # <<<<<<<<<<<<<<
@@ -2577,7 +2761,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __pyx_t_1 = __pyx_v_image->nd;
   __pyx_v_ndim = __pyx_t_1;
 
-  /* "cbclib/bin/line_detector.pyx":94
+  /* "cbclib/bin/line_detector.pyx":111
  *     cdef np.ndarray _check_image(np.ndarray image):
  *         cdef int ndim = image.ndim
  *         if ndim != 2:             # <<<<<<<<<<<<<<
@@ -2587,20 +2771,20 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __pyx_t_2 = ((__pyx_v_ndim != 2) != 0);
   if (unlikely(__pyx_t_2)) {
 
-    /* "cbclib/bin/line_detector.pyx":95
+    /* "cbclib/bin/line_detector.pyx":112
  *         cdef int ndim = image.ndim
  *         if ndim != 2:
  *             raise ValueError('Image must be a 2D array.')             # <<<<<<<<<<<<<<
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):
  *             image = np.PyArray_GETCONTIGUOUS(image)
  */
-    __pyx_t_3 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__3, NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 95, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__3, NULL); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 112, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(1, 95, __pyx_L1_error)
+    __PYX_ERR(1, 112, __pyx_L1_error)
 
-    /* "cbclib/bin/line_detector.pyx":94
+    /* "cbclib/bin/line_detector.pyx":111
  *     cdef np.ndarray _check_image(np.ndarray image):
  *         cdef int ndim = image.ndim
  *         if ndim != 2:             # <<<<<<<<<<<<<<
@@ -2609,7 +2793,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
  */
   }
 
-  /* "cbclib/bin/line_detector.pyx":96
+  /* "cbclib/bin/line_detector.pyx":113
  *         if ndim != 2:
  *             raise ValueError('Image must be a 2D array.')
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):             # <<<<<<<<<<<<<<
@@ -2619,19 +2803,19 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __pyx_t_2 = ((!(PyArray_IS_C_CONTIGUOUS(__pyx_v_image) != 0)) != 0);
   if (__pyx_t_2) {
 
-    /* "cbclib/bin/line_detector.pyx":97
+    /* "cbclib/bin/line_detector.pyx":114
  *             raise ValueError('Image must be a 2D array.')
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):
  *             image = np.PyArray_GETCONTIGUOUS(image)             # <<<<<<<<<<<<<<
  *         cdef int tn = np.PyArray_TYPE(image)
  *         if tn != np.NPY_FLOAT64:
  */
-    __pyx_t_3 = ((PyObject *)PyArray_GETCONTIGUOUS(__pyx_v_image)); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 97, __pyx_L1_error)
+    __pyx_t_3 = ((PyObject *)PyArray_GETCONTIGUOUS(__pyx_v_image)); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 114, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF_SET(__pyx_v_image, ((PyArrayObject *)__pyx_t_3));
     __pyx_t_3 = 0;
 
-    /* "cbclib/bin/line_detector.pyx":96
+    /* "cbclib/bin/line_detector.pyx":113
  *         if ndim != 2:
  *             raise ValueError('Image must be a 2D array.')
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):             # <<<<<<<<<<<<<<
@@ -2640,7 +2824,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
  */
   }
 
-  /* "cbclib/bin/line_detector.pyx":98
+  /* "cbclib/bin/line_detector.pyx":115
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):
  *             image = np.PyArray_GETCONTIGUOUS(image)
  *         cdef int tn = np.PyArray_TYPE(image)             # <<<<<<<<<<<<<<
@@ -2649,7 +2833,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
  */
   __pyx_v_tn = PyArray_TYPE(__pyx_v_image);
 
-  /* "cbclib/bin/line_detector.pyx":99
+  /* "cbclib/bin/line_detector.pyx":116
  *             image = np.PyArray_GETCONTIGUOUS(image)
  *         cdef int tn = np.PyArray_TYPE(image)
  *         if tn != np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
@@ -2659,20 +2843,20 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __pyx_t_2 = ((__pyx_v_tn != NPY_FLOAT64) != 0);
   if (__pyx_t_2) {
 
-    /* "cbclib/bin/line_detector.pyx":100
+    /* "cbclib/bin/line_detector.pyx":117
  *         cdef int tn = np.PyArray_TYPE(image)
  *         if tn != np.NPY_FLOAT64:
  *             image = np.PyArray_Cast(image, np.NPY_FLOAT64)             # <<<<<<<<<<<<<<
  *         return image
  * 
  */
-    __pyx_t_3 = PyArray_Cast(__pyx_v_image, NPY_FLOAT64); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 100, __pyx_L1_error)
+    __pyx_t_3 = PyArray_Cast(__pyx_v_image, NPY_FLOAT64); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 117, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    if (!(likely(((__pyx_t_3) == Py_None) || likely(__Pyx_TypeTest(__pyx_t_3, __pyx_ptype_5numpy_ndarray))))) __PYX_ERR(1, 100, __pyx_L1_error)
+    if (!(likely(((__pyx_t_3) == Py_None) || likely(__Pyx_TypeTest(__pyx_t_3, __pyx_ptype_5numpy_ndarray))))) __PYX_ERR(1, 117, __pyx_L1_error)
     __Pyx_DECREF_SET(__pyx_v_image, ((PyArrayObject *)__pyx_t_3));
     __pyx_t_3 = 0;
 
-    /* "cbclib/bin/line_detector.pyx":99
+    /* "cbclib/bin/line_detector.pyx":116
  *             image = np.PyArray_GETCONTIGUOUS(image)
  *         cdef int tn = np.PyArray_TYPE(image)
  *         if tn != np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
@@ -2681,7 +2865,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
  */
   }
 
-  /* "cbclib/bin/line_detector.pyx":101
+  /* "cbclib/bin/line_detector.pyx":118
  *         if tn != np.NPY_FLOAT64:
  *             image = np.PyArray_Cast(image, np.NPY_FLOAT64)
  *         return image             # <<<<<<<<<<<<<<
@@ -2693,7 +2877,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   __pyx_r = __pyx_v_image;
   goto __pyx_L0;
 
-  /* "cbclib/bin/line_detector.pyx":92
+  /* "cbclib/bin/line_detector.pyx":109
  * 
  *     @staticmethod
  *     cdef np.ndarray _check_image(np.ndarray image):             # <<<<<<<<<<<<<<
@@ -2713,7 +2897,7 @@ static PyArrayObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(PyA
   return __pyx_r;
 }
 
-/* "cbclib/bin/line_detector.pyx":103
+/* "cbclib/bin/line_detector.pyx":120
  *         return image
  * 
  *     cpdef dict detect(self, np.ndarray image):             # <<<<<<<<<<<<<<
@@ -2759,7 +2943,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
     if (unlikely(!__Pyx_object_dict_version_matches(((PyObject *)__pyx_v_self), __pyx_tp_dict_version, __pyx_obj_dict_version))) {
       PY_UINT64_T __pyx_type_dict_guard = __Pyx_get_tp_dict_version(((PyObject *)__pyx_v_self));
       #endif
-      __pyx_t_1 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_detect); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 103, __pyx_L1_error)
+      __pyx_t_1 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_detect); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 120, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
       if (!PyCFunction_Check(__pyx_t_1) || (PyCFunction_GET_FUNCTION(__pyx_t_1) != (PyCFunction)(void*)__pyx_pw_6cbclib_3bin_13line_detector_3LSD_5detect)) {
         __Pyx_XDECREF(__pyx_r);
@@ -2776,10 +2960,10 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
         }
         __pyx_t_2 = (__pyx_t_4) ? __Pyx_PyObject_Call2Args(__pyx_t_3, __pyx_t_4, ((PyObject *)__pyx_v_image)) : __Pyx_PyObject_CallOneArg(__pyx_t_3, ((PyObject *)__pyx_v_image));
         __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
-        if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 103, __pyx_L1_error)
+        if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 120, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_2);
         __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-        if (!(likely(PyDict_CheckExact(__pyx_t_2))||((__pyx_t_2) == Py_None)||(PyErr_Format(PyExc_TypeError, "Expected %.16s, got %.200s", "dict", Py_TYPE(__pyx_t_2)->tp_name), 0))) __PYX_ERR(1, 103, __pyx_L1_error)
+        if (!(likely(PyDict_CheckExact(__pyx_t_2))||((__pyx_t_2) == Py_None)||(PyErr_Format(PyExc_TypeError, "Expected %.16s, got %.200s", "dict", Py_TYPE(__pyx_t_2)->tp_name), 0))) __PYX_ERR(1, 120, __pyx_L1_error)
         __pyx_r = ((PyObject*)__pyx_t_2);
         __pyx_t_2 = 0;
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -2798,20 +2982,32 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
     #endif
   }
 
-  /* "cbclib/bin/line_detector.pyx":131
+  /* "cbclib/bin/line_detector.pyx":148
  *               numbered in the same order as in `lines`.
  *         """
  *         image = LSD._check_image(image)             # <<<<<<<<<<<<<<
+ *         image = LSD._scale_image(image)
  * 
- *         cdef double *_img = <double *>np.PyArray_DATA(image)
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(__pyx_v_image)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 131, __pyx_L1_error)
+  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image(__pyx_v_image)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 148, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF_SET(__pyx_v_image, ((PyArrayObject *)__pyx_t_1));
   __pyx_t_1 = 0;
 
-  /* "cbclib/bin/line_detector.pyx":133
+  /* "cbclib/bin/line_detector.pyx":149
+ *         """
  *         image = LSD._check_image(image)
+ *         image = LSD._scale_image(image)             # <<<<<<<<<<<<<<
+ * 
+ *         cdef double *_img = <double *>np.PyArray_DATA(image)
+ */
+  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_3LSD__scale_image(__pyx_v_image)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 149, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_DECREF_SET(__pyx_v_image, ((PyArrayObject *)__pyx_t_1));
+  __pyx_t_1 = 0;
+
+  /* "cbclib/bin/line_detector.pyx":151
+ *         image = LSD._scale_image(image)
  * 
  *         cdef double *_img = <double *>np.PyArray_DATA(image)             # <<<<<<<<<<<<<<
  *         cdef int _img_x = <int>image.shape[1]
@@ -2819,7 +3015,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
  */
   __pyx_v__img = ((double *)PyArray_DATA(__pyx_v_image));
 
-  /* "cbclib/bin/line_detector.pyx":134
+  /* "cbclib/bin/line_detector.pyx":152
  * 
  *         cdef double *_img = <double *>np.PyArray_DATA(image)
  *         cdef int _img_x = <int>image.shape[1]             # <<<<<<<<<<<<<<
@@ -2828,7 +3024,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
  */
   __pyx_v__img_x = ((int)(__pyx_v_image->dimensions[1]));
 
-  /* "cbclib/bin/line_detector.pyx":135
+  /* "cbclib/bin/line_detector.pyx":153
  *         cdef double *_img = <double *>np.PyArray_DATA(image)
  *         cdef int _img_x = <int>image.shape[1]
  *         cdef int _img_y = <int>image.shape[0]             # <<<<<<<<<<<<<<
@@ -2837,7 +3033,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
  */
   __pyx_v__img_y = ((int)(__pyx_v_image->dimensions[0]));
 
-  /* "cbclib/bin/line_detector.pyx":144
+  /* "cbclib/bin/line_detector.pyx":162
  *         cdef double *_out
  * 
  *         cdef int fail = 0             # <<<<<<<<<<<<<<
@@ -2846,7 +3042,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
  */
   __pyx_v_fail = 0;
 
-  /* "cbclib/bin/line_detector.pyx":145
+  /* "cbclib/bin/line_detector.pyx":163
  * 
  *         cdef int fail = 0
  *         with nogil:             # <<<<<<<<<<<<<<
@@ -2861,7 +3057,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
       #endif
       /*try:*/ {
 
-        /* "cbclib/bin/line_detector.pyx":146
+        /* "cbclib/bin/line_detector.pyx":164
  *         cdef int fail = 0
  *         with nogil:
  *             fail =  LineSegmentDetection(&_out, &_n_out, _img, _img_x, _img_y,             # <<<<<<<<<<<<<<
@@ -2871,7 +3067,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
         __pyx_v_fail = LineSegmentDetection((&__pyx_v__out), (&__pyx_v__n_out), __pyx_v__img, __pyx_v__img_x, __pyx_v__img_y, __pyx_v_self->_scale, __pyx_v_self->_sigma_scale, 2.0, 22.5, __pyx_v_self->_log_eps, 0.7, 0x400, (&__pyx_v__reg_img), (&__pyx_v__reg_x), (&__pyx_v__reg_y));
       }
 
-      /* "cbclib/bin/line_detector.pyx":145
+      /* "cbclib/bin/line_detector.pyx":163
  * 
  *         cdef int fail = 0
  *         with nogil:             # <<<<<<<<<<<<<<
@@ -2890,7 +3086,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
       }
   }
 
-  /* "cbclib/bin/line_detector.pyx":151
+  /* "cbclib/bin/line_detector.pyx":169
  *                                          &_reg_img, &_reg_x, &_reg_y)
  * 
  *         if fail:             # <<<<<<<<<<<<<<
@@ -2900,20 +3096,20 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
   __pyx_t_5 = (__pyx_v_fail != 0);
   if (unlikely(__pyx_t_5)) {
 
-    /* "cbclib/bin/line_detector.pyx":152
+    /* "cbclib/bin/line_detector.pyx":170
  * 
  *         if fail:
  *             raise RuntimeError("LSD execution finished with an error.")             # <<<<<<<<<<<<<<
  * 
  *         cdef np.npy_intp *out_dims = [_n_out, LINE_SIZE]
  */
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__4, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 152, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__4, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 170, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_Raise(__pyx_t_1, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(1, 152, __pyx_L1_error)
+    __PYX_ERR(1, 170, __pyx_L1_error)
 
-    /* "cbclib/bin/line_detector.pyx":151
+    /* "cbclib/bin/line_detector.pyx":169
  *                                          &_reg_img, &_reg_x, &_reg_y)
  * 
  *         if fail:             # <<<<<<<<<<<<<<
@@ -2922,7 +3118,7 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
  */
   }
 
-  /* "cbclib/bin/line_detector.pyx":154
+  /* "cbclib/bin/line_detector.pyx":172
  *             raise RuntimeError("LSD execution finished with an error.")
  * 
  *         cdef np.npy_intp *out_dims = [_n_out, LINE_SIZE]             # <<<<<<<<<<<<<<
@@ -2933,22 +3129,22 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
   __pyx_t_6[1] = 7;
   __pyx_v_out_dims = __pyx_t_6;
 
-  /* "cbclib/bin/line_detector.pyx":155
+  /* "cbclib/bin/line_detector.pyx":173
  * 
  *         cdef np.npy_intp *out_dims = [_n_out, LINE_SIZE]
  *         cdef np.ndarray out = ArrayWrapper.from_ptr(<void *>_out).to_ndarray(2, out_dims, np.NPY_FLOAT64)             # <<<<<<<<<<<<<<
  * 
  *         cdef np.npy_intp *reg_dims = [_reg_y, _reg_x,]
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_from_ptr(((void *)__pyx_v__out))); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 155, __pyx_L1_error)
+  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_from_ptr(((void *)__pyx_v__out))); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 173, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = ((PyObject *)((struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_ArrayWrapper *)((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_1)->__pyx_vtab)->to_ndarray(((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_1), 2, __pyx_v_out_dims, NPY_FLOAT64)); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 155, __pyx_L1_error)
+  __pyx_t_2 = ((PyObject *)((struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_ArrayWrapper *)((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_1)->__pyx_vtab)->to_ndarray(((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_1), 2, __pyx_v_out_dims, NPY_FLOAT64)); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 173, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   __pyx_v_out = ((PyArrayObject *)__pyx_t_2);
   __pyx_t_2 = 0;
 
-  /* "cbclib/bin/line_detector.pyx":157
+  /* "cbclib/bin/line_detector.pyx":175
  *         cdef np.ndarray out = ArrayWrapper.from_ptr(<void *>_out).to_ndarray(2, out_dims, np.NPY_FLOAT64)
  * 
  *         cdef np.npy_intp *reg_dims = [_reg_y, _reg_x,]             # <<<<<<<<<<<<<<
@@ -2959,36 +3155,36 @@ static PyObject *__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(struct __pyx_o
   __pyx_t_7[1] = __pyx_v__reg_x;
   __pyx_v_reg_dims = __pyx_t_7;
 
-  /* "cbclib/bin/line_detector.pyx":158
+  /* "cbclib/bin/line_detector.pyx":176
  * 
  *         cdef np.npy_intp *reg_dims = [_reg_y, _reg_x,]
  *         cdef np.ndarray reg_img = ArrayWrapper.from_ptr(<void *>_reg_img).to_ndarray(2, reg_dims, np.NPY_INT32)             # <<<<<<<<<<<<<<
  * 
  *         return {'lines': out, 'labels': reg_img}
  */
-  __pyx_t_2 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_from_ptr(((void *)__pyx_v__reg_img))); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 158, __pyx_L1_error)
+  __pyx_t_2 = ((PyObject *)__pyx_f_6cbclib_3bin_13line_detector_12ArrayWrapper_from_ptr(((void *)__pyx_v__reg_img))); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 176, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_1 = ((PyObject *)((struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_ArrayWrapper *)((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_2)->__pyx_vtab)->to_ndarray(((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_2), 2, __pyx_v_reg_dims, NPY_INT32)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 158, __pyx_L1_error)
+  __pyx_t_1 = ((PyObject *)((struct __pyx_vtabstruct_6cbclib_3bin_13line_detector_ArrayWrapper *)((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_2)->__pyx_vtab)->to_ndarray(((struct __pyx_obj_6cbclib_3bin_13line_detector_ArrayWrapper *)__pyx_t_2), 2, __pyx_v_reg_dims, NPY_INT32)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 176, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_reg_img = ((PyArrayObject *)__pyx_t_1);
   __pyx_t_1 = 0;
 
-  /* "cbclib/bin/line_detector.pyx":160
+  /* "cbclib/bin/line_detector.pyx":178
  *         cdef np.ndarray reg_img = ArrayWrapper.from_ptr(<void *>_reg_img).to_ndarray(2, reg_dims, np.NPY_INT32)
  * 
  *         return {'lines': out, 'labels': reg_img}             # <<<<<<<<<<<<<<
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 160, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 178, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_u_lines, ((PyObject *)__pyx_v_out)) < 0) __PYX_ERR(1, 160, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_u_labels, ((PyObject *)__pyx_v_reg_img)) < 0) __PYX_ERR(1, 160, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_u_lines, ((PyObject *)__pyx_v_out)) < 0) __PYX_ERR(1, 178, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_u_labels, ((PyObject *)__pyx_v_reg_img)) < 0) __PYX_ERR(1, 178, __pyx_L1_error)
   __pyx_r = ((PyObject*)__pyx_t_1);
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cbclib/bin/line_detector.pyx":103
+  /* "cbclib/bin/line_detector.pyx":120
  *         return image
  * 
  *     cpdef dict detect(self, np.ndarray image):             # <<<<<<<<<<<<<<
@@ -3024,7 +3220,7 @@ static PyObject *__pyx_pw_6cbclib_3bin_13line_detector_3LSD_5detect(PyObject *__
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("detect (wrapper)", 0);
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_image), __pyx_ptype_5numpy_ndarray, 1, "image", 0))) __PYX_ERR(1, 103, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_image), __pyx_ptype_5numpy_ndarray, 1, "image", 0))) __PYX_ERR(1, 120, __pyx_L1_error)
   __pyx_r = __pyx_pf_6cbclib_3bin_13line_detector_3LSD_4detect(((struct __pyx_obj_6cbclib_3bin_13line_detector_LSD *)__pyx_v_self), ((PyArrayObject *)__pyx_v_image));
 
   /* function exit code */
@@ -3045,7 +3241,7 @@ static PyObject *__pyx_pf_6cbclib_3bin_13line_detector_3LSD_4detect(struct __pyx
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("detect", 0);
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(__pyx_v_self, __pyx_v_image, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 103, __pyx_L1_error)
+  __pyx_t_1 = __pyx_f_6cbclib_3bin_13line_detector_3LSD_detect(__pyx_v_self, __pyx_v_image, 1); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 120, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -4488,6 +4684,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_kp_u_numpy_core_umath_failed_to_impor, __pyx_k_numpy_core_umath_failed_to_impor, sizeof(__pyx_k_numpy_core_umath_failed_to_impor), 0, 1, 0, 0},
   {&__pyx_n_s_pyx_state, __pyx_k_pyx_state, sizeof(__pyx_k_pyx_state), 0, 0, 1, 1},
   {&__pyx_n_s_pyx_vtable, __pyx_k_pyx_vtable, sizeof(__pyx_k_pyx_vtable), 0, 0, 1, 1},
+  {&__pyx_n_s_range, __pyx_k_range, sizeof(__pyx_k_range), 0, 0, 1, 1},
   {&__pyx_n_s_reduce, __pyx_k_reduce, sizeof(__pyx_k_reduce), 0, 0, 1, 1},
   {&__pyx_n_s_reduce_cython, __pyx_k_reduce_cython, sizeof(__pyx_k_reduce_cython), 0, 0, 1, 1},
   {&__pyx_n_s_reduce_ex, __pyx_k_reduce_ex, sizeof(__pyx_k_reduce_ex), 0, 0, 1, 1},
@@ -4502,8 +4699,9 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
 };
 static CYTHON_SMALL_CODE int __Pyx_InitCachedBuiltins(void) {
   __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(0, 2, __pyx_L1_error)
-  __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(1, 95, __pyx_L1_error)
-  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(1, 152, __pyx_L1_error)
+  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(1, 99, __pyx_L1_error)
+  __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(1, 170, __pyx_L1_error)
   __pyx_builtin_ImportError = __Pyx_GetBuiltinName(__pyx_n_s_ImportError); if (!__pyx_builtin_ImportError) __PYX_ERR(2, 947, __pyx_L1_error)
   return 0;
   __pyx_L1_error:;
@@ -4533,25 +4731,25 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GOTREF(__pyx_tuple__2);
   __Pyx_GIVEREF(__pyx_tuple__2);
 
-  /* "cbclib/bin/line_detector.pyx":95
+  /* "cbclib/bin/line_detector.pyx":112
  *         cdef int ndim = image.ndim
  *         if ndim != 2:
  *             raise ValueError('Image must be a 2D array.')             # <<<<<<<<<<<<<<
  *         if not np.PyArray_IS_C_CONTIGUOUS(image):
  *             image = np.PyArray_GETCONTIGUOUS(image)
  */
-  __pyx_tuple__3 = PyTuple_Pack(1, __pyx_kp_u_Image_must_be_a_2D_array); if (unlikely(!__pyx_tuple__3)) __PYX_ERR(1, 95, __pyx_L1_error)
+  __pyx_tuple__3 = PyTuple_Pack(1, __pyx_kp_u_Image_must_be_a_2D_array); if (unlikely(!__pyx_tuple__3)) __PYX_ERR(1, 112, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__3);
   __Pyx_GIVEREF(__pyx_tuple__3);
 
-  /* "cbclib/bin/line_detector.pyx":152
+  /* "cbclib/bin/line_detector.pyx":170
  * 
  *         if fail:
  *             raise RuntimeError("LSD execution finished with an error.")             # <<<<<<<<<<<<<<
  * 
  *         cdef np.npy_intp *out_dims = [_n_out, LINE_SIZE]
  */
-  __pyx_tuple__4 = PyTuple_Pack(1, __pyx_kp_u_LSD_execution_finished_with_an_e); if (unlikely(!__pyx_tuple__4)) __PYX_ERR(1, 152, __pyx_L1_error)
+  __pyx_tuple__4 = PyTuple_Pack(1, __pyx_kp_u_LSD_execution_finished_with_an_e); if (unlikely(!__pyx_tuple__4)) __PYX_ERR(1, 170, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__4);
   __Pyx_GIVEREF(__pyx_tuple__4);
 
@@ -4617,17 +4815,17 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GIVEREF(__pyx_tuple__11);
   __pyx_codeobj__12 = (PyObject*)__Pyx_PyCode_New(2, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__11, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_stringsource, __pyx_n_s_setstate_cython, 3, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__12)) __PYX_ERR(0, 3, __pyx_L1_error)
 
-  /* "cbclib/bin/line_detector.pyx":103
+  /* "cbclib/bin/line_detector.pyx":120
  *         return image
  * 
  *     cpdef dict detect(self, np.ndarray image):             # <<<<<<<<<<<<<<
  *         """Perform the streak detection on `image`.
  * 
  */
-  __pyx_tuple__13 = PyTuple_Pack(2, __pyx_n_s_self, __pyx_n_s_image); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(1, 103, __pyx_L1_error)
+  __pyx_tuple__13 = PyTuple_Pack(2, __pyx_n_s_self, __pyx_n_s_image); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(1, 120, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__13);
   __Pyx_GIVEREF(__pyx_tuple__13);
-  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(2, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_line_detector_pyx, __pyx_n_s_detect, 103, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(1, 103, __pyx_L1_error)
+  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(2, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_line_detector_pyx, __pyx_n_s_detect, 120, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(1, 120, __pyx_L1_error)
 
   /* "(tree fragment)":1
  * def __reduce_cython__(self):             # <<<<<<<<<<<<<<
@@ -4720,6 +4918,7 @@ static int __Pyx_modinit_type_init_code(void) {
   if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cbclib_3bin_13line_detector_ArrayWrapper) < 0) __PYX_ERR(1, 16, __pyx_L1_error)
   __pyx_ptype_6cbclib_3bin_13line_detector_ArrayWrapper = &__pyx_type_6cbclib_3bin_13line_detector_ArrayWrapper;
   __pyx_vtabptr_6cbclib_3bin_13line_detector_LSD = &__pyx_vtable_6cbclib_3bin_13line_detector_LSD;
+  __pyx_vtable_6cbclib_3bin_13line_detector_LSD._scale_image = (PyArrayObject *(*)(PyArrayObject *))__pyx_f_6cbclib_3bin_13line_detector_3LSD__scale_image;
   __pyx_vtable_6cbclib_3bin_13line_detector_LSD._check_image = (PyArrayObject *(*)(PyArrayObject *))__pyx_f_6cbclib_3bin_13line_detector_3LSD__check_image;
   __pyx_vtable_6cbclib_3bin_13line_detector_LSD.detect = (PyObject *(*)(struct __pyx_obj_6cbclib_3bin_13line_detector_LSD *, PyArrayObject *, int __pyx_skip_dispatch))__pyx_f_6cbclib_3bin_13line_detector_3LSD_detect;
   if (PyType_Ready(&__pyx_type_6cbclib_3bin_13line_detector_LSD) < 0) __PYX_ERR(1, 44, __pyx_L1_error)
@@ -5070,16 +5269,16 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_setstate_cython, __pyx_t_1) < 0) __PYX_ERR(0, 3, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "cbclib/bin/line_detector.pyx":103
+  /* "cbclib/bin/line_detector.pyx":120
  *         return image
  * 
  *     cpdef dict detect(self, np.ndarray image):             # <<<<<<<<<<<<<<
  *         """Perform the streak detection on `image`.
  * 
  */
-  __pyx_t_1 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_13line_detector_3LSD_5detect, __Pyx_CYFUNCTION_CCLASS, __pyx_n_s_LSD_detect, NULL, __pyx_n_s_cbclib_bin_line_detector, __pyx_d, ((PyObject *)__pyx_codeobj__14)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 103, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_13line_detector_3LSD_5detect, __Pyx_CYFUNCTION_CCLASS, __pyx_n_s_LSD_detect, NULL, __pyx_n_s_cbclib_bin_line_detector, __pyx_d, ((PyObject *)__pyx_codeobj__14)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 120, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem((PyObject *)__pyx_ptype_6cbclib_3bin_13line_detector_LSD->tp_dict, __pyx_n_s_detect, __pyx_t_1) < 0) __PYX_ERR(1, 103, __pyx_L1_error)
+  if (PyDict_SetItem((PyObject *)__pyx_ptype_6cbclib_3bin_13line_detector_LSD->tp_dict, __pyx_n_s_detect, __pyx_t_1) < 0) __PYX_ERR(1, 120, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   PyType_Modified(__pyx_ptype_6cbclib_3bin_13line_detector_LSD);
 
@@ -7187,6 +7386,59 @@ bad:
 }
 
 /* CIntToPy */
+static CYTHON_INLINE PyObject* __Pyx_PyInt_From_Py_intptr_t(Py_intptr_t value) {
+    const Py_intptr_t neg_one = (Py_intptr_t) ((Py_intptr_t) 0 - (Py_intptr_t) 1), const_zero = (Py_intptr_t) 0;
+    const int is_unsigned = neg_one > const_zero;
+    if (is_unsigned) {
+        if (sizeof(Py_intptr_t) < sizeof(long)) {
+            return PyInt_FromLong((long) value);
+        } else if (sizeof(Py_intptr_t) <= sizeof(unsigned long)) {
+            return PyLong_FromUnsignedLong((unsigned long) value);
+#ifdef HAVE_LONG_LONG
+        } else if (sizeof(Py_intptr_t) <= sizeof(unsigned PY_LONG_LONG)) {
+            return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG) value);
+#endif
+        }
+    } else {
+        if (sizeof(Py_intptr_t) <= sizeof(long)) {
+            return PyInt_FromLong((long) value);
+#ifdef HAVE_LONG_LONG
+        } else if (sizeof(Py_intptr_t) <= sizeof(PY_LONG_LONG)) {
+            return PyLong_FromLongLong((PY_LONG_LONG) value);
+#endif
+        }
+    }
+    {
+        int one = 1; int little = (int)*(unsigned char *)&one;
+        unsigned char *bytes = (unsigned char *)&value;
+        return _PyLong_FromByteArray(bytes, sizeof(Py_intptr_t),
+                                     little, !is_unsigned);
+    }
+}
+
+/* CIntFromPyVerify */
+#define __PYX_VERIFY_RETURN_INT(target_type, func_type, func_value)\
+    __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, 0)
+#define __PYX_VERIFY_RETURN_INT_EXC(target_type, func_type, func_value)\
+    __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, 1)
+#define __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, exc)\
+    {\
+        func_type value = func_value;\
+        if (sizeof(target_type) < sizeof(func_type)) {\
+            if (unlikely(value != (func_type) (target_type) value)) {\
+                func_type zero = 0;\
+                if (exc && unlikely(value == (func_type)-1 && PyErr_Occurred()))\
+                    return (target_type) -1;\
+                if (is_unsigned && unlikely(value < zero))\
+                    goto raise_neg_overflow;\
+                else\
+                    goto raise_overflow;\
+            }\
+        }\
+        return (target_type) value;\
+    }
+
+/* CIntToPy */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value) {
     const int neg_one = (int) ((int) 0 - (int) 1), const_zero = (int) 0;
     const int is_unsigned = neg_one > const_zero;
@@ -7525,6 +7777,195 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_int(int value) {
     #endif
 #endif
 
+/* CIntFromPy */
+static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
+    const int neg_one = (int) ((int) 0 - (int) 1), const_zero = (int) 0;
+    const int is_unsigned = neg_one > const_zero;
+#if PY_MAJOR_VERSION < 3
+    if (likely(PyInt_Check(x))) {
+        if (sizeof(int) < sizeof(long)) {
+            __PYX_VERIFY_RETURN_INT(int, long, PyInt_AS_LONG(x))
+        } else {
+            long val = PyInt_AS_LONG(x);
+            if (is_unsigned && unlikely(val < 0)) {
+                goto raise_neg_overflow;
+            }
+            return (int) val;
+        }
+    } else
+#endif
+    if (likely(PyLong_Check(x))) {
+        if (is_unsigned) {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (int) 0;
+                case  1: __PYX_VERIFY_RETURN_INT(int, digit, digits[0])
+                case 2:
+                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 2 * PyLong_SHIFT) {
+                            return (int) (((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 3 * PyLong_SHIFT) {
+                            return (int) (((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) >= 4 * PyLong_SHIFT) {
+                            return (int) (((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
+                        }
+                    }
+                    break;
+            }
+#endif
+#if CYTHON_COMPILING_IN_CPYTHON
+            if (unlikely(Py_SIZE(x) < 0)) {
+                goto raise_neg_overflow;
+            }
+#else
+            {
+                int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
+                if (unlikely(result < 0))
+                    return (int) -1;
+                if (unlikely(result == 1))
+                    goto raise_neg_overflow;
+            }
+#endif
+            if (sizeof(int) <= sizeof(unsigned long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned long, PyLong_AsUnsignedLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
+#endif
+            }
+        } else {
+#if CYTHON_USE_PYLONG_INTERNALS
+            const digit* digits = ((PyLongObject*)x)->ob_digit;
+            switch (Py_SIZE(x)) {
+                case  0: return (int) 0;
+                case -1: __PYX_VERIFY_RETURN_INT(int, sdigit, (sdigit) (-(sdigit)digits[0]))
+                case  1: __PYX_VERIFY_RETURN_INT(int,  digit, +digits[0])
+                case -2:
+                    if (8 * sizeof(int) - 1 > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 2:
+                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                            return (int) ((((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case -3:
+                    if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 3:
+                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                            return (int) ((((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case -4:
+                    if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
+                            return (int) (((int)-1)*(((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+                case 4:
+                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
+                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
+                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
+                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
+                            return (int) ((((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
+                        }
+                    }
+                    break;
+            }
+#endif
+            if (sizeof(int) <= sizeof(long)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, long, PyLong_AsLong(x))
+#ifdef HAVE_LONG_LONG
+            } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
+                __PYX_VERIFY_RETURN_INT_EXC(int, PY_LONG_LONG, PyLong_AsLongLong(x))
+#endif
+            }
+        }
+        {
+#if CYTHON_COMPILING_IN_PYPY && !defined(_PyLong_AsByteArray)
+            PyErr_SetString(PyExc_RuntimeError,
+                            "_PyLong_AsByteArray() not available in PyPy, cannot convert large numbers");
+#else
+            int val;
+            PyObject *v = __Pyx_PyNumber_IntOrLong(x);
+ #if PY_MAJOR_VERSION < 3
+            if (likely(v) && !PyLong_Check(v)) {
+                PyObject *tmp = v;
+                v = PyNumber_Long(tmp);
+                Py_DECREF(tmp);
+            }
+ #endif
+            if (likely(v)) {
+                int one = 1; int is_little = (int)*(unsigned char *)&one;
+                unsigned char *bytes = (unsigned char *)&val;
+                int ret = _PyLong_AsByteArray((PyLongObject *)v,
+                                              bytes, sizeof(val),
+                                              is_little, !is_unsigned);
+                Py_DECREF(v);
+                if (likely(!ret))
+                    return val;
+            }
+#endif
+            return (int) -1;
+        }
+    } else {
+        int val;
+        PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
+        if (!tmp) return (int) -1;
+        val = __Pyx_PyInt_As_int(tmp);
+        Py_DECREF(tmp);
+        return val;
+    }
+raise_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "value too large to convert to int");
+    return (int) -1;
+raise_neg_overflow:
+    PyErr_SetString(PyExc_OverflowError,
+        "can't convert negative value to int");
+    return (int) -1;
+}
+
 /* CIntToPy */
 static CYTHON_INLINE PyObject* __Pyx_PyInt_From_long(long value) {
     const long neg_one = (long) ((long) 0 - (long) 1), const_zero = (long) 0;
@@ -7555,28 +7996,6 @@ static CYTHON_INLINE PyObject* __Pyx_PyInt_From_long(long value) {
                                      little, !is_unsigned);
     }
 }
-
-/* CIntFromPyVerify */
-#define __PYX_VERIFY_RETURN_INT(target_type, func_type, func_value)\
-    __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, 0)
-#define __PYX_VERIFY_RETURN_INT_EXC(target_type, func_type, func_value)\
-    __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, 1)
-#define __PYX__VERIFY_RETURN_INT(target_type, func_type, func_value, exc)\
-    {\
-        func_type value = func_value;\
-        if (sizeof(target_type) < sizeof(func_type)) {\
-            if (unlikely(value != (func_type) (target_type) value)) {\
-                func_type zero = 0;\
-                if (exc && unlikely(value == (func_type)-1 && PyErr_Occurred()))\
-                    return (target_type) -1;\
-                if (is_unsigned && unlikely(value < zero))\
-                    goto raise_neg_overflow;\
-                else\
-                    goto raise_overflow;\
-            }\
-        }\
-        return (target_type) value;\
-    }
 
 /* CIntFromPy */
 static CYTHON_INLINE long __Pyx_PyInt_As_long(PyObject *x) {
@@ -7765,195 +8184,6 @@ raise_neg_overflow:
     PyErr_SetString(PyExc_OverflowError,
         "can't convert negative value to long");
     return (long) -1;
-}
-
-/* CIntFromPy */
-static CYTHON_INLINE int __Pyx_PyInt_As_int(PyObject *x) {
-    const int neg_one = (int) ((int) 0 - (int) 1), const_zero = (int) 0;
-    const int is_unsigned = neg_one > const_zero;
-#if PY_MAJOR_VERSION < 3
-    if (likely(PyInt_Check(x))) {
-        if (sizeof(int) < sizeof(long)) {
-            __PYX_VERIFY_RETURN_INT(int, long, PyInt_AS_LONG(x))
-        } else {
-            long val = PyInt_AS_LONG(x);
-            if (is_unsigned && unlikely(val < 0)) {
-                goto raise_neg_overflow;
-            }
-            return (int) val;
-        }
-    } else
-#endif
-    if (likely(PyLong_Check(x))) {
-        if (is_unsigned) {
-#if CYTHON_USE_PYLONG_INTERNALS
-            const digit* digits = ((PyLongObject*)x)->ob_digit;
-            switch (Py_SIZE(x)) {
-                case  0: return (int) 0;
-                case  1: __PYX_VERIFY_RETURN_INT(int, digit, digits[0])
-                case 2:
-                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 2 * PyLong_SHIFT) {
-                            return (int) (((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
-                        }
-                    }
-                    break;
-                case 3:
-                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 3 * PyLong_SHIFT) {
-                            return (int) (((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
-                        }
-                    }
-                    break;
-                case 4:
-                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) >= 4 * PyLong_SHIFT) {
-                            return (int) (((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0]));
-                        }
-                    }
-                    break;
-            }
-#endif
-#if CYTHON_COMPILING_IN_CPYTHON
-            if (unlikely(Py_SIZE(x) < 0)) {
-                goto raise_neg_overflow;
-            }
-#else
-            {
-                int result = PyObject_RichCompareBool(x, Py_False, Py_LT);
-                if (unlikely(result < 0))
-                    return (int) -1;
-                if (unlikely(result == 1))
-                    goto raise_neg_overflow;
-            }
-#endif
-            if (sizeof(int) <= sizeof(unsigned long)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned long, PyLong_AsUnsignedLong(x))
-#ifdef HAVE_LONG_LONG
-            } else if (sizeof(int) <= sizeof(unsigned PY_LONG_LONG)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, unsigned PY_LONG_LONG, PyLong_AsUnsignedLongLong(x))
-#endif
-            }
-        } else {
-#if CYTHON_USE_PYLONG_INTERNALS
-            const digit* digits = ((PyLongObject*)x)->ob_digit;
-            switch (Py_SIZE(x)) {
-                case  0: return (int) 0;
-                case -1: __PYX_VERIFY_RETURN_INT(int, sdigit, (sdigit) (-(sdigit)digits[0]))
-                case  1: __PYX_VERIFY_RETURN_INT(int,  digit, +digits[0])
-                case -2:
-                    if (8 * sizeof(int) - 1 > 1 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-                case 2:
-                    if (8 * sizeof(int) > 1 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 2 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
-                            return (int) ((((((int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-                case -3:
-                    if (8 * sizeof(int) - 1 > 2 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-                case 3:
-                    if (8 * sizeof(int) > 2 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 3 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
-                            return (int) ((((((((int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-                case -4:
-                    if (8 * sizeof(int) - 1 > 3 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, long, -(long) (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
-                            return (int) (((int)-1)*(((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-                case 4:
-                    if (8 * sizeof(int) > 3 * PyLong_SHIFT) {
-                        if (8 * sizeof(unsigned long) > 4 * PyLong_SHIFT) {
-                            __PYX_VERIFY_RETURN_INT(int, unsigned long, (((((((((unsigned long)digits[3]) << PyLong_SHIFT) | (unsigned long)digits[2]) << PyLong_SHIFT) | (unsigned long)digits[1]) << PyLong_SHIFT) | (unsigned long)digits[0])))
-                        } else if (8 * sizeof(int) - 1 > 4 * PyLong_SHIFT) {
-                            return (int) ((((((((((int)digits[3]) << PyLong_SHIFT) | (int)digits[2]) << PyLong_SHIFT) | (int)digits[1]) << PyLong_SHIFT) | (int)digits[0])));
-                        }
-                    }
-                    break;
-            }
-#endif
-            if (sizeof(int) <= sizeof(long)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, long, PyLong_AsLong(x))
-#ifdef HAVE_LONG_LONG
-            } else if (sizeof(int) <= sizeof(PY_LONG_LONG)) {
-                __PYX_VERIFY_RETURN_INT_EXC(int, PY_LONG_LONG, PyLong_AsLongLong(x))
-#endif
-            }
-        }
-        {
-#if CYTHON_COMPILING_IN_PYPY && !defined(_PyLong_AsByteArray)
-            PyErr_SetString(PyExc_RuntimeError,
-                            "_PyLong_AsByteArray() not available in PyPy, cannot convert large numbers");
-#else
-            int val;
-            PyObject *v = __Pyx_PyNumber_IntOrLong(x);
- #if PY_MAJOR_VERSION < 3
-            if (likely(v) && !PyLong_Check(v)) {
-                PyObject *tmp = v;
-                v = PyNumber_Long(tmp);
-                Py_DECREF(tmp);
-            }
- #endif
-            if (likely(v)) {
-                int one = 1; int is_little = (int)*(unsigned char *)&one;
-                unsigned char *bytes = (unsigned char *)&val;
-                int ret = _PyLong_AsByteArray((PyLongObject *)v,
-                                              bytes, sizeof(val),
-                                              is_little, !is_unsigned);
-                Py_DECREF(v);
-                if (likely(!ret))
-                    return val;
-            }
-#endif
-            return (int) -1;
-        }
-    } else {
-        int val;
-        PyObject *tmp = __Pyx_PyNumber_IntOrLong(x);
-        if (!tmp) return (int) -1;
-        val = __Pyx_PyInt_As_int(tmp);
-        Py_DECREF(tmp);
-        return val;
-    }
-raise_overflow:
-    PyErr_SetString(PyExc_OverflowError,
-        "value too large to convert to int");
-    return (int) -1;
-raise_neg_overflow:
-    PyErr_SetString(PyExc_OverflowError,
-        "can't convert negative value to int");
-    return (int) -1;
 }
 
 /* FastTypeChecks */
