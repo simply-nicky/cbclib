@@ -2,14 +2,12 @@ cimport numpy as np
 import numpy as np
 from libc.stdlib cimport free, malloc, calloc
 from cpython.ref cimport Py_INCREF
+from cython.parallel import prange
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
 
-DEF QUANT = 2.0
-DEF ANG_TH = 22.5
-DEF DENSITY_TH = 0.7
 DEF N_BINS = 1024
 DEF LINE_SIZE = 7
 
@@ -52,16 +50,38 @@ cdef class LSD:
              Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
              http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
     """
-    cdef double _scale
-    cdef double _sigma_scale
-    cdef double _log_eps
+    cdef public double ang_th
+    cdef public double density_th
+    cdef public double log_eps
+    cdef public double scale
+    cdef public double sigma_scale
+    cdef public double quant
 
-    def __cinit__(self, double scale=0.8, double sigma_scale=0.6, double log_eps=0.):
-        self._scale = scale
-        self._sigma_scale = sigma_scale
-        self._log_eps = log_eps
+    def __cinit__(self, double scale=0.8, double sigma_scale=0.6, double log_eps=0.,
+                  double ang_th=45.0, double density_th=0.7, double quant=2.0):
+        if scale < 0 or scale > 1:
+            raise ValueError('scale is out of bounds (0.0, 1.0)')
+        else:
+            self.scale = scale
+        if sigma_scale < 0 or sigma_scale > 1:
+            raise ValueError('sigma_scale is out of bounds (0.0, 1.0)')
+        else:
+            self.sigma_scale = sigma_scale
+        self.log_eps = log_eps
+        if ang_th < 0 or ang_th > 360:
+            raise ValueError('ang_th is out of bounds (0.0, 360.0)')
+        else:
+            self.ang_th = ang_th
+        if density_th < 0 or density_th > 1:
+            raise ValueError('density_th is out of bounds (0.0, 1.0)')
+        else:
+            self.density_th = density_th
+        if quant < 0:
+            raise ValueError('quant msut be positive')
+        else:
+            self.quant = quant
 
-    def __init__(self, scale=0.8, sigma_scale=0.6, log_eps=0):
+    def __init__(self, scale=0.8, sigma_scale=0.6, log_eps=0, ang_th=45.0, density_th=0.7, quant=2.0):
         """Create a LSD object for streak detection on digital images.
 
         Parameters
@@ -86,30 +106,23 @@ cdef class LSD:
             *  1.0 gives an average of 0.1 false detections on nose.
             *  2.0 gives an average of 0.01 false detections on noise.
             Default value is 0.0.
+        ang_th : float, optional
+            Gradient angle tolerance in the region growing algorithm, in
+            degrees. Default value is 45.0.
+        density_th : float, optional
+            Minimal proportion of 'supporting' points in a rectangle.
+            Default value is 0.7.
+        quant : float, optional
+            Bound to the quantization error on the gradient norm.
+            Example: if gray levels are quantized to integer steps,
+            the gradient (computed by finite differences) error
+            due to quantization will be bounded by 2.0, as the
+            worst case is when the error are 1 and -1, that
+            gives an error of 2.0. Default value is 2.0.
         """
 
     @staticmethod
-    cdef np.ndarray _scale_image(np.ndarray image):
-        """LSD works with digital values in the range [0, 255]."""
-        cdef double *data = <double *>np.PyArray_DATA(image)
-        cdef np.npy_intp size = np.PyArray_SIZE(image)
-        cdef int i
-        cdef double _min = data[0]
-        cdef double _max = data[0]
-        for i in range(size):
-            if data[i] > _max:
-                _max = data[i]
-            if data[i] < _min:
-                _min = data[i]
-        for i in range(size):
-            data[i] = (data[i] - _min) / (_max - _min) * 255.
-        return image
-
-    @staticmethod
     cdef np.ndarray _check_image(np.ndarray image):
-        cdef int ndim = image.ndim
-        if ndim != 2:
-            raise ValueError('Image must be a 2D array.')
         if not np.PyArray_IS_C_CONTIGUOUS(image):
             image = np.PyArray_GETCONTIGUOUS(image)
         cdef int tn = np.PyArray_TYPE(image)
@@ -145,8 +158,9 @@ cdef class LSD:
               0, while the used ones have the number of the line segment,
               numbered in the same order as in `lines`.
         """
+        if image.ndim != 2:
+            raise ValueError('Image must be a 2D array.')
         image = LSD._check_image(image)
-        image = LSD._scale_image(image)
 
         cdef double *_img = <double *>np.PyArray_DATA(image)
         cdef int _img_x = <int>image.shape[1]
@@ -161,10 +175,10 @@ cdef class LSD:
 
         cdef int fail = 0
         with nogil:
-            fail =  LineSegmentDetection(&_out, &_n_out, _img, _img_x, _img_y,
-                                         self._scale, self._sigma_scale, QUANT,
-                                         ANG_TH, self._log_eps, DENSITY_TH, N_BINS,
-                                         &_reg_img, &_reg_x, &_reg_y)
+            fail = LineSegmentDetection(&_out, &_n_out, _img, _img_x, _img_y,
+                                        self.scale, self.sigma_scale, self.quant,
+                                        self.ang_th, self.log_eps, self.density_th, N_BINS,
+                                        &_reg_img, &_reg_x, &_reg_y)
 
         if fail:
             raise RuntimeError("LSD execution finished with an error.")
@@ -176,3 +190,48 @@ cdef class LSD:
         cdef np.ndarray reg_img = ArrayWrapper.from_ptr(<void *>_reg_img).to_ndarray(2, reg_dims, np.NPY_INT32)
 
         return {'lines': out, 'labels': reg_img}
+
+    cpdef np.ndarray mask(self, np.ndarray image, unsigned int max_val=1, unsigned int dilation=0, unsigned int num_threads=1):
+        """Perform the streak detection on `image` and return rasterized lines
+        drawn on a mask array.
+
+        Parameters
+        ----------
+        image : np.ndarray
+            2D array of the digital image.
+        max_val : int, optional
+            Maximal value in the output mask.
+        dilation : int, optional
+            Size of the morphology dilation applied to the output mask.
+        num_threads : int, optional
+            Number of the computational threads.
+        
+        Returns
+        -------
+        mask : np.ndarray
+            Array, that has the same shape as `image`, with the regions
+            masked by the detected lines.
+        """
+        if image.ndim < 2:
+            raise ValueError('Image must be >=2D array.')
+        image = LSD._check_image(image)
+
+        cdef int ndim = image.ndim
+        cdef double *img_ptr = <double *>np.PyArray_DATA(image)
+        cdef int X = <int>image.shape[ndim - 1]
+        cdef int Y = <int>image.shape[ndim - 2]
+
+        cdef np.ndarray mask = np.PyArray_ZEROS(ndim, image.shape, np.NPY_UINT32, 0)
+        cdef unsigned int *msk_ptr = <unsigned int *>np.PyArray_DATA(mask)
+        cdef double *out
+        cdef int n_out, fail, i
+
+        cdef unsigned int repeats = image.size / X / Y
+        num_threads = repeats if num_threads > repeats else num_threads
+        for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+            fail = LineSegmentDetection(&out, &n_out, img_ptr + i * X * Y, X, Y,
+                                        self.scale, self.sigma_scale, self.quant,
+                                        self.ang_th, self.log_eps, self.density_th, N_BINS,
+                                        NULL, NULL, NULL)
+            draw_lines(msk_ptr + i * X * Y, X, Y, max_val, out, n_out, dilation)
+        return mask

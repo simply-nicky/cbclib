@@ -4,6 +4,10 @@ cdef extern from "Python.h":
 ctypedef int (*convolve_func)(double*, double*, int, unsigned long*, double*,
                               unsigned long, int, int, double, unsigned)
 
+cdef extern from "array.h":
+    int draw_lines_c "draw_lines" (unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
+                     double *lines, unsigned long lines, unsigned int dilation) nogil
+
 cdef extern from "pocket_fft.h":
     unsigned long next_fast_len_fftw(unsigned long target) nogil
     unsigned long good_size(unsigned long n) nogil
@@ -28,14 +32,21 @@ cdef extern from "fft_functions.h":
 cdef extern from "median.h":
     int compare_double(void *a, void *b) nogil
     int compare_float(void *a, void *b) nogil
-    int compare_long(void *a, void *b) nogil
+    int compare_int(void *a, void *b) nogil
+    int compare_uint(void *a, void *b) nogil
 
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
-    int median_filter_c "median_filter" (void *out, void *data, int ndim, unsigned long *dims,
-                        unsigned long item_size, unsigned long *fsize, int mode, void *cval,
-                        int (*compar)(void*, void*), unsigned threads) nogil
+    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, int ndim,
+                        unsigned long *dims, unsigned long item_size, unsigned long *fsize,
+                        unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
+                        unsigned threads) nogil
+
+    int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, int ndim,
+                         unsigned long *dims, unsigned long item_size, unsigned long *fsize,
+                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
+                         unsigned threads) nogil
 
 cdef extern from "fftw3.h":
     void fftw_init_threads() nogil

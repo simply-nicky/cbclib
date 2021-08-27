@@ -4,3 +4,7 @@ cdef extern from "lsd.h":
                              double quant, double ang_th, double log_eps,
                              double density_th, int n_bins,
                              int **reg_img, int *reg_x, int *reg_y) nogil
+
+cdef extern from "array.h":
+    int draw_lines(unsigned int *out, unsigned long X, unsigned long Y, unsigned int max_val,
+                   double *lines, unsigned long lines, unsigned int dilation) nogil

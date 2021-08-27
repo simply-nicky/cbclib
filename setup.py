@@ -25,7 +25,8 @@ extension_args = {'language': 'c',
 src_files = ['cbclib/include/pocket_fft.c', 'cbclib/include/array.c',
              'cbclib/include/fft_functions.c', 'cbclib/include/median.c']
 extensions = [Extension(name='cbclib.bin.line_detector',
-                        sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c'], **extension_args),
+                        sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c', 'cbclib/include/array.c'],
+                        **extension_args),
               Extension(name='cbclib.bin.data_processing',
                         sources=['cbclib/bin/data_processing' + ext,] + src_files, **extension_args)]
 

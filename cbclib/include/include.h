@@ -4,9 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
+#include <float.h>
 #include <complex.h>
 #include <fftw3.h>
 #include <omp.h>
+#include <pthread.h>
 
 #ifdef __GNUC__
 #define NOINLINE __attribute__((noinline))
@@ -32,5 +35,8 @@
 
 #define ERROR(msg) \
     (fprintf(stderr, "C Error: %s\n", msg))
+
+#define LSD_ERROR(msg) \
+    (fprintf(stderr, "LSD Error: %s\n", msg))
 
 #endif

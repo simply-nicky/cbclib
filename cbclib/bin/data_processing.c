@@ -10,6 +10,7 @@
             "/gpfs/cfel/cxi/scratch/user/nivanov/.conda/envs/cbc/lib/python3.7/site-packages/numpy/core/include/numpy/ndarrayobject.h",
             "/gpfs/cfel/cxi/scratch/user/nivanov/.conda/envs/cbc/lib/python3.7/site-packages/numpy/core/include/numpy/ndarraytypes.h",
             "/gpfs/cfel/cxi/scratch/user/nivanov/.conda/envs/cbc/lib/python3.7/site-packages/numpy/core/include/numpy/ufuncobject.h",
+            "cbclib/include/array.h",
             "cbclib/include/fft_functions.h",
             "cbclib/include/median.h",
             "cbclib/include/pocket_fft.h"
@@ -654,6 +655,7 @@ static CYTHON_INLINE float __PYX_NAN() {
 #define __PYX_HAVE__cbclib__bin__data_processing
 #define __PYX_HAVE_API__cbclib__bin__data_processing
 /* Early includes */
+#include "array.h"
 #include "pocket_fft.h"
 #include "fft_functions.h"
 #include "median.h"
@@ -1168,7 +1170,7 @@ typedef npy_clongdouble __pyx_t_5numpy_clongdouble_t;
  */
 typedef npy_cdouble __pyx_t_5numpy_complex_t;
 
-/* "cbclib/bin/data_processing.pxd":45
+/* "cbclib/bin/data_processing.pxd":56
  *     void fftw_cleanup_threads() nogil
  * 
  * cdef enum:             # <<<<<<<<<<<<<<
@@ -1763,6 +1765,8 @@ static PyObject *__pyx_builtin_ValueError;
 static PyObject *__pyx_builtin_MemoryError;
 static PyObject *__pyx_builtin_TypeError;
 static PyObject *__pyx_builtin_ImportError;
+static const char __pyx_k_X[] = "_X";
+static const char __pyx_k_Y[] = "_Y";
 static const char __pyx_k_i[] = "i";
 static const char __pyx_k_np[] = "np";
 static const char __pyx_k_inp[] = "inp";
@@ -1787,8 +1791,12 @@ static const char __pyx_k_test[] = "__test__";
 static const char __pyx_k_wrap[] = "wrap";
 static const char __pyx_k_array[] = "array";
 static const char __pyx_k_dtype[] = "dtype";
+static const char __pyx_k_fmask[] = "_fmask";
+static const char __pyx_k_fsize[] = "_fsize";
+static const char __pyx_k_image[] = "image";
 static const char __pyx_k_inp_2[] = "_inp";
 static const char __pyx_k_ksize[] = "ksize";
+static const char __pyx_k_lines[] = "lines";
 static const char __pyx_k_numpy[] = "numpy";
 static const char __pyx_k_odims[] = "odims";
 static const char __pyx_k_order[] = "order";
@@ -1813,15 +1821,23 @@ static const char __pyx_k_return[] = "return";
 static const char __pyx_k_sigmas[] = "sigmas";
 static const char __pyx_k_target[] = "target";
 static const char __pyx_k_backend[] = "backend";
+static const char __pyx_k_fsize_2[] = "fsize";
+static const char __pyx_k_image_2[] = "_image";
+static const char __pyx_k_lines_2[] = "_lines";
+static const char __pyx_k_max_val[] = "max_val";
+static const char __pyx_k_n_lines[] = "_n_lines";
 static const char __pyx_k_ndarray[] = "ndarray";
 static const char __pyx_k_nearest[] = "nearest";
 static const char __pyx_k_reflect[] = "reflect";
 static const char __pyx_k_unicode[] = "unicode";
 static const char __pyx_k_constant[] = "constant";
+static const char __pyx_k_dilation[] = "dilation";
 static const char __pyx_k_truncate[] = "truncate";
 static const char __pyx_k_type_num[] = "type_num";
 static const char __pyx_k_TypeError[] = "TypeError";
+static const char __pyx_k_footprint[] = "footprint";
 static const char __pyx_k_ValueError[] = "ValueError";
+static const char __pyx_k_draw_lines[] = "draw_lines";
 static const char __pyx_k_ImportError[] = "ImportError";
 static const char __pyx_k_MemoryError[] = "MemoryError";
 static const char __pyx_k_num_threads[] = "num_threads";
@@ -1830,6 +1846,7 @@ static const char __pyx_k_fft_convolve[] = "fft_convolve";
 static const char __pyx_k_unsigned_int[] = "unsigned int";
 static const char __pyx_k_median_filter[] = "median_filter";
 static const char __pyx_k_next_fast_len[] = "next_fast_len";
+static const char __pyx_k_maximum_filter[] = "maximum_filter";
 static const char __pyx_k_gaussian_filter[] = "gaussian_filter";
 static const char __pyx_k_gaussian_kernel[] = "gaussian_kernel";
 static const char __pyx_k_not_enough_memory[] = "not enough memory";
@@ -1842,11 +1859,14 @@ static const char __pyx_k_gaussian_gradient_magnitude[] = "gaussian_gradient_mag
 static const char __pyx_k_Wrong_sequence_argument_type[] = "Wrong sequence argument type";
 static const char __pyx_k_Target_length_must_be_positive[] = "Target length must be positive";
 static const char __pyx_k_cbclib_bin_data_processing_pyx[] = "cbclib/bin/data_processing.pyx";
+static const char __pyx_k_lines_array_has_an_incompatible[] = "lines array has an incompatible shape";
 static const char __pyx_k_numpy_core_multiarray_failed_to[] = "numpy.core.multiarray failed to import";
 static const char __pyx_k_Sequence_argument_must_have_leng[] = "Sequence argument must have length equal to input rank";
 static const char __pyx_k_data_argument_has_incompatible_t[] = "data argument has incompatible type: {:s}";
+static const char __pyx_k_image_array_must_be_two_dimensio[] = "image array must be two-dimensional";
 static const char __pyx_k_mask_and_data_arrays_must_have_i[] = "mask and data arrays must have identical shapes";
 static const char __pyx_k_numpy_core_umath_failed_to_impor[] = "numpy.core.umath failed to import";
+static const char __pyx_k_size_or_footprint_must_be_provid[] = "size or footprint must be provided.";
 static PyObject *__pyx_kp_u_C_backend_exited_with_error;
 static PyObject *__pyx_n_s_ImportError;
 static PyObject *__pyx_n_s_MemoryError;
@@ -1856,6 +1876,8 @@ static PyObject *__pyx_kp_u_Target_length_must_be_positive;
 static PyObject *__pyx_n_s_TypeError;
 static PyObject *__pyx_n_s_ValueError;
 static PyObject *__pyx_kp_u_Wrong_sequence_argument_type;
+static PyObject *__pyx_n_s_X;
+static PyObject *__pyx_n_s_Y;
 static PyObject *__pyx_n_s_array;
 static PyObject *__pyx_n_s_axis;
 static PyObject *__pyx_n_s_backend;
@@ -1869,18 +1891,27 @@ static PyObject *__pyx_n_s_cval_2;
 static PyObject *__pyx_n_s_data;
 static PyObject *__pyx_n_s_data_2;
 static PyObject *__pyx_kp_u_data_argument_has_incompatible_t;
+static PyObject *__pyx_n_s_dilation;
 static PyObject *__pyx_n_s_dims;
 static PyObject *__pyx_n_s_dims_2;
 static PyObject *__pyx_n_u_double;
+static PyObject *__pyx_n_s_draw_lines;
 static PyObject *__pyx_n_s_dtype;
 static PyObject *__pyx_n_s_fail;
 static PyObject *__pyx_n_s_fft_convolve;
 static PyObject *__pyx_n_u_fftw;
+static PyObject *__pyx_n_s_fmask;
+static PyObject *__pyx_n_s_footprint;
 static PyObject *__pyx_n_s_format;
+static PyObject *__pyx_n_s_fsize;
+static PyObject *__pyx_n_s_fsize_2;
 static PyObject *__pyx_n_s_gaussian_filter;
 static PyObject *__pyx_n_s_gaussian_gradient_magnitude;
 static PyObject *__pyx_n_s_gaussian_kernel;
 static PyObject *__pyx_n_s_i;
+static PyObject *__pyx_n_s_image;
+static PyObject *__pyx_n_s_image_2;
+static PyObject *__pyx_kp_u_image_array_must_be_two_dimensio;
 static PyObject *__pyx_n_s_import;
 static PyObject *__pyx_n_s_inp;
 static PyObject *__pyx_n_s_inp_2;
@@ -1888,15 +1919,21 @@ static PyObject *__pyx_n_u_int;
 static PyObject *__pyx_n_s_kernel;
 static PyObject *__pyx_n_s_krn;
 static PyObject *__pyx_n_s_ksize;
+static PyObject *__pyx_n_s_lines;
+static PyObject *__pyx_n_s_lines_2;
+static PyObject *__pyx_kp_u_lines_array_has_an_incompatible;
 static PyObject *__pyx_n_s_main;
 static PyObject *__pyx_n_s_mask;
 static PyObject *__pyx_n_s_mask_2;
 static PyObject *__pyx_kp_u_mask_and_data_arrays_must_have_i;
+static PyObject *__pyx_n_s_max_val;
+static PyObject *__pyx_n_s_maximum_filter;
 static PyObject *__pyx_n_s_median;
 static PyObject *__pyx_n_s_median_filter;
 static PyObject *__pyx_n_u_mirror;
 static PyObject *__pyx_n_s_mode;
 static PyObject *__pyx_n_s_mode_2;
+static PyObject *__pyx_n_s_n_lines;
 static PyObject *__pyx_n_s_name;
 static PyObject *__pyx_n_u_ndarray;
 static PyObject *__pyx_n_s_ndim;
@@ -1925,6 +1962,7 @@ static PyObject *__pyx_n_s_sig;
 static PyObject *__pyx_n_s_sigma;
 static PyObject *__pyx_n_s_sigmas;
 static PyObject *__pyx_n_s_size;
+static PyObject *__pyx_kp_u_size_or_footprint_must_be_provid;
 static PyObject *__pyx_n_s_target;
 static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_n_s_truncate;
@@ -1938,7 +1976,9 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_4gaussian_filter(C
 static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_6gaussian_kernel(CYTHON_UNUSED PyObject *__pyx_self, double __pyx_v_sigma, unsigned int __pyx_v_order, double __pyx_v_truncate); /* proto */
 static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_8gaussian_gradient_magnitude(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_inp, PyObject *__pyx_v_sigma, PyObject *__pyx_v_mode, double __pyx_v_cval, double __pyx_v_truncate, PyObject *__pyx_v_backend, unsigned int __pyx_v_num_threads); /* proto */
 static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyArrayObject *__pyx_v_mask, int __pyx_v_axis, unsigned int __pyx_v_num_threads); /* proto */
-static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyArrayObject *__pyx_v_mask, unsigned int __pyx_v_size, int __pyx_v_axis, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads); /* proto */
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyObject *__pyx_v_size, PyArrayObject *__pyx_v_footprint, PyArrayObject *__pyx_v_mask, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads); /* proto */
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_14maximum_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyObject *__pyx_v_size, PyArrayObject *__pyx_v_footprint, PyArrayObject *__pyx_v_mask, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads); /* proto */
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_16draw_lines(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_image, PyArrayObject *__pyx_v_lines, unsigned int __pyx_v_max_val, unsigned int __pyx_v_dilation); /* proto */
 static PyObject *__pyx_int_0;
 static PyObject *__pyx_tuple_;
 static PyObject *__pyx_tuple__2;
@@ -1950,20 +1990,27 @@ static PyObject *__pyx_tuple__7;
 static PyObject *__pyx_tuple__8;
 static PyObject *__pyx_tuple__9;
 static PyObject *__pyx_tuple__10;
+static PyObject *__pyx_tuple__11;
 static PyObject *__pyx_tuple__12;
 static PyObject *__pyx_tuple__13;
 static PyObject *__pyx_tuple__15;
-static PyObject *__pyx_tuple__17;
-static PyObject *__pyx_tuple__19;
-static PyObject *__pyx_tuple__21;
-static PyObject *__pyx_tuple__23;
-static PyObject *__pyx_codeobj__11;
+static PyObject *__pyx_tuple__16;
+static PyObject *__pyx_tuple__18;
+static PyObject *__pyx_tuple__20;
+static PyObject *__pyx_tuple__22;
+static PyObject *__pyx_tuple__24;
+static PyObject *__pyx_tuple__26;
+static PyObject *__pyx_tuple__28;
+static PyObject *__pyx_tuple__30;
 static PyObject *__pyx_codeobj__14;
-static PyObject *__pyx_codeobj__16;
-static PyObject *__pyx_codeobj__18;
-static PyObject *__pyx_codeobj__20;
-static PyObject *__pyx_codeobj__22;
-static PyObject *__pyx_codeobj__24;
+static PyObject *__pyx_codeobj__17;
+static PyObject *__pyx_codeobj__19;
+static PyObject *__pyx_codeobj__21;
+static PyObject *__pyx_codeobj__23;
+static PyObject *__pyx_codeobj__25;
+static PyObject *__pyx_codeobj__27;
+static PyObject *__pyx_codeobj__29;
+static PyObject *__pyx_codeobj__31;
 /* Late includes */
 
 /* "cbclib/bin/data_processing.pyx":10
@@ -4937,18 +4984,19 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
   void *__pyx_v__out;
   void *__pyx_v__data;
   unsigned char *__pyx_v__mask;
-  CYTHON_UNUSED int __pyx_v_fail;
+  int __pyx_v_fail;
   PyArrayObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
-  PyObject *__pyx_t_1 = NULL;
-  int __pyx_t_2;
+  int __pyx_t_1;
+  PyObject *__pyx_t_2 = NULL;
   int __pyx_t_3;
   long __pyx_t_4;
   int __pyx_t_5;
-  int __pyx_t_6;
-  PyObject *__pyx_t_7 = NULL;
-  PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  int __pyx_t_7;
+  int __pyx_t_8;
   PyObject *__pyx_t_9 = NULL;
+  PyObject *__pyx_t_10 = NULL;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -4959,89 +5007,64 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
   /* "cbclib/bin/data_processing.pyx":364
  *         Whitefield.
  *     """
- *     data = check_array(data, np.NPY_FLOAT64)             # <<<<<<<<<<<<<<
- *     mask = check_array(mask, np.NPY_BOOL)
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
  * 
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_data, NPY_FLOAT64)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 364, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_DECREF_SET(__pyx_v_data, ((PyArrayObject *)__pyx_t_1));
-  __pyx_t_1 = 0;
+  __pyx_t_1 = ((!(PyArray_IS_C_CONTIGUOUS(__pyx_v_data) != 0)) != 0);
+  if (__pyx_t_1) {
 
-  /* "cbclib/bin/data_processing.pyx":365
+    /* "cbclib/bin/data_processing.pyx":365
  *     """
- *     data = check_array(data, np.NPY_FLOAT64)
- *     mask = check_array(mask, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):
+ *         data = np.PyArray_GETCONTIGUOUS(data)             # <<<<<<<<<<<<<<
  * 
  *     cdef int ndim = data.ndim
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_mask, NPY_BOOL)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 365, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_1));
-  __pyx_t_1 = 0;
+    __pyx_t_2 = ((PyObject *)PyArray_GETCONTIGUOUS(__pyx_v_data)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 365, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_DECREF_SET(__pyx_v_data, ((PyArrayObject *)__pyx_t_2));
+    __pyx_t_2 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":364
+ *         Whitefield.
+ *     """
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
+ * 
+ */
+  }
 
   /* "cbclib/bin/data_processing.pyx":367
- *     mask = check_array(mask, np.NPY_BOOL)
+ *         data = np.PyArray_GETCONTIGUOUS(data)
  * 
  *     cdef int ndim = data.ndim             # <<<<<<<<<<<<<<
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')
+ *     axis = axis if axis >= 0 else ndim + axis
+ *     axis = axis if axis <= ndim - 1 else ndim - 1
  */
-  __pyx_t_2 = __pyx_v_data->nd;
-  __pyx_v_ndim = __pyx_t_2;
+  __pyx_t_3 = __pyx_v_data->nd;
+  __pyx_v_ndim = __pyx_t_3;
 
   /* "cbclib/bin/data_processing.pyx":368
  * 
  *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis
- */
-  __pyx_t_3 = (memcmp(__pyx_v_data->dimensions, __pyx_v_mask->dimensions, (__pyx_v_ndim * (sizeof(npy_intp)))) != 0);
-  if (unlikely(__pyx_t_3)) {
-
-    /* "cbclib/bin/data_processing.pyx":369
- *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')             # <<<<<<<<<<<<<<
- *     axis = axis if axis >= 0 else ndim + axis
- *     axis = axis if axis <= ndim - 1 else ndim - 1
- */
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__6, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 369, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_1);
-    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
-    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(0, 369, __pyx_L1_error)
-
-    /* "cbclib/bin/data_processing.pyx":368
- * 
- *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis
- */
-  }
-
-  /* "cbclib/bin/data_processing.pyx":370
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')
  *     axis = axis if axis >= 0 else ndim + axis             # <<<<<<<<<<<<<<
  *     axis = axis if axis <= ndim - 1 else ndim - 1
- *     cdef unsigned long *_dims = <unsigned long *>data.shape
+ * 
  */
   if (((__pyx_v_axis >= 0) != 0)) {
-    __pyx_t_2 = __pyx_v_axis;
+    __pyx_t_3 = __pyx_v_axis;
   } else {
-    __pyx_t_2 = (__pyx_v_ndim + __pyx_v_axis);
+    __pyx_t_3 = (__pyx_v_ndim + __pyx_v_axis);
   }
-  __pyx_v_axis = __pyx_t_2;
+  __pyx_v_axis = __pyx_t_3;
 
-  /* "cbclib/bin/data_processing.pyx":371
- *         raise ValueError('mask and data arrays must have identical shapes')
+  /* "cbclib/bin/data_processing.pyx":369
+ *     cdef int ndim = data.ndim
  *     axis = axis if axis >= 0 else ndim + axis
  *     axis = axis if axis <= ndim - 1 else ndim - 1             # <<<<<<<<<<<<<<
- *     cdef unsigned long *_dims = <unsigned long *>data.shape
- *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
+ * 
+ *     if mask is None:
  */
   if (((__pyx_v_axis <= (__pyx_v_ndim - 1)) != 0)) {
     __pyx_t_4 = __pyx_v_axis;
@@ -5050,49 +5073,141 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
   }
   __pyx_v_axis = __pyx_t_4;
 
-  /* "cbclib/bin/data_processing.pyx":372
- *     axis = axis if axis >= 0 else ndim + axis
+  /* "cbclib/bin/data_processing.pyx":371
  *     axis = axis if axis <= ndim - 1 else ndim - 1
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, data.shape, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+  __pyx_t_1 = (((PyObject *)__pyx_v_mask) == Py_None);
+  __pyx_t_5 = (__pyx_t_1 != 0);
+  if (__pyx_t_5) {
+
+    /* "cbclib/bin/data_processing.pyx":372
+ * 
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, data.shape, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ */
+    __pyx_t_2 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_data->dimensions, NPY_BOOL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 372, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_6 = __pyx_t_2;
+    __Pyx_INCREF(__pyx_t_6);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":373
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, data.shape, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)             # <<<<<<<<<<<<<<
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)
+ */
+    PyArray_FILLWBYTE(((PyObject *)__pyx_v_mask), 1);
+
+    /* "cbclib/bin/data_processing.pyx":371
+ *     axis = axis if axis <= ndim - 1 else ndim - 1
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, data.shape, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+    goto __pyx_L4;
+  }
+
+  /* "cbclib/bin/data_processing.pyx":375
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
+ *             raise ValueError('mask and data arrays must have identical shapes')
+ */
+  /*else*/ {
+    __pyx_t_6 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_mask, NPY_BOOL)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 375, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":376
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)
+ *         if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
+ *             raise ValueError('mask and data arrays must have identical shapes')
+ * 
+ */
+    __pyx_t_5 = (memcmp(__pyx_v_data->dimensions, __pyx_v_mask->dimensions, (__pyx_v_ndim * (sizeof(npy_intp)))) != 0);
+    if (unlikely(__pyx_t_5)) {
+
+      /* "cbclib/bin/data_processing.pyx":377
+ *         mask = check_array(mask, np.NPY_BOOL)
+ *         if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
+ *             raise ValueError('mask and data arrays must have identical shapes')             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>data.shape
+ */
+      __pyx_t_6 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__6, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 377, __pyx_L1_error)
+      __Pyx_GOTREF(__pyx_t_6);
+      __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+      __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+      __PYX_ERR(0, 377, __pyx_L1_error)
+
+      /* "cbclib/bin/data_processing.pyx":376
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)
+ *         if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
+ *             raise ValueError('mask and data arrays must have identical shapes')
+ * 
+ */
+    }
+  }
+  __pyx_L4:;
+
+  /* "cbclib/bin/data_processing.pyx":379
+ *             raise ValueError('mask and data arrays must have identical shapes')
+ * 
  *     cdef unsigned long *_dims = <unsigned long *>data.shape             # <<<<<<<<<<<<<<
+ * 
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
- *     if odims is NULL:
  */
   __pyx_v__dims = ((unsigned long *)__pyx_v_data->dimensions);
 
-  /* "cbclib/bin/data_processing.pyx":373
- *     axis = axis if axis <= ndim - 1 else ndim - 1
+  /* "cbclib/bin/data_processing.pyx":381
  *     cdef unsigned long *_dims = <unsigned long *>data.shape
+ * 
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))             # <<<<<<<<<<<<<<
  *     if odims is NULL:
  *         raise MemoryError('not enough memory')
  */
   __pyx_v_odims = ((npy_intp *)malloc(((__pyx_v_ndim - 1) * (sizeof(npy_intp)))));
 
-  /* "cbclib/bin/data_processing.pyx":374
- *     cdef unsigned long *_dims = <unsigned long *>data.shape
+  /* "cbclib/bin/data_processing.pyx":382
+ * 
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
  *     if odims is NULL:             # <<<<<<<<<<<<<<
  *         raise MemoryError('not enough memory')
  *     cdef int i
  */
-  __pyx_t_3 = ((__pyx_v_odims == NULL) != 0);
-  if (unlikely(__pyx_t_3)) {
+  __pyx_t_5 = ((__pyx_v_odims == NULL) != 0);
+  if (unlikely(__pyx_t_5)) {
 
-    /* "cbclib/bin/data_processing.pyx":375
+    /* "cbclib/bin/data_processing.pyx":383
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
  *     if odims is NULL:
  *         raise MemoryError('not enough memory')             # <<<<<<<<<<<<<<
  *     cdef int i
  *     for i in range(axis):
  */
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_MemoryError, __pyx_tuple__7, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 375, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_1);
-    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
-    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(0, 375, __pyx_L1_error)
+    __pyx_t_6 = __Pyx_PyObject_Call(__pyx_builtin_MemoryError, __pyx_tuple__7, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 383, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __PYX_ERR(0, 383, __pyx_L1_error)
 
-    /* "cbclib/bin/data_processing.pyx":374
- *     cdef unsigned long *_dims = <unsigned long *>data.shape
+    /* "cbclib/bin/data_processing.pyx":382
+ * 
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
  *     if odims is NULL:             # <<<<<<<<<<<<<<
  *         raise MemoryError('not enough memory')
@@ -5100,19 +5215,19 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
  */
   }
 
-  /* "cbclib/bin/data_processing.pyx":377
+  /* "cbclib/bin/data_processing.pyx":385
  *         raise MemoryError('not enough memory')
  *     cdef int i
  *     for i in range(axis):             # <<<<<<<<<<<<<<
  *         odims[i] = data.shape[i]
  *     for i in range(axis + 1, ndim):
  */
-  __pyx_t_2 = __pyx_v_axis;
-  __pyx_t_5 = __pyx_t_2;
-  for (__pyx_t_6 = 0; __pyx_t_6 < __pyx_t_5; __pyx_t_6+=1) {
-    __pyx_v_i = __pyx_t_6;
+  __pyx_t_3 = __pyx_v_axis;
+  __pyx_t_7 = __pyx_t_3;
+  for (__pyx_t_8 = 0; __pyx_t_8 < __pyx_t_7; __pyx_t_8+=1) {
+    __pyx_v_i = __pyx_t_8;
 
-    /* "cbclib/bin/data_processing.pyx":378
+    /* "cbclib/bin/data_processing.pyx":386
  *     cdef int i
  *     for i in range(axis):
  *         odims[i] = data.shape[i]             # <<<<<<<<<<<<<<
@@ -5122,53 +5237,53 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
     (__pyx_v_odims[__pyx_v_i]) = (__pyx_v_data->dimensions[__pyx_v_i]);
   }
 
-  /* "cbclib/bin/data_processing.pyx":379
+  /* "cbclib/bin/data_processing.pyx":387
  *     for i in range(axis):
  *         odims[i] = data.shape[i]
  *     for i in range(axis + 1, ndim):             # <<<<<<<<<<<<<<
  *         odims[i - 1] = data.shape[i]
- *     cdef int type_num = np.PyArray_TYPE(data)
+ * 
  */
-  __pyx_t_2 = __pyx_v_ndim;
-  __pyx_t_5 = __pyx_t_2;
-  for (__pyx_t_6 = (__pyx_v_axis + 1); __pyx_t_6 < __pyx_t_5; __pyx_t_6+=1) {
-    __pyx_v_i = __pyx_t_6;
+  __pyx_t_3 = __pyx_v_ndim;
+  __pyx_t_7 = __pyx_t_3;
+  for (__pyx_t_8 = (__pyx_v_axis + 1); __pyx_t_8 < __pyx_t_7; __pyx_t_8+=1) {
+    __pyx_v_i = __pyx_t_8;
 
-    /* "cbclib/bin/data_processing.pyx":380
+    /* "cbclib/bin/data_processing.pyx":388
  *         odims[i] = data.shape[i]
  *     for i in range(axis + 1, ndim):
  *         odims[i - 1] = data.shape[i]             # <<<<<<<<<<<<<<
+ * 
  *     cdef int type_num = np.PyArray_TYPE(data)
- *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
  */
     (__pyx_v_odims[(__pyx_v_i - 1)]) = (__pyx_v_data->dimensions[__pyx_v_i]);
   }
 
-  /* "cbclib/bin/data_processing.pyx":381
- *     for i in range(axis + 1, ndim):
+  /* "cbclib/bin/data_processing.pyx":390
  *         odims[i - 1] = data.shape[i]
+ * 
  *     cdef int type_num = np.PyArray_TYPE(data)             # <<<<<<<<<<<<<<
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  */
   __pyx_v_type_num = PyArray_TYPE(__pyx_v_data);
 
-  /* "cbclib/bin/data_processing.pyx":382
- *         odims[i - 1] = data.shape[i]
+  /* "cbclib/bin/data_processing.pyx":391
+ * 
  *     cdef int type_num = np.PyArray_TYPE(data)
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)             # <<<<<<<<<<<<<<
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)
  */
-  __pyx_t_1 = PyArray_SimpleNew((__pyx_v_ndim - 1), __pyx_v_odims, __pyx_v_type_num); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 382, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_7 = __pyx_t_1;
-  __Pyx_INCREF(__pyx_t_7);
-  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_v_out = ((PyArrayObject *)__pyx_t_7);
-  __pyx_t_7 = 0;
+  __pyx_t_6 = PyArray_SimpleNew((__pyx_v_ndim - 1), __pyx_v_odims, __pyx_v_type_num); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 391, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_6);
+  __pyx_t_2 = __pyx_t_6;
+  __Pyx_INCREF(__pyx_t_2);
+  __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+  __pyx_v_out = ((PyArrayObject *)__pyx_t_2);
+  __pyx_t_2 = 0;
 
-  /* "cbclib/bin/data_processing.pyx":383
+  /* "cbclib/bin/data_processing.pyx":392
  *     cdef int type_num = np.PyArray_TYPE(data)
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
  *     cdef void *_out = <void *>np.PyArray_DATA(out)             # <<<<<<<<<<<<<<
@@ -5177,27 +5292,27 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
  */
   __pyx_v__out = ((void *)PyArray_DATA(__pyx_v_out));
 
-  /* "cbclib/bin/data_processing.pyx":384
+  /* "cbclib/bin/data_processing.pyx":393
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)             # <<<<<<<<<<<<<<
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
- *     with nogil:
+ * 
  */
   __pyx_v__data = ((void *)PyArray_DATA(__pyx_v_data));
 
-  /* "cbclib/bin/data_processing.pyx":385
+  /* "cbclib/bin/data_processing.pyx":394
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)             # <<<<<<<<<<<<<<
+ * 
  *     with nogil:
- *         if type_num == np.NPY_FLOAT64:
  */
   __pyx_v__mask = ((unsigned char *)PyArray_DATA(__pyx_v_mask));
 
-  /* "cbclib/bin/data_processing.pyx":386
- *     cdef void *_data = <void *>np.PyArray_DATA(data)
+  /* "cbclib/bin/data_processing.pyx":396
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ * 
  *     with nogil:             # <<<<<<<<<<<<<<
  *         if type_num == np.NPY_FLOAT64:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
@@ -5210,8 +5325,8 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
       #endif
       /*try:*/ {
 
-        /* "cbclib/bin/data_processing.pyx":387
- *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+        /* "cbclib/bin/data_processing.pyx":397
+ * 
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
@@ -5220,7 +5335,7 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
         switch (__pyx_v_type_num) {
           case NPY_FLOAT64:
 
-          /* "cbclib/bin/data_processing.pyx":388
+          /* "cbclib/bin/data_processing.pyx":398
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)             # <<<<<<<<<<<<<<
@@ -5229,8 +5344,8 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
  */
           __pyx_v_fail = median(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 8, __pyx_v_axis, compare_double, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":387
- *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+          /* "cbclib/bin/data_processing.pyx":397
+ * 
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
@@ -5239,16 +5354,16 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
           break;
           case NPY_FLOAT32:
 
-          /* "cbclib/bin/data_processing.pyx":390
+          /* "cbclib/bin/data_processing.pyx":400
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_float, num_threads)             # <<<<<<<<<<<<<<
  *         elif type_num == np.NPY_INT32:
- *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_long, num_threads)
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
  */
           __pyx_v_fail = median(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, compare_float, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":389
+          /* "cbclib/bin/data_processing.pyx":399
  *         if type_num == np.NPY_FLOAT64:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:             # <<<<<<<<<<<<<<
@@ -5258,70 +5373,89 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
           break;
           case NPY_INT32:
 
-          /* "cbclib/bin/data_processing.pyx":392
+          /* "cbclib/bin/data_processing.pyx":402
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_float, num_threads)
  *         elif type_num == np.NPY_INT32:
- *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_long, num_threads)             # <<<<<<<<<<<<<<
- *         else:
- *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)             # <<<<<<<<<<<<<<
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
  */
-          __pyx_v_fail = median(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, compare_long, __pyx_v_num_threads);
+          __pyx_v_fail = median(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, compare_int, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":391
+          /* "cbclib/bin/data_processing.pyx":401
  *         elif type_num == np.NPY_FLOAT32:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_float, num_threads)
  *         elif type_num == np.NPY_INT32:             # <<<<<<<<<<<<<<
- *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_long, num_threads)
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ */
+          break;
+          case NPY_UINT32:
+
+          /* "cbclib/bin/data_processing.pyx":404
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)             # <<<<<<<<<<<<<<
+ *         else:
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ */
+          __pyx_v_fail = median(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, compare_uint, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":403
+ *         elif type_num == np.NPY_INT32:
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:             # <<<<<<<<<<<<<<
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
  *         else:
  */
           break;
           default:
 
-          /* "cbclib/bin/data_processing.pyx":394
- *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_long, num_threads)
+          /* "cbclib/bin/data_processing.pyx":406
+ *             fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
  *         else:
  *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))             # <<<<<<<<<<<<<<
- *     free(odims)
- *     return out
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')
  */
           {
               #ifdef WITH_THREAD
               PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
               #endif
               /*try:*/ {
-                __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_kp_u_data_argument_has_incompatible_t, __pyx_n_s_format); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 394, __pyx_L13_error)
-                __Pyx_GOTREF(__pyx_t_1);
-                __pyx_t_8 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_data), __pyx_n_s_dtype); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 394, __pyx_L13_error)
-                __Pyx_GOTREF(__pyx_t_8);
-                __pyx_t_9 = NULL;
-                if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_1))) {
-                  __pyx_t_9 = PyMethod_GET_SELF(__pyx_t_1);
-                  if (likely(__pyx_t_9)) {
-                    PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_1);
-                    __Pyx_INCREF(__pyx_t_9);
+                __pyx_t_6 = __Pyx_PyObject_GetAttrStr(__pyx_kp_u_data_argument_has_incompatible_t, __pyx_n_s_format); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 406, __pyx_L15_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __pyx_t_9 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_data), __pyx_n_s_dtype); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 406, __pyx_L15_error)
+                __Pyx_GOTREF(__pyx_t_9);
+                __pyx_t_10 = NULL;
+                if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_6))) {
+                  __pyx_t_10 = PyMethod_GET_SELF(__pyx_t_6);
+                  if (likely(__pyx_t_10)) {
+                    PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_6);
+                    __Pyx_INCREF(__pyx_t_10);
                     __Pyx_INCREF(function);
-                    __Pyx_DECREF_SET(__pyx_t_1, function);
+                    __Pyx_DECREF_SET(__pyx_t_6, function);
                   }
                 }
-                __pyx_t_7 = (__pyx_t_9) ? __Pyx_PyObject_Call2Args(__pyx_t_1, __pyx_t_9, __pyx_t_8) : __Pyx_PyObject_CallOneArg(__pyx_t_1, __pyx_t_8);
-                __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
-                __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-                if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 394, __pyx_L13_error)
-                __Pyx_GOTREF(__pyx_t_7);
-                __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-                __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_TypeError, __pyx_t_7); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 394, __pyx_L13_error)
-                __Pyx_GOTREF(__pyx_t_1);
-                __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-                __Pyx_Raise(__pyx_t_1, 0, 0, 0);
-                __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-                __PYX_ERR(0, 394, __pyx_L13_error)
+                __pyx_t_2 = (__pyx_t_10) ? __Pyx_PyObject_Call2Args(__pyx_t_6, __pyx_t_10, __pyx_t_9) : __Pyx_PyObject_CallOneArg(__pyx_t_6, __pyx_t_9);
+                __Pyx_XDECREF(__pyx_t_10); __pyx_t_10 = 0;
+                __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+                if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 406, __pyx_L15_error)
+                __Pyx_GOTREF(__pyx_t_2);
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+                __pyx_t_6 = __Pyx_PyObject_CallOneArg(__pyx_builtin_TypeError, __pyx_t_2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 406, __pyx_L15_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+                __PYX_ERR(0, 406, __pyx_L15_error)
               }
               /*finally:*/ {
-                __pyx_L13_error: {
+                __pyx_L15_error: {
                   #ifdef WITH_THREAD
                   __Pyx_PyGILState_Release(__pyx_gilstate_save);
                   #endif
-                  goto __pyx_L10_error;
+                  goto __pyx_L12_error;
                 }
               }
           }
@@ -5329,9 +5463,9 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
         }
       }
 
-      /* "cbclib/bin/data_processing.pyx":386
- *     cdef void *_data = <void *>np.PyArray_DATA(data)
+      /* "cbclib/bin/data_processing.pyx":396
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ * 
  *     with nogil:             # <<<<<<<<<<<<<<
  *         if type_num == np.NPY_FLOAT64:
  *             fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
@@ -5342,34 +5476,66 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
           __Pyx_FastGIL_Forget();
           Py_BLOCK_THREADS
           #endif
-          goto __pyx_L11;
+          goto __pyx_L13;
         }
-        __pyx_L10_error: {
+        __pyx_L12_error: {
           #ifdef WITH_THREAD
           __Pyx_FastGIL_Forget();
           Py_BLOCK_THREADS
           #endif
           goto __pyx_L1_error;
         }
-        __pyx_L11:;
+        __pyx_L13:;
       }
   }
 
-  /* "cbclib/bin/data_processing.pyx":395
+  /* "cbclib/bin/data_processing.pyx":407
  *         else:
  *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ * 
+ */
+  __pyx_t_5 = (__pyx_v_fail != 0);
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cbclib/bin/data_processing.pyx":408
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')             # <<<<<<<<<<<<<<
+ * 
+ *     free(odims)
+ */
+    __pyx_t_6 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__5, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 408, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __PYX_ERR(0, 408, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":407
+ *         else:
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":410
+ *         raise RuntimeError('C backend exited with error.')
+ * 
  *     free(odims)             # <<<<<<<<<<<<<<
  *     return out
  * 
  */
   free(__pyx_v_odims);
 
-  /* "cbclib/bin/data_processing.pyx":396
- *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+  /* "cbclib/bin/data_processing.pyx":411
+ * 
  *     free(odims)
  *     return out             # <<<<<<<<<<<<<<
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
  */
   __Pyx_XDECREF(((PyObject *)__pyx_r));
   __Pyx_INCREF(((PyObject *)__pyx_v_out));
@@ -5386,10 +5552,10 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
 
   /* function exit code */
   __pyx_L1_error:;
-  __Pyx_XDECREF(__pyx_t_1);
-  __Pyx_XDECREF(__pyx_t_7);
-  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_XDECREF(__pyx_t_10);
   __Pyx_AddTraceback("cbclib.bin.data_processing.median", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
@@ -5401,23 +5567,23 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_10median(CYTHON_UN
   return __pyx_r;
 }
 
-/* "cbclib/bin/data_processing.pyx":398
+/* "cbclib/bin/data_processing.pyx":413
  *     return out
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,             # <<<<<<<<<<<<<<
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
  *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
- *     """Calculate a median along the `axis`.
+ *     """Calculate a multidimensional median filter.
  */
 
 /* Python wrapper */
 static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static char __pyx_doc_6cbclib_3bin_15data_processing_12median_filter[] = "median_filter(ndarray data: np.ndarray, ndarray mask: np.ndarray, unsigned int size: cython.uint = 3, int axis: cython.int = 0, unicode mode: str = u'reflect', double cval: cython.double = 0., unsigned int num_threads: cython.uint = 1) -> np.ndarray\nCalculate a median along the `axis`.\n\n    Parameters\n    ----------\n    data : numpy.ndarray\n        Intensity frames.\n    mask : numpy.ndarray\n        Bad pixel mask.\n    size : int, optional\n        `size` gives the shape that is taken from the input array, at every element position,\n        to define the input to the filter function. Default is 3.\n    axis : int, optional\n        Array axis along which median values are calculated.\n    mode : {'constant', 'nearest', 'mirror', 'reflect', 'wrap'}, optional\n        The mode parameter determines how the input array is extended when the filter\n        overlaps a border. Default value is 'reflect'. The valid values and their behavior\n        is as follows:\n\n        * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all\n          values beyond the edge with the same constant value, defined by the `cval`\n          parameter.\n        * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating\n          the last pixel.\n        * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting\n          about the center of the last pixel. This mode is also sometimes referred to as\n          whole-sample symmetric.\n        * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting\n          about the edge of the last pixel. This mode is also sometimes referred to as\n          half-sample symmetric.\n        * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around\n          to the opposite edge.\n    cval : float, optional\n        Value to fill past edges of input if mode is \342\200\230constant\342\200\231. Default is 0.0.\n    num_threads "": int, optional\n        Number of threads.\n\n    Returns\n    -------\n    wfield : numpy.ndarray\n        Whitefield.\n    ";
+static char __pyx_doc_6cbclib_3bin_15data_processing_12median_filter[] = "median_filter(ndarray data: np.ndarray, size: object = None, ndarray footprint: np.ndarray = None, ndarray mask: np.ndarray = None, unicode mode: str = u'reflect', double cval: cython.double = 0., unsigned int num_threads: cython.uint = 1) -> np.ndarray\nCalculate a multidimensional median filter.\n\n    Parameters\n    ----------\n    data : numpy.ndarray\n        Intensity frames.\n    size : scalar or tuple, optional\n        See footprint, below. Ignored if footprint is given.\n    footprint : numpy.ndarray, optional\n        Either size or footprint must be defined. size gives the shape that is taken from the\n        input array, at every element position, to define the input to the filter function.\n        footprint is a boolean array that specifies (implicitly) a shape, but also which of\n        the elements within this shape will get passed to the filter function. Thus size=(n,m)\n        is equivalent to footprint=np.ones((n,m)). We adjust size to the number of dimensions\n        of the input array, so that, if the input array is shape (10,10,10), and size is 2,\n        then the actual size used is (2,2,2). When footprint is given, size is ignored.\n    mode : {'constant', 'nearest', 'mirror', 'reflect', 'wrap'}, optional\n        The mode parameter determines how the input array is extended when the filter\n        overlaps a border. Default value is 'reflect'. The valid values and their behavior\n        is as follows:\n\n        * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all\n          values beyond the edge with the same constant value, defined by the `cval`\n          parameter.\n        * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating\n          the last pixel.\n        * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting\n          about the center of the last pixel. This mode is also sometimes referred to as\n          whole-sample symmetric.\n      ""  * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting\n          about the edge of the last pixel. This mode is also sometimes referred to as\n          half-sample symmetric.\n        * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around\n          to the opposite edge.\n    cval : float, optional\n        Value to fill past edges of input if mode is \342\200\230constant\342\200\231. Default is 0.0.\n    num_threads : int, optional\n        Number of threads.\n\n    Returns\n    -------\n    wfield : numpy.ndarray\n        Whitefield.\n    ";
 static PyMethodDef __pyx_mdef_6cbclib_3bin_15data_processing_13median_filter = {"median_filter", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cbclib_3bin_15data_processing_13median_filter, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6cbclib_3bin_15data_processing_12median_filter};
 static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_data = 0;
+  PyObject *__pyx_v_size = 0;
+  PyArrayObject *__pyx_v_footprint = 0;
   PyArrayObject *__pyx_v_mask = 0;
-  unsigned int __pyx_v_size;
-  int __pyx_v_axis;
   PyObject *__pyx_v_mode = 0;
   double __pyx_v_cval;
   unsigned int __pyx_v_num_threads;
@@ -5428,8 +5594,11 @@ static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(Py
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("median_filter (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_data,&__pyx_n_s_mask,&__pyx_n_s_size,&__pyx_n_s_axis,&__pyx_n_s_mode,&__pyx_n_s_cval,&__pyx_n_s_num_threads,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_data,&__pyx_n_s_size,&__pyx_n_s_footprint,&__pyx_n_s_mask,&__pyx_n_s_mode,&__pyx_n_s_cval,&__pyx_n_s_num_threads,0};
     PyObject* values[7] = {0,0,0,0,0,0,0};
+    values[1] = ((PyObject *)((PyObject *)Py_None));
+    values[2] = (PyObject *)((PyArrayObject *)((PyObject *)Py_None));
+    values[3] = (PyObject *)((PyArrayObject *)((PyObject *)Py_None));
     values[4] = ((PyObject*)((PyObject*)__pyx_n_u_reflect));
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
@@ -5459,20 +5628,20 @@ static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(Py
         else goto __pyx_L5_argtuple_error;
         CYTHON_FALLTHROUGH;
         case  1:
-        if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mask)) != 0)) kw_args--;
-        else {
-          __Pyx_RaiseArgtupleInvalid("median_filter", 0, 2, 7, 1); __PYX_ERR(0, 398, __pyx_L3_error)
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_size);
+          if (value) { values[1] = value; kw_args--; }
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (kw_args > 0) {
-          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_size);
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_footprint);
           if (value) { values[2] = value; kw_args--; }
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (kw_args > 0) {
-          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_axis);
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mask);
           if (value) { values[3] = value; kw_args--; }
         }
         CYTHON_FALLTHROUGH;
@@ -5495,7 +5664,7 @@ static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(Py
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "median_filter") < 0)) __PYX_ERR(0, 398, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "median_filter") < 0)) __PYX_ERR(0, 413, __pyx_L3_error)
       }
     } else {
       switch (PyTuple_GET_SIZE(__pyx_args)) {
@@ -5510,47 +5679,41 @@ static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(Py
         case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
         CYTHON_FALLTHROUGH;
         case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
-        values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
         break;
         default: goto __pyx_L5_argtuple_error;
       }
     }
     __pyx_v_data = ((PyArrayObject *)values[0]);
-    __pyx_v_mask = ((PyArrayObject *)values[1]);
-    if (values[2]) {
-      __pyx_v_size = __Pyx_PyInt_As_unsigned_int(values[2]); if (unlikely((__pyx_v_size == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 398, __pyx_L3_error)
-    } else {
-      __pyx_v_size = ((unsigned int)((unsigned int)3));
-    }
-    if (values[3]) {
-      __pyx_v_axis = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_axis == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 398, __pyx_L3_error)
-    } else {
-      __pyx_v_axis = ((int)((int)0));
-    }
+    __pyx_v_size = values[1];
+    __pyx_v_footprint = ((PyArrayObject *)values[2]);
+    __pyx_v_mask = ((PyArrayObject *)values[3]);
     __pyx_v_mode = ((PyObject*)values[4]);
     if (values[5]) {
-      __pyx_v_cval = __pyx_PyFloat_AsDouble(values[5]); if (unlikely((__pyx_v_cval == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 399, __pyx_L3_error)
+      __pyx_v_cval = __pyx_PyFloat_AsDouble(values[5]); if (unlikely((__pyx_v_cval == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 414, __pyx_L3_error)
     } else {
       __pyx_v_cval = ((double)((double)0.));
     }
     if (values[6]) {
-      __pyx_v_num_threads = __Pyx_PyInt_As_unsigned_int(values[6]); if (unlikely((__pyx_v_num_threads == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 399, __pyx_L3_error)
+      __pyx_v_num_threads = __Pyx_PyInt_As_unsigned_int(values[6]); if (unlikely((__pyx_v_num_threads == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 414, __pyx_L3_error)
     } else {
       __pyx_v_num_threads = ((unsigned int)((unsigned int)1));
     }
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("median_filter", 0, 2, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 398, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("median_filter", 0, 1, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 413, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cbclib.bin.data_processing.median_filter", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), __pyx_ptype_5numpy_ndarray, 1, "data", 0))) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mask), __pyx_ptype_5numpy_ndarray, 1, "mask", 0))) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mode), (&PyUnicode_Type), 1, "mode", 1))) __PYX_ERR(0, 399, __pyx_L1_error)
-  __pyx_r = __pyx_pf_6cbclib_3bin_15data_processing_12median_filter(__pyx_self, __pyx_v_data, __pyx_v_mask, __pyx_v_size, __pyx_v_axis, __pyx_v_mode, __pyx_v_cval, __pyx_v_num_threads);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), __pyx_ptype_5numpy_ndarray, 1, "data", 0))) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_footprint), __pyx_ptype_5numpy_ndarray, 1, "footprint", 0))) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mask), __pyx_ptype_5numpy_ndarray, 1, "mask", 0))) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mode), (&PyUnicode_Type), 1, "mode", 1))) __PYX_ERR(0, 414, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6cbclib_3bin_15data_processing_12median_filter(__pyx_self, __pyx_v_data, __pyx_v_size, __pyx_v_footprint, __pyx_v_mask, __pyx_v_mode, __pyx_v_cval, __pyx_v_num_threads);
 
   /* function exit code */
   goto __pyx_L0;
@@ -5561,9 +5724,12 @@ static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_13median_filter(Py
   return __pyx_r;
 }
 
-static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyArrayObject *__pyx_v_mask, unsigned int __pyx_v_size, int __pyx_v_axis, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads) {
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyObject *__pyx_v_size, PyArrayObject *__pyx_v_footprint, PyArrayObject *__pyx_v_mask, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads) {
   int __pyx_v_ndim;
   npy_intp *__pyx_v_dims;
+  unsigned long *__pyx_v__fsize;
+  PyArrayObject *__pyx_v_fsize = 0;
+  unsigned char *__pyx_v__fmask;
   unsigned long *__pyx_v__dims;
   int __pyx_v_type_num;
   PyArrayObject *__pyx_v_out = 0;
@@ -5572,139 +5738,297 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
   unsigned char *__pyx_v__mask;
   int __pyx_v__mode;
   void *__pyx_v__cval;
-  CYTHON_UNUSED int __pyx_v_fail;
+  int __pyx_v_fail;
   PyArrayObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
-  PyObject *__pyx_t_1 = NULL;
-  int __pyx_t_2;
+  int __pyx_t_1;
+  PyObject *__pyx_t_2 = NULL;
   int __pyx_t_3;
-  long __pyx_t_4;
-  npy_intp *__pyx_t_5;
+  npy_intp *__pyx_t_4;
+  int __pyx_t_5;
   PyObject *__pyx_t_6 = NULL;
-  PyObject *__pyx_t_7 = NULL;
+  int __pyx_t_7;
   PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_9 = NULL;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("median_filter", 0);
   __Pyx_INCREF((PyObject *)__pyx_v_data);
+  __Pyx_INCREF((PyObject *)__pyx_v_footprint);
   __Pyx_INCREF((PyObject *)__pyx_v_mask);
 
-  /* "cbclib/bin/data_processing.pyx":441
+  /* "cbclib/bin/data_processing.pyx":459
  *         Whitefield.
  *     """
- *     data = check_array(data, np.NPY_FLOAT64)             # <<<<<<<<<<<<<<
- *     mask = check_array(mask, np.NPY_BOOL)
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
  * 
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_data, NPY_FLOAT64)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 441, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_DECREF_SET(__pyx_v_data, ((PyArrayObject *)__pyx_t_1));
-  __pyx_t_1 = 0;
+  __pyx_t_1 = ((!(PyArray_IS_C_CONTIGUOUS(__pyx_v_data) != 0)) != 0);
+  if (__pyx_t_1) {
 
-  /* "cbclib/bin/data_processing.pyx":442
+    /* "cbclib/bin/data_processing.pyx":460
  *     """
- *     data = check_array(data, np.NPY_FLOAT64)
- *     mask = check_array(mask, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):
+ *         data = np.PyArray_GETCONTIGUOUS(data)             # <<<<<<<<<<<<<<
  * 
  *     cdef int ndim = data.ndim
  */
-  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_mask, NPY_BOOL)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 442, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_1));
-  __pyx_t_1 = 0;
+    __pyx_t_2 = ((PyObject *)PyArray_GETCONTIGUOUS(__pyx_v_data)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 460, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_DECREF_SET(__pyx_v_data, ((PyArrayObject *)__pyx_t_2));
+    __pyx_t_2 = 0;
 
-  /* "cbclib/bin/data_processing.pyx":444
- *     mask = check_array(mask, np.NPY_BOOL)
+    /* "cbclib/bin/data_processing.pyx":459
+ *         Whitefield.
+ *     """
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":462
+ *         data = np.PyArray_GETCONTIGUOUS(data)
  * 
  *     cdef int ndim = data.ndim             # <<<<<<<<<<<<<<
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')
+ *     cdef np.npy_intp *dims = data.shape
+ * 
  */
-  __pyx_t_2 = __pyx_v_data->nd;
-  __pyx_v_ndim = __pyx_t_2;
+  __pyx_t_3 = __pyx_v_data->nd;
+  __pyx_v_ndim = __pyx_t_3;
 
-  /* "cbclib/bin/data_processing.pyx":445
+  /* "cbclib/bin/data_processing.pyx":463
  * 
  *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis
- */
-  __pyx_t_3 = (memcmp(__pyx_v_data->dimensions, __pyx_v_mask->dimensions, (__pyx_v_ndim * (sizeof(npy_intp)))) != 0);
-  if (unlikely(__pyx_t_3)) {
-
-    /* "cbclib/bin/data_processing.pyx":446
- *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')             # <<<<<<<<<<<<<<
- *     axis = axis if axis >= 0 else ndim + axis
- *     axis = axis if axis <= ndim - 1 else ndim - 1
- */
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__6, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 446, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_1);
-    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
-    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(0, 446, __pyx_L1_error)
-
-    /* "cbclib/bin/data_processing.pyx":445
- * 
- *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):             # <<<<<<<<<<<<<<
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis
- */
-  }
-
-  /* "cbclib/bin/data_processing.pyx":447
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis             # <<<<<<<<<<<<<<
- *     axis = axis if axis <= ndim - 1 else ndim - 1
- *     cdef np.npy_intp *dims = data.shape
- */
-  if (((__pyx_v_axis >= 0) != 0)) {
-    __pyx_t_2 = __pyx_v_axis;
-  } else {
-    __pyx_t_2 = (__pyx_v_ndim + __pyx_v_axis);
-  }
-  __pyx_v_axis = __pyx_t_2;
-
-  /* "cbclib/bin/data_processing.pyx":448
- *         raise ValueError('mask and data arrays must have identical shapes')
- *     axis = axis if axis >= 0 else ndim + axis
- *     axis = axis if axis <= ndim - 1 else ndim - 1             # <<<<<<<<<<<<<<
- *     cdef np.npy_intp *dims = data.shape
- *     cdef unsigned long *_dims = <unsigned long *>dims
- */
-  if (((__pyx_v_axis <= (__pyx_v_ndim - 1)) != 0)) {
-    __pyx_t_4 = __pyx_v_axis;
-  } else {
-    __pyx_t_4 = (__pyx_v_ndim - 1);
-  }
-  __pyx_v_axis = __pyx_t_4;
-
-  /* "cbclib/bin/data_processing.pyx":449
- *     axis = axis if axis >= 0 else ndim + axis
- *     axis = axis if axis <= ndim - 1 else ndim - 1
  *     cdef np.npy_intp *dims = data.shape             # <<<<<<<<<<<<<<
- *     cdef unsigned long *_dims = <unsigned long *>dims
- *     cdef int type_num = np.PyArray_TYPE(data)
+ * 
+ *     if mask is None:
  */
-  __pyx_t_5 = __pyx_v_data->dimensions;
-  __pyx_v_dims = __pyx_t_5;
+  __pyx_t_4 = __pyx_v_data->dimensions;
+  __pyx_v_dims = __pyx_t_4;
 
-  /* "cbclib/bin/data_processing.pyx":450
- *     axis = axis if axis <= ndim - 1 else ndim - 1
+  /* "cbclib/bin/data_processing.pyx":465
  *     cdef np.npy_intp *dims = data.shape
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+  __pyx_t_1 = (((PyObject *)__pyx_v_mask) == Py_None);
+  __pyx_t_5 = (__pyx_t_1 != 0);
+  if (__pyx_t_5) {
+
+    /* "cbclib/bin/data_processing.pyx":466
+ * 
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ */
+    __pyx_t_2 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_dims, NPY_BOOL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 466, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_6 = __pyx_t_2;
+    __Pyx_INCREF(__pyx_t_6);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":467
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)             # <<<<<<<<<<<<<<
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)
+ */
+    PyArray_FILLWBYTE(((PyObject *)__pyx_v_mask), 1);
+
+    /* "cbclib/bin/data_processing.pyx":465
+ *     cdef np.npy_intp *dims = data.shape
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+    goto __pyx_L4;
+  }
+
+  /* "cbclib/bin/data_processing.pyx":469
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ * 
+ *     if size is None and footprint is None:
+ */
+  /*else*/ {
+    __pyx_t_6 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_mask, NPY_BOOL)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 469, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+  }
+  __pyx_L4:;
+
+  /* "cbclib/bin/data_processing.pyx":471
+ *         mask = check_array(mask, np.NPY_BOOL)
+ * 
+ *     if size is None and footprint is None:             # <<<<<<<<<<<<<<
+ *         raise ValueError('size or footprint must be provided.')
+ * 
+ */
+  __pyx_t_1 = (__pyx_v_size == Py_None);
+  __pyx_t_7 = (__pyx_t_1 != 0);
+  if (__pyx_t_7) {
+  } else {
+    __pyx_t_5 = __pyx_t_7;
+    goto __pyx_L6_bool_binop_done;
+  }
+  __pyx_t_7 = (((PyObject *)__pyx_v_footprint) == Py_None);
+  __pyx_t_1 = (__pyx_t_7 != 0);
+  __pyx_t_5 = __pyx_t_1;
+  __pyx_L6_bool_binop_done:;
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cbclib/bin/data_processing.pyx":472
+ * 
+ *     if size is None and footprint is None:
+ *         raise ValueError('size or footprint must be provided.')             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_fsize
+ */
+    __pyx_t_6 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__8, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 472, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __PYX_ERR(0, 472, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":471
+ *         mask = check_array(mask, np.NPY_BOOL)
+ * 
+ *     if size is None and footprint is None:             # <<<<<<<<<<<<<<
+ *         raise ValueError('size or footprint must be provided.')
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":476
+ *     cdef unsigned long *_fsize
+ *     cdef np.ndarray fsize
+ *     if size is None:             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ */
+  __pyx_t_5 = (__pyx_v_size == Py_None);
+  __pyx_t_1 = (__pyx_t_5 != 0);
+  if (__pyx_t_1) {
+
+    /* "cbclib/bin/data_processing.pyx":477
+ *     cdef np.ndarray fsize
+ *     if size is None:
+ *         _fsize = <unsigned long *>footprint.shape             # <<<<<<<<<<<<<<
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+ */
+    __pyx_v__fsize = ((unsigned long *)__pyx_v_footprint->dimensions);
+
+    /* "cbclib/bin/data_processing.pyx":476
+ *     cdef unsigned long *_fsize
+ *     cdef np.ndarray fsize
+ *     if size is None:             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ */
+    goto __pyx_L8;
+  }
+
+  /* "cbclib/bin/data_processing.pyx":479
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ */
+  /*else*/ {
+    __pyx_t_6 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_normalize_sequence(__pyx_v_size, __pyx_v_ndim, NPY_INTP)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 479, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_v_fsize = ((PyArrayObject *)__pyx_t_6);
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":480
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)             # <<<<<<<<<<<<<<
+ * 
+ *     if footprint is None:
+ */
+    __pyx_v__fsize = ((unsigned long *)PyArray_DATA(__pyx_v_fsize));
+  }
+  __pyx_L8:;
+
+  /* "cbclib/bin/data_processing.pyx":482
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ *     if footprint is None:             # <<<<<<<<<<<<<<
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ */
+  __pyx_t_1 = (((PyObject *)__pyx_v_footprint) == Py_None);
+  __pyx_t_5 = (__pyx_t_1 != 0);
+  if (__pyx_t_5) {
+
+    /* "cbclib/bin/data_processing.pyx":483
+ * 
+ *     if footprint is None:
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ */
+    __pyx_t_6 = PyArray_SimpleNew(__pyx_v_ndim, ((npy_intp *)__pyx_v__fsize), NPY_BOOL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 483, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_t_2 = __pyx_t_6;
+    __Pyx_INCREF(__pyx_t_2);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __Pyx_DECREF_SET(__pyx_v_footprint, ((PyArrayObject *)__pyx_t_2));
+    __pyx_t_2 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":484
+ *     if footprint is None:
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)             # <<<<<<<<<<<<<<
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ * 
+ */
+    PyArray_FILLWBYTE(((PyObject *)__pyx_v_footprint), 1);
+
+    /* "cbclib/bin/data_processing.pyx":482
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ *     if footprint is None:             # <<<<<<<<<<<<<<
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":485
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>dims
+ */
+  __pyx_v__fmask = ((unsigned char *)PyArray_DATA(__pyx_v_footprint));
+
+  /* "cbclib/bin/data_processing.pyx":487
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ * 
  *     cdef unsigned long *_dims = <unsigned long *>dims             # <<<<<<<<<<<<<<
  *     cdef int type_num = np.PyArray_TYPE(data)
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
  */
   __pyx_v__dims = ((unsigned long *)__pyx_v_dims);
 
-  /* "cbclib/bin/data_processing.pyx":451
- *     cdef np.npy_intp *dims = data.shape
+  /* "cbclib/bin/data_processing.pyx":488
+ * 
  *     cdef unsigned long *_dims = <unsigned long *>dims
  *     cdef int type_num = np.PyArray_TYPE(data)             # <<<<<<<<<<<<<<
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
@@ -5712,22 +6036,22 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
  */
   __pyx_v_type_num = PyArray_TYPE(__pyx_v_data);
 
-  /* "cbclib/bin/data_processing.pyx":452
+  /* "cbclib/bin/data_processing.pyx":489
  *     cdef unsigned long *_dims = <unsigned long *>dims
  *     cdef int type_num = np.PyArray_TYPE(data)
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)             # <<<<<<<<<<<<<<
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)
  */
-  __pyx_t_1 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_dims, __pyx_v_type_num); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 452, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_6 = __pyx_t_1;
+  __pyx_t_2 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_dims, __pyx_v_type_num); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 489, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_6 = __pyx_t_2;
   __Pyx_INCREF(__pyx_t_6);
-  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_out = ((PyArrayObject *)__pyx_t_6);
   __pyx_t_6 = 0;
 
-  /* "cbclib/bin/data_processing.pyx":453
+  /* "cbclib/bin/data_processing.pyx":490
  *     cdef int type_num = np.PyArray_TYPE(data)
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
  *     cdef void *_out = <void *>np.PyArray_DATA(out)             # <<<<<<<<<<<<<<
@@ -5736,7 +6060,7 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
  */
   __pyx_v__out = ((void *)PyArray_DATA(__pyx_v_out));
 
-  /* "cbclib/bin/data_processing.pyx":454
+  /* "cbclib/bin/data_processing.pyx":491
  *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)             # <<<<<<<<<<<<<<
@@ -5745,7 +6069,7 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
  */
   __pyx_v__data = ((void *)PyArray_DATA(__pyx_v_data));
 
-  /* "cbclib/bin/data_processing.pyx":455
+  /* "cbclib/bin/data_processing.pyx":492
  *     cdef void *_out = <void *>np.PyArray_DATA(out)
  *     cdef void *_data = <void *>np.PyArray_DATA(data)
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)             # <<<<<<<<<<<<<<
@@ -5754,31 +6078,31 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
  */
   __pyx_v__mask = ((unsigned char *)PyArray_DATA(__pyx_v_mask));
 
-  /* "cbclib/bin/data_processing.pyx":456
+  /* "cbclib/bin/data_processing.pyx":493
  *     cdef void *_data = <void *>np.PyArray_DATA(data)
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
  *     cdef int _mode = extend_mode_to_code(mode)             # <<<<<<<<<<<<<<
  *     cdef void *_cval = <void *>&cval
- *     with nogil:
+ * 
  */
-  __pyx_t_2 = __pyx_f_6cbclib_3bin_15data_processing_extend_mode_to_code(__pyx_v_mode); if (unlikely(__pyx_t_2 == ((int)-1))) __PYX_ERR(0, 456, __pyx_L1_error)
-  __pyx_v__mode = __pyx_t_2;
+  __pyx_t_3 = __pyx_f_6cbclib_3bin_15data_processing_extend_mode_to_code(__pyx_v_mode); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 493, __pyx_L1_error)
+  __pyx_v__mode = __pyx_t_3;
 
-  /* "cbclib/bin/data_processing.pyx":457
+  /* "cbclib/bin/data_processing.pyx":494
  *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
  *     cdef int _mode = extend_mode_to_code(mode)
  *     cdef void *_cval = <void *>&cval             # <<<<<<<<<<<<<<
+ * 
  *     with nogil:
- *         if type_num == np.NPY_FLOAT64:
  */
   __pyx_v__cval = ((void *)(&__pyx_v_cval));
 
-  /* "cbclib/bin/data_processing.pyx":458
- *     cdef int _mode = extend_mode_to_code(mode)
+  /* "cbclib/bin/data_processing.pyx":496
  *     cdef void *_cval = <void *>&cval
+ * 
  *     with nogil:             # <<<<<<<<<<<<<<
  *         if type_num == np.NPY_FLOAT64:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  */
   {
       #ifdef WITH_THREAD
@@ -5788,117 +6112,140 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
       #endif
       /*try:*/ {
 
-        /* "cbclib/bin/data_processing.pyx":459
- *     cdef void *_cval = <void *>&cval
+        /* "cbclib/bin/data_processing.pyx":497
+ * 
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:
  */
         switch (__pyx_v_type_num) {
           case NPY_FLOAT64:
 
-          /* "cbclib/bin/data_processing.pyx":460
+          /* "cbclib/bin/data_processing.pyx":498
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)             # <<<<<<<<<<<<<<
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)             # <<<<<<<<<<<<<<
  *         elif type_num == np.NPY_FLOAT32:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_float, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
  */
-          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 8, __pyx_v_axis, __pyx_v_size, __pyx_v__mode, __pyx_v__cval, compare_double, __pyx_v_num_threads);
+          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 8, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_double, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":459
- *     cdef void *_cval = <void *>&cval
+          /* "cbclib/bin/data_processing.pyx":497
+ * 
  *     with nogil:
  *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:
  */
           break;
           case NPY_FLOAT32:
 
-          /* "cbclib/bin/data_processing.pyx":462
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+          /* "cbclib/bin/data_processing.pyx":500
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_float, num_threads)             # <<<<<<<<<<<<<<
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)             # <<<<<<<<<<<<<<
  *         elif type_num == np.NPY_INT32:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_long, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
  */
-          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, __pyx_v_size, __pyx_v__mode, __pyx_v__cval, compare_float, __pyx_v_num_threads);
+          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_float, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":461
+          /* "cbclib/bin/data_processing.pyx":499
  *         if type_num == np.NPY_FLOAT64:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  *         elif type_num == np.NPY_FLOAT32:             # <<<<<<<<<<<<<<
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_float, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
  *         elif type_num == np.NPY_INT32:
  */
           break;
           case NPY_INT32:
 
-          /* "cbclib/bin/data_processing.pyx":464
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_float, num_threads)
+          /* "cbclib/bin/data_processing.pyx":502
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
  *         elif type_num == np.NPY_INT32:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_long, num_threads)             # <<<<<<<<<<<<<<
- *         else:
- *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)             # <<<<<<<<<<<<<<
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
  */
-          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v_axis, __pyx_v_size, __pyx_v__mode, __pyx_v__cval, compare_long, __pyx_v_num_threads);
+          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_int, __pyx_v_num_threads);
 
-          /* "cbclib/bin/data_processing.pyx":463
+          /* "cbclib/bin/data_processing.pyx":501
  *         elif type_num == np.NPY_FLOAT32:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_float, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
  *         elif type_num == np.NPY_INT32:             # <<<<<<<<<<<<<<
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_long, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ */
+          break;
+          case NPY_UINT32:
+
+          /* "cbclib/bin/data_processing.pyx":504
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)             # <<<<<<<<<<<<<<
+ *         else:
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ */
+          __pyx_v_fail = median_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_uint, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":503
+ *         elif type_num == np.NPY_INT32:
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:             # <<<<<<<<<<<<<<
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
  *         else:
  */
           break;
           default:
 
-          /* "cbclib/bin/data_processing.pyx":466
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, axis, size, _mode, _cval, compare_long, num_threads)
+          /* "cbclib/bin/data_processing.pyx":506
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
  *         else:
- *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))             # <<<<<<<<<<<<<<
- *     return out
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))             # <<<<<<<<<<<<<<
+ * 
+ *     if fail:
  */
           {
               #ifdef WITH_THREAD
               PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
               #endif
               /*try:*/ {
-                __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_kp_u_data_argument_has_incompatible_t, __pyx_n_s_format); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 466, __pyx_L8_error)
-                __Pyx_GOTREF(__pyx_t_1);
-                __pyx_t_7 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_data), __pyx_n_s_dtype); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 466, __pyx_L8_error)
-                __Pyx_GOTREF(__pyx_t_7);
+                __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_kp_u_data_argument_has_incompatible_t, __pyx_n_s_format); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 506, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_2);
+                __pyx_t_8 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_data), __pyx_n_s_dtype); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 506, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_8);
+                __pyx_t_9 = __Pyx_PyObject_CallOneArg(((PyObject *)(&PyUnicode_Type)), __pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 506, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_9);
+                __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
                 __pyx_t_8 = NULL;
-                if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_1))) {
-                  __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_1);
+                if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_2))) {
+                  __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_2);
                   if (likely(__pyx_t_8)) {
-                    PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_1);
+                    PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_2);
                     __Pyx_INCREF(__pyx_t_8);
                     __Pyx_INCREF(function);
-                    __Pyx_DECREF_SET(__pyx_t_1, function);
+                    __Pyx_DECREF_SET(__pyx_t_2, function);
                   }
                 }
-                __pyx_t_6 = (__pyx_t_8) ? __Pyx_PyObject_Call2Args(__pyx_t_1, __pyx_t_8, __pyx_t_7) : __Pyx_PyObject_CallOneArg(__pyx_t_1, __pyx_t_7);
+                __pyx_t_6 = (__pyx_t_8) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_8, __pyx_t_9) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_t_9);
                 __Pyx_XDECREF(__pyx_t_8); __pyx_t_8 = 0;
-                __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 466, __pyx_L8_error)
+                __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 506, __pyx_L14_error)
                 __Pyx_GOTREF(__pyx_t_6);
-                __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-                __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_TypeError, __pyx_t_6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 466, __pyx_L8_error)
-                __Pyx_GOTREF(__pyx_t_1);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __pyx_t_2 = __Pyx_PyObject_CallOneArg(__pyx_builtin_TypeError, __pyx_t_6); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 506, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_2);
                 __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-                __Pyx_Raise(__pyx_t_1, 0, 0, 0);
-                __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-                __PYX_ERR(0, 466, __pyx_L8_error)
+                __Pyx_Raise(__pyx_t_2, 0, 0, 0);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __PYX_ERR(0, 506, __pyx_L14_error)
               }
               /*finally:*/ {
-                __pyx_L8_error: {
+                __pyx_L14_error: {
                   #ifdef WITH_THREAD
                   __Pyx_PyGILState_Release(__pyx_gilstate_save);
                   #endif
-                  goto __pyx_L5_error;
+                  goto __pyx_L11_error;
                 }
               }
           }
@@ -5906,12 +6253,12 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
         }
       }
 
-      /* "cbclib/bin/data_processing.pyx":458
- *     cdef int _mode = extend_mode_to_code(mode)
+      /* "cbclib/bin/data_processing.pyx":496
  *     cdef void *_cval = <void *>&cval
+ * 
  *     with nogil:             # <<<<<<<<<<<<<<
  *         if type_num == np.NPY_FLOAT64:
- *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, axis, size, _mode, _cval, compare_double, num_threads)
+ *             fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
  */
       /*finally:*/ {
         /*normal exit:*/{
@@ -5919,49 +6266,1248 @@ static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_12median_filter(CY
           __Pyx_FastGIL_Forget();
           Py_BLOCK_THREADS
           #endif
-          goto __pyx_L6;
+          goto __pyx_L12;
         }
-        __pyx_L5_error: {
+        __pyx_L11_error: {
           #ifdef WITH_THREAD
           __Pyx_FastGIL_Forget();
           Py_BLOCK_THREADS
           #endif
           goto __pyx_L1_error;
         }
-        __pyx_L6:;
+        __pyx_L12:;
       }
   }
 
-  /* "cbclib/bin/data_processing.pyx":467
- *         else:
- *             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+  /* "cbclib/bin/data_processing.pyx":508
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ * 
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return out
+ */
+  __pyx_t_5 = (__pyx_v_fail != 0);
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cbclib/bin/data_processing.pyx":509
+ * 
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')             # <<<<<<<<<<<<<<
+ *     return out
+ * 
+ */
+    __pyx_t_2 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__5, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 509, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_Raise(__pyx_t_2, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __PYX_ERR(0, 509, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":508
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ * 
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return out
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":510
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')
  *     return out             # <<<<<<<<<<<<<<
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
  */
   __Pyx_XDECREF(((PyObject *)__pyx_r));
   __Pyx_INCREF(((PyObject *)__pyx_v_out));
   __pyx_r = __pyx_v_out;
   goto __pyx_L0;
 
-  /* "cbclib/bin/data_processing.pyx":398
+  /* "cbclib/bin/data_processing.pyx":413
  *     return out
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,             # <<<<<<<<<<<<<<
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
  *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
- *     """Calculate a median along the `axis`.
+ *     """Calculate a multidimensional median filter.
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_AddTraceback("cbclib.bin.data_processing.median_filter", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF((PyObject *)__pyx_v_fsize);
+  __Pyx_XDECREF((PyObject *)__pyx_v_out);
+  __Pyx_XDECREF((PyObject *)__pyx_v_data);
+  __Pyx_XDECREF((PyObject *)__pyx_v_footprint);
+  __Pyx_XDECREF((PyObject *)__pyx_v_mask);
+  __Pyx_XGIVEREF((PyObject *)__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cbclib/bin/data_processing.pyx":512
+ *     return out
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
+ *                    mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
+ *     """Calculate a multidimensional maximum filter.
+ */
+
+/* Python wrapper */
+static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_15maximum_filter(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static char __pyx_doc_6cbclib_3bin_15data_processing_14maximum_filter[] = "maximum_filter(ndarray data: np.ndarray, size: object = None, ndarray footprint: np.ndarray = None, ndarray mask: np.ndarray = None, unicode mode: str = u'reflect', double cval: cython.double = 0., unsigned int num_threads: cython.uint = 1) -> np.ndarray\nCalculate a multidimensional maximum filter.\n\n    Parameters\n    ----------\n    data : numpy.ndarray\n        Intensity frames.\n    size : scalar or tuple, optional\n        See footprint, below. Ignored if footprint is given.\n    footprint : numpy.ndarray, optional\n        Either size or footprint must be defined. size gives the shape that is taken from the\n        input array, at every element position, to define the input to the filter function.\n        footprint is a boolean array that specifies (implicitly) a shape, but also which of\n        the elements within this shape will get passed to the filter function. Thus size=(n,m)\n        is equivalent to footprint=np.ones((n,m)). We adjust size to the number of dimensions\n        of the input array, so that, if the input array is shape (10,10,10), and size is 2,\n        then the actual size used is (2,2,2). When footprint is given, size is ignored.\n    mode : {'constant', 'nearest', 'mirror', 'reflect', 'wrap'}, optional\n        The mode parameter determines how the input array is extended when the filter\n        overlaps a border. Default value is 'reflect'. The valid values and their behavior\n        is as follows:\n\n        * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all\n          values beyond the edge with the same constant value, defined by the `cval`\n          parameter.\n        * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating\n          the last pixel.\n        * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting\n          about the center of the last pixel. This mode is also sometimes referred to as\n          whole-sample symmetric.\n    ""    * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting\n          about the edge of the last pixel. This mode is also sometimes referred to as\n          half-sample symmetric.\n        * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around\n          to the opposite edge.\n    cval : float, optional\n        Value to fill past edges of input if mode is \342\200\230constant\342\200\231. Default is 0.0.\n    num_threads : int, optional\n        Number of threads.\n\n    Returns\n    -------\n    wfield : numpy.ndarray\n        Whitefield.\n    ";
+static PyMethodDef __pyx_mdef_6cbclib_3bin_15data_processing_15maximum_filter = {"maximum_filter", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cbclib_3bin_15data_processing_15maximum_filter, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6cbclib_3bin_15data_processing_14maximum_filter};
+static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_15maximum_filter(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+  PyArrayObject *__pyx_v_data = 0;
+  PyObject *__pyx_v_size = 0;
+  PyArrayObject *__pyx_v_footprint = 0;
+  PyArrayObject *__pyx_v_mask = 0;
+  PyObject *__pyx_v_mode = 0;
+  double __pyx_v_cval;
+  unsigned int __pyx_v_num_threads;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyArrayObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("maximum_filter (wrapper)", 0);
+  {
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_data,&__pyx_n_s_size,&__pyx_n_s_footprint,&__pyx_n_s_mask,&__pyx_n_s_mode,&__pyx_n_s_cval,&__pyx_n_s_num_threads,0};
+    PyObject* values[7] = {0,0,0,0,0,0,0};
+    values[1] = ((PyObject *)((PyObject *)Py_None));
+    values[2] = (PyObject *)((PyArrayObject *)((PyObject *)Py_None));
+    values[3] = (PyObject *)((PyArrayObject *)((PyObject *)Py_None));
+    values[4] = ((PyObject*)((PyObject*)__pyx_n_u_reflect));
+    if (unlikely(__pyx_kwds)) {
+      Py_ssize_t kw_args;
+      const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
+      switch (pos_args) {
+        case  7: values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
+        CYTHON_FALLTHROUGH;
+        case  6: values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
+        CYTHON_FALLTHROUGH;
+        case  5: values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
+        CYTHON_FALLTHROUGH;
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      kw_args = PyDict_Size(__pyx_kwds);
+      switch (pos_args) {
+        case  0:
+        if (likely((values[0] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_data)) != 0)) kw_args--;
+        else goto __pyx_L5_argtuple_error;
+        CYTHON_FALLTHROUGH;
+        case  1:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_size);
+          if (value) { values[1] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  2:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_footprint);
+          if (value) { values[2] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  3:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mask);
+          if (value) { values[3] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  4:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_mode);
+          if (value) { values[4] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  5:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_cval);
+          if (value) { values[5] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  6:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_num_threads);
+          if (value) { values[6] = value; kw_args--; }
+        }
+      }
+      if (unlikely(kw_args > 0)) {
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "maximum_filter") < 0)) __PYX_ERR(0, 512, __pyx_L3_error)
+      }
+    } else {
+      switch (PyTuple_GET_SIZE(__pyx_args)) {
+        case  7: values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
+        CYTHON_FALLTHROUGH;
+        case  6: values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
+        CYTHON_FALLTHROUGH;
+        case  5: values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
+        CYTHON_FALLTHROUGH;
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+    }
+    __pyx_v_data = ((PyArrayObject *)values[0]);
+    __pyx_v_size = values[1];
+    __pyx_v_footprint = ((PyArrayObject *)values[2]);
+    __pyx_v_mask = ((PyArrayObject *)values[3]);
+    __pyx_v_mode = ((PyObject*)values[4]);
+    if (values[5]) {
+      __pyx_v_cval = __pyx_PyFloat_AsDouble(values[5]); if (unlikely((__pyx_v_cval == (double)-1) && PyErr_Occurred())) __PYX_ERR(0, 513, __pyx_L3_error)
+    } else {
+      __pyx_v_cval = ((double)((double)0.));
+    }
+    if (values[6]) {
+      __pyx_v_num_threads = __Pyx_PyInt_As_unsigned_int(values[6]); if (unlikely((__pyx_v_num_threads == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 513, __pyx_L3_error)
+    } else {
+      __pyx_v_num_threads = ((unsigned int)((unsigned int)1));
+    }
+  }
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("maximum_filter", 0, 1, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 512, __pyx_L3_error)
+  __pyx_L3_error:;
+  __Pyx_AddTraceback("cbclib.bin.data_processing.maximum_filter", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_data), __pyx_ptype_5numpy_ndarray, 1, "data", 0))) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_footprint), __pyx_ptype_5numpy_ndarray, 1, "footprint", 0))) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mask), __pyx_ptype_5numpy_ndarray, 1, "mask", 0))) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_mode), (&PyUnicode_Type), 1, "mode", 1))) __PYX_ERR(0, 513, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6cbclib_3bin_15data_processing_14maximum_filter(__pyx_self, __pyx_v_data, __pyx_v_size, __pyx_v_footprint, __pyx_v_mask, __pyx_v_mode, __pyx_v_cval, __pyx_v_num_threads);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_14maximum_filter(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_data, PyObject *__pyx_v_size, PyArrayObject *__pyx_v_footprint, PyArrayObject *__pyx_v_mask, PyObject *__pyx_v_mode, double __pyx_v_cval, unsigned int __pyx_v_num_threads) {
+  int __pyx_v_ndim;
+  npy_intp *__pyx_v_dims;
+  unsigned long *__pyx_v__fsize;
+  PyArrayObject *__pyx_v_fsize = 0;
+  unsigned char *__pyx_v__fmask;
+  unsigned long *__pyx_v__dims;
+  int __pyx_v_type_num;
+  PyArrayObject *__pyx_v_out = 0;
+  void *__pyx_v__out;
+  void *__pyx_v__data;
+  unsigned char *__pyx_v__mask;
+  int __pyx_v__mode;
+  void *__pyx_v__cval;
+  int __pyx_v_fail;
+  PyArrayObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  int __pyx_t_1;
+  PyObject *__pyx_t_2 = NULL;
+  int __pyx_t_3;
+  npy_intp *__pyx_t_4;
+  int __pyx_t_5;
+  PyObject *__pyx_t_6 = NULL;
+  int __pyx_t_7;
+  PyObject *__pyx_t_8 = NULL;
+  PyObject *__pyx_t_9 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("maximum_filter", 0);
+  __Pyx_INCREF((PyObject *)__pyx_v_data);
+  __Pyx_INCREF((PyObject *)__pyx_v_footprint);
+  __Pyx_INCREF((PyObject *)__pyx_v_mask);
+
+  /* "cbclib/bin/data_processing.pyx":558
+ *         Whitefield.
+ *     """
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
+ * 
+ */
+  __pyx_t_1 = ((!(PyArray_IS_C_CONTIGUOUS(__pyx_v_data) != 0)) != 0);
+  if (__pyx_t_1) {
+
+    /* "cbclib/bin/data_processing.pyx":559
+ *     """
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):
+ *         data = np.PyArray_GETCONTIGUOUS(data)             # <<<<<<<<<<<<<<
+ * 
+ *     cdef int ndim = data.ndim
+ */
+    __pyx_t_2 = ((PyObject *)PyArray_GETCONTIGUOUS(__pyx_v_data)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 559, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_DECREF_SET(__pyx_v_data, ((PyArrayObject *)__pyx_t_2));
+    __pyx_t_2 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":558
+ *         Whitefield.
+ *     """
+ *     if not np.PyArray_IS_C_CONTIGUOUS(data):             # <<<<<<<<<<<<<<
+ *         data = np.PyArray_GETCONTIGUOUS(data)
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":561
+ *         data = np.PyArray_GETCONTIGUOUS(data)
+ * 
+ *     cdef int ndim = data.ndim             # <<<<<<<<<<<<<<
+ *     cdef np.npy_intp *dims = data.shape
+ * 
+ */
+  __pyx_t_3 = __pyx_v_data->nd;
+  __pyx_v_ndim = __pyx_t_3;
+
+  /* "cbclib/bin/data_processing.pyx":562
+ * 
+ *     cdef int ndim = data.ndim
+ *     cdef np.npy_intp *dims = data.shape             # <<<<<<<<<<<<<<
+ * 
+ *     if mask is None:
+ */
+  __pyx_t_4 = __pyx_v_data->dimensions;
+  __pyx_v_dims = __pyx_t_4;
+
+  /* "cbclib/bin/data_processing.pyx":564
+ *     cdef np.npy_intp *dims = data.shape
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+  __pyx_t_1 = (((PyObject *)__pyx_v_mask) == Py_None);
+  __pyx_t_5 = (__pyx_t_1 != 0);
+  if (__pyx_t_5) {
+
+    /* "cbclib/bin/data_processing.pyx":565
+ * 
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ */
+    __pyx_t_2 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_dims, NPY_BOOL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 565, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_6 = __pyx_t_2;
+    __Pyx_INCREF(__pyx_t_6);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":566
+ *     if mask is None:
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)             # <<<<<<<<<<<<<<
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)
+ */
+    PyArray_FILLWBYTE(((PyObject *)__pyx_v_mask), 1);
+
+    /* "cbclib/bin/data_processing.pyx":564
+ *     cdef np.npy_intp *dims = data.shape
+ * 
+ *     if mask is None:             # <<<<<<<<<<<<<<
+ *         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ */
+    goto __pyx_L4;
+  }
+
+  /* "cbclib/bin/data_processing.pyx":568
+ *         np.PyArray_FILLWBYTE(mask, 1)
+ *     else:
+ *         mask = check_array(mask, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ * 
+ *     if size is None and footprint is None:
+ */
+  /*else*/ {
+    __pyx_t_6 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_mask, NPY_BOOL)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 568, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_DECREF_SET(__pyx_v_mask, ((PyArrayObject *)__pyx_t_6));
+    __pyx_t_6 = 0;
+  }
+  __pyx_L4:;
+
+  /* "cbclib/bin/data_processing.pyx":570
+ *         mask = check_array(mask, np.NPY_BOOL)
+ * 
+ *     if size is None and footprint is None:             # <<<<<<<<<<<<<<
+ *         raise ValueError('size or footprint must be provided.')
+ * 
+ */
+  __pyx_t_1 = (__pyx_v_size == Py_None);
+  __pyx_t_7 = (__pyx_t_1 != 0);
+  if (__pyx_t_7) {
+  } else {
+    __pyx_t_5 = __pyx_t_7;
+    goto __pyx_L6_bool_binop_done;
+  }
+  __pyx_t_7 = (((PyObject *)__pyx_v_footprint) == Py_None);
+  __pyx_t_1 = (__pyx_t_7 != 0);
+  __pyx_t_5 = __pyx_t_1;
+  __pyx_L6_bool_binop_done:;
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cbclib/bin/data_processing.pyx":571
+ * 
+ *     if size is None and footprint is None:
+ *         raise ValueError('size or footprint must be provided.')             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_fsize
+ */
+    __pyx_t_6 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__8, NULL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 571, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __PYX_ERR(0, 571, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":570
+ *         mask = check_array(mask, np.NPY_BOOL)
+ * 
+ *     if size is None and footprint is None:             # <<<<<<<<<<<<<<
+ *         raise ValueError('size or footprint must be provided.')
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":575
+ *     cdef unsigned long *_fsize
+ *     cdef np.ndarray fsize
+ *     if size is None:             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ */
+  __pyx_t_5 = (__pyx_v_size == Py_None);
+  __pyx_t_1 = (__pyx_t_5 != 0);
+  if (__pyx_t_1) {
+
+    /* "cbclib/bin/data_processing.pyx":576
+ *     cdef np.ndarray fsize
+ *     if size is None:
+ *         _fsize = <unsigned long *>footprint.shape             # <<<<<<<<<<<<<<
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+ */
+    __pyx_v__fsize = ((unsigned long *)__pyx_v_footprint->dimensions);
+
+    /* "cbclib/bin/data_processing.pyx":575
+ *     cdef unsigned long *_fsize
+ *     cdef np.ndarray fsize
+ *     if size is None:             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ */
+    goto __pyx_L8;
+  }
+
+  /* "cbclib/bin/data_processing.pyx":578
+ *         _fsize = <unsigned long *>footprint.shape
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)             # <<<<<<<<<<<<<<
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ */
+  /*else*/ {
+    __pyx_t_6 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_normalize_sequence(__pyx_v_size, __pyx_v_ndim, NPY_INTP)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 578, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_v_fsize = ((PyArrayObject *)__pyx_t_6);
+    __pyx_t_6 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":579
+ *     else:
+ *         fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)             # <<<<<<<<<<<<<<
+ * 
+ *     if footprint is None:
+ */
+    __pyx_v__fsize = ((unsigned long *)PyArray_DATA(__pyx_v_fsize));
+  }
+  __pyx_L8:;
+
+  /* "cbclib/bin/data_processing.pyx":581
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ *     if footprint is None:             # <<<<<<<<<<<<<<
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ */
+  __pyx_t_1 = (((PyObject *)__pyx_v_footprint) == Py_None);
+  __pyx_t_5 = (__pyx_t_1 != 0);
+  if (__pyx_t_5) {
+
+    /* "cbclib/bin/data_processing.pyx":582
+ * 
+ *     if footprint is None:
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)             # <<<<<<<<<<<<<<
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ */
+    __pyx_t_6 = PyArray_SimpleNew(__pyx_v_ndim, ((npy_intp *)__pyx_v__fsize), NPY_BOOL); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 582, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_t_2 = __pyx_t_6;
+    __Pyx_INCREF(__pyx_t_2);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __Pyx_DECREF_SET(__pyx_v_footprint, ((PyArrayObject *)__pyx_t_2));
+    __pyx_t_2 = 0;
+
+    /* "cbclib/bin/data_processing.pyx":583
+ *     if footprint is None:
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)             # <<<<<<<<<<<<<<
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ * 
+ */
+    PyArray_FILLWBYTE(((PyObject *)__pyx_v_footprint), 1);
+
+    /* "cbclib/bin/data_processing.pyx":581
+ *         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
+ * 
+ *     if footprint is None:             # <<<<<<<<<<<<<<
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":584
+ *         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
+ *         np.PyArray_FILLWBYTE(footprint, 1)
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>dims
+ */
+  __pyx_v__fmask = ((unsigned char *)PyArray_DATA(__pyx_v_footprint));
+
+  /* "cbclib/bin/data_processing.pyx":586
+ *     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>dims             # <<<<<<<<<<<<<<
+ *     cdef int type_num = np.PyArray_TYPE(data)
+ *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+ */
+  __pyx_v__dims = ((unsigned long *)__pyx_v_dims);
+
+  /* "cbclib/bin/data_processing.pyx":587
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>dims
+ *     cdef int type_num = np.PyArray_TYPE(data)             # <<<<<<<<<<<<<<
+ *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+ *     cdef void *_out = <void *>np.PyArray_DATA(out)
+ */
+  __pyx_v_type_num = PyArray_TYPE(__pyx_v_data);
+
+  /* "cbclib/bin/data_processing.pyx":588
+ *     cdef unsigned long *_dims = <unsigned long *>dims
+ *     cdef int type_num = np.PyArray_TYPE(data)
+ *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)             # <<<<<<<<<<<<<<
+ *     cdef void *_out = <void *>np.PyArray_DATA(out)
+ *     cdef void *_data = <void *>np.PyArray_DATA(data)
+ */
+  __pyx_t_2 = PyArray_SimpleNew(__pyx_v_ndim, __pyx_v_dims, __pyx_v_type_num); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 588, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_6 = __pyx_t_2;
+  __Pyx_INCREF(__pyx_t_6);
+  __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  __pyx_v_out = ((PyArrayObject *)__pyx_t_6);
+  __pyx_t_6 = 0;
+
+  /* "cbclib/bin/data_processing.pyx":589
+ *     cdef int type_num = np.PyArray_TYPE(data)
+ *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+ *     cdef void *_out = <void *>np.PyArray_DATA(out)             # <<<<<<<<<<<<<<
+ *     cdef void *_data = <void *>np.PyArray_DATA(data)
+ *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ */
+  __pyx_v__out = ((void *)PyArray_DATA(__pyx_v_out));
+
+  /* "cbclib/bin/data_processing.pyx":590
+ *     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+ *     cdef void *_out = <void *>np.PyArray_DATA(out)
+ *     cdef void *_data = <void *>np.PyArray_DATA(data)             # <<<<<<<<<<<<<<
+ *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ *     cdef int _mode = extend_mode_to_code(mode)
+ */
+  __pyx_v__data = ((void *)PyArray_DATA(__pyx_v_data));
+
+  /* "cbclib/bin/data_processing.pyx":591
+ *     cdef void *_out = <void *>np.PyArray_DATA(out)
+ *     cdef void *_data = <void *>np.PyArray_DATA(data)
+ *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)             # <<<<<<<<<<<<<<
+ *     cdef int _mode = extend_mode_to_code(mode)
+ *     cdef void *_cval = <void *>&cval
+ */
+  __pyx_v__mask = ((unsigned char *)PyArray_DATA(__pyx_v_mask));
+
+  /* "cbclib/bin/data_processing.pyx":592
+ *     cdef void *_data = <void *>np.PyArray_DATA(data)
+ *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ *     cdef int _mode = extend_mode_to_code(mode)             # <<<<<<<<<<<<<<
+ *     cdef void *_cval = <void *>&cval
+ * 
+ */
+  __pyx_t_3 = __pyx_f_6cbclib_3bin_15data_processing_extend_mode_to_code(__pyx_v_mode); if (unlikely(__pyx_t_3 == ((int)-1))) __PYX_ERR(0, 592, __pyx_L1_error)
+  __pyx_v__mode = __pyx_t_3;
+
+  /* "cbclib/bin/data_processing.pyx":593
+ *     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+ *     cdef int _mode = extend_mode_to_code(mode)
+ *     cdef void *_cval = <void *>&cval             # <<<<<<<<<<<<<<
+ * 
+ *     with nogil:
+ */
+  __pyx_v__cval = ((void *)(&__pyx_v_cval));
+
+  /* "cbclib/bin/data_processing.pyx":595
+ *     cdef void *_cval = <void *>&cval
+ * 
+ *     with nogil:             # <<<<<<<<<<<<<<
+ *         if type_num == np.NPY_FLOAT64:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ */
+  {
+      #ifdef WITH_THREAD
+      PyThreadState *_save;
+      Py_UNBLOCK_THREADS
+      __Pyx_FastGIL_Remember();
+      #endif
+      /*try:*/ {
+
+        /* "cbclib/bin/data_processing.pyx":596
+ * 
+ *     with nogil:
+ *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ *         elif type_num == np.NPY_FLOAT32:
+ */
+        switch (__pyx_v_type_num) {
+          case NPY_FLOAT64:
+
+          /* "cbclib/bin/data_processing.pyx":597
+ *     with nogil:
+ *         if type_num == np.NPY_FLOAT64:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)             # <<<<<<<<<<<<<<
+ *         elif type_num == np.NPY_FLOAT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+ */
+          __pyx_v_fail = maximum_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 8, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_double, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":596
+ * 
+ *     with nogil:
+ *         if type_num == np.NPY_FLOAT64:             # <<<<<<<<<<<<<<
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ *         elif type_num == np.NPY_FLOAT32:
+ */
+          break;
+          case NPY_FLOAT32:
+
+          /* "cbclib/bin/data_processing.pyx":599
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ *         elif type_num == np.NPY_FLOAT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)             # <<<<<<<<<<<<<<
+ *         elif type_num == np.NPY_INT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ */
+          __pyx_v_fail = maximum_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_float, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":598
+ *         if type_num == np.NPY_FLOAT64:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ *         elif type_num == np.NPY_FLOAT32:             # <<<<<<<<<<<<<<
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+ *         elif type_num == np.NPY_INT32:
+ */
+          break;
+          case NPY_INT32:
+
+          /* "cbclib/bin/data_processing.pyx":601
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+ *         elif type_num == np.NPY_INT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)             # <<<<<<<<<<<<<<
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+ */
+          __pyx_v_fail = maximum_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_int, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":600
+ *         elif type_num == np.NPY_FLOAT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+ *         elif type_num == np.NPY_INT32:             # <<<<<<<<<<<<<<
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ */
+          break;
+          case NPY_UINT32:
+
+          /* "cbclib/bin/data_processing.pyx":603
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)             # <<<<<<<<<<<<<<
+ *         else:
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ */
+          __pyx_v_fail = maximum_filter(__pyx_v__out, __pyx_v__data, __pyx_v__mask, __pyx_v_ndim, __pyx_v__dims, 4, __pyx_v__fsize, __pyx_v__fmask, __pyx_v__mode, __pyx_v__cval, compare_uint, __pyx_v_num_threads);
+
+          /* "cbclib/bin/data_processing.pyx":602
+ *         elif type_num == np.NPY_INT32:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+ *         elif type_num == np.NPY_UINT32:             # <<<<<<<<<<<<<<
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+ *         else:
+ */
+          break;
+          default:
+
+          /* "cbclib/bin/data_processing.pyx":605
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+ *         else:
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))             # <<<<<<<<<<<<<<
+ * 
+ *     if fail:
+ */
+          {
+              #ifdef WITH_THREAD
+              PyGILState_STATE __pyx_gilstate_save = __Pyx_PyGILState_Ensure();
+              #endif
+              /*try:*/ {
+                __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_kp_u_data_argument_has_incompatible_t, __pyx_n_s_format); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 605, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_2);
+                __pyx_t_8 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_data), __pyx_n_s_dtype); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 605, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_8);
+                __pyx_t_9 = __Pyx_PyObject_CallOneArg(((PyObject *)(&PyUnicode_Type)), __pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 605, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_9);
+                __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
+                __pyx_t_8 = NULL;
+                if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_2))) {
+                  __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_2);
+                  if (likely(__pyx_t_8)) {
+                    PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_2);
+                    __Pyx_INCREF(__pyx_t_8);
+                    __Pyx_INCREF(function);
+                    __Pyx_DECREF_SET(__pyx_t_2, function);
+                  }
+                }
+                __pyx_t_6 = (__pyx_t_8) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_8, __pyx_t_9) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_t_9);
+                __Pyx_XDECREF(__pyx_t_8); __pyx_t_8 = 0;
+                __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
+                if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 605, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_6);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __pyx_t_2 = __Pyx_PyObject_CallOneArg(__pyx_builtin_TypeError, __pyx_t_6); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 605, __pyx_L14_error)
+                __Pyx_GOTREF(__pyx_t_2);
+                __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+                __Pyx_Raise(__pyx_t_2, 0, 0, 0);
+                __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+                __PYX_ERR(0, 605, __pyx_L14_error)
+              }
+              /*finally:*/ {
+                __pyx_L14_error: {
+                  #ifdef WITH_THREAD
+                  __Pyx_PyGILState_Release(__pyx_gilstate_save);
+                  #endif
+                  goto __pyx_L11_error;
+                }
+              }
+          }
+          break;
+        }
+      }
+
+      /* "cbclib/bin/data_processing.pyx":595
+ *     cdef void *_cval = <void *>&cval
+ * 
+ *     with nogil:             # <<<<<<<<<<<<<<
+ *         if type_num == np.NPY_FLOAT64:
+ *             fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+ */
+      /*finally:*/ {
+        /*normal exit:*/{
+          #ifdef WITH_THREAD
+          __Pyx_FastGIL_Forget();
+          Py_BLOCK_THREADS
+          #endif
+          goto __pyx_L12;
+        }
+        __pyx_L11_error: {
+          #ifdef WITH_THREAD
+          __Pyx_FastGIL_Forget();
+          Py_BLOCK_THREADS
+          #endif
+          goto __pyx_L1_error;
+        }
+        __pyx_L12:;
+      }
+  }
+
+  /* "cbclib/bin/data_processing.pyx":607
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ * 
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return out
+ */
+  __pyx_t_5 = (__pyx_v_fail != 0);
+  if (unlikely(__pyx_t_5)) {
+
+    /* "cbclib/bin/data_processing.pyx":608
+ * 
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')             # <<<<<<<<<<<<<<
+ *     return out
+ * 
+ */
+    __pyx_t_2 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__5, NULL); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 608, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_Raise(__pyx_t_2, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __PYX_ERR(0, 608, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":607
+ *             raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+ * 
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return out
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":609
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')
+ *     return out             # <<<<<<<<<<<<<<
+ * 
+ * def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:
+ */
+  __Pyx_XDECREF(((PyObject *)__pyx_r));
+  __Pyx_INCREF(((PyObject *)__pyx_v_out));
+  __pyx_r = __pyx_v_out;
+  goto __pyx_L0;
+
+  /* "cbclib/bin/data_processing.pyx":512
+ *     return out
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
+ *                    mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
+ *     """Calculate a multidimensional maximum filter.
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_8);
+  __Pyx_XDECREF(__pyx_t_9);
+  __Pyx_AddTraceback("cbclib.bin.data_processing.maximum_filter", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF((PyObject *)__pyx_v_fsize);
+  __Pyx_XDECREF((PyObject *)__pyx_v_out);
+  __Pyx_XDECREF((PyObject *)__pyx_v_data);
+  __Pyx_XDECREF((PyObject *)__pyx_v_footprint);
+  __Pyx_XDECREF((PyObject *)__pyx_v_mask);
+  __Pyx_XGIVEREF((PyObject *)__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cbclib/bin/data_processing.pyx":611
+ *     return out
+ * 
+ * def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Draw thick lines with variable thickness. The lines must follow
+ *     the LSD convention, see the parameters for more info.
+ */
+
+/* Python wrapper */
+static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_17draw_lines(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static char __pyx_doc_6cbclib_3bin_15data_processing_16draw_lines[] = "draw_lines(ndarray image: np.ndarray, ndarray lines: np.ndarray, unsigned int max_val: cython.uint = 255, unsigned int dilation: cython.uint = 0) -> np.ndarray\nDraw thick lines with variable thickness. The lines must follow\n    the LSD convention, see the parameters for more info.\n\n    Parameters\n    ----------\n    image : np.ndarray\n        Image array.\n    lines : np.ndarray\n        An array of the detected lines. Must have a shape of (`N`, 7),\n        where `N` is the number of lines. Each line is comprised of\n        7 parameters as follows:\n\n        * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's\n          ends.\n        * `width` : Line's width.\n        * `p` : Angle precision [0, 1] given by angle tolerance\n          over 180 degree.\n        * `-log10(NFA)` : Number of false alarms.\n    max_val : int, optional\n        Maximum value of the line mask.\n    dilation : int, optional\n        Size of the binary dilation applied to the output image.\n\n    Returns\n    -------\n    image : np.ndarray\n        Output image with the lines drawn.\n\n    See Also\n    --------\n    LSD : Line Segment Detector.\n    ";
+static PyMethodDef __pyx_mdef_6cbclib_3bin_15data_processing_17draw_lines = {"draw_lines", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cbclib_3bin_15data_processing_17draw_lines, METH_VARARGS|METH_KEYWORDS, __pyx_doc_6cbclib_3bin_15data_processing_16draw_lines};
+static PyArrayObject *__pyx_pw_6cbclib_3bin_15data_processing_17draw_lines(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+  PyArrayObject *__pyx_v_image = 0;
+  PyArrayObject *__pyx_v_lines = 0;
+  unsigned int __pyx_v_max_val;
+  unsigned int __pyx_v_dilation;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyArrayObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("draw_lines (wrapper)", 0);
+  {
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_image,&__pyx_n_s_lines,&__pyx_n_s_max_val,&__pyx_n_s_dilation,0};
+    PyObject* values[4] = {0,0,0,0};
+    if (unlikely(__pyx_kwds)) {
+      Py_ssize_t kw_args;
+      const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
+      switch (pos_args) {
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      kw_args = PyDict_Size(__pyx_kwds);
+      switch (pos_args) {
+        case  0:
+        if (likely((values[0] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_image)) != 0)) kw_args--;
+        else goto __pyx_L5_argtuple_error;
+        CYTHON_FALLTHROUGH;
+        case  1:
+        if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_lines)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("draw_lines", 0, 2, 4, 1); __PYX_ERR(0, 611, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  2:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_max_val);
+          if (value) { values[2] = value; kw_args--; }
+        }
+        CYTHON_FALLTHROUGH;
+        case  3:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_dilation);
+          if (value) { values[3] = value; kw_args--; }
+        }
+      }
+      if (unlikely(kw_args > 0)) {
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "draw_lines") < 0)) __PYX_ERR(0, 611, __pyx_L3_error)
+      }
+    } else {
+      switch (PyTuple_GET_SIZE(__pyx_args)) {
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+    }
+    __pyx_v_image = ((PyArrayObject *)values[0]);
+    __pyx_v_lines = ((PyArrayObject *)values[1]);
+    if (values[2]) {
+      __pyx_v_max_val = __Pyx_PyInt_As_unsigned_int(values[2]); if (unlikely((__pyx_v_max_val == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 611, __pyx_L3_error)
+    } else {
+      __pyx_v_max_val = ((unsigned int)((unsigned int)0xFF));
+    }
+    if (values[3]) {
+      __pyx_v_dilation = __Pyx_PyInt_As_unsigned_int(values[3]); if (unlikely((__pyx_v_dilation == (unsigned int)-1) && PyErr_Occurred())) __PYX_ERR(0, 611, __pyx_L3_error)
+    } else {
+      __pyx_v_dilation = ((unsigned int)((unsigned int)0));
+    }
+  }
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("draw_lines", 0, 2, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 611, __pyx_L3_error)
+  __pyx_L3_error:;
+  __Pyx_AddTraceback("cbclib.bin.data_processing.draw_lines", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_image), __pyx_ptype_5numpy_ndarray, 1, "image", 0))) __PYX_ERR(0, 611, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_lines), __pyx_ptype_5numpy_ndarray, 1, "lines", 0))) __PYX_ERR(0, 611, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6cbclib_3bin_15data_processing_16draw_lines(__pyx_self, __pyx_v_image, __pyx_v_lines, __pyx_v_max_val, __pyx_v_dilation);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyArrayObject *__pyx_pf_6cbclib_3bin_15data_processing_16draw_lines(CYTHON_UNUSED PyObject *__pyx_self, PyArrayObject *__pyx_v_image, PyArrayObject *__pyx_v_lines, unsigned int __pyx_v_max_val, unsigned int __pyx_v_dilation) {
+  unsigned int *__pyx_v__image;
+  unsigned long __pyx_v__Y;
+  unsigned long __pyx_v__X;
+  double *__pyx_v__lines;
+  unsigned long __pyx_v__n_lines;
+  int __pyx_v_fail;
+  PyArrayObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  int __pyx_t_2;
+  int __pyx_t_3;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("draw_lines", 0);
+  __Pyx_INCREF((PyObject *)__pyx_v_image);
+  __Pyx_INCREF((PyObject *)__pyx_v_lines);
+
+  /* "cbclib/bin/data_processing.pyx":644
+ *     LSD : Line Segment Detector.
+ *     """
+ *     image = check_array(image, np.NPY_UINT32)             # <<<<<<<<<<<<<<
+ *     lines = check_array(lines, np.NPY_FLOAT64)
+ * 
+ */
+  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_image, NPY_UINT32)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 644, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_DECREF_SET(__pyx_v_image, ((PyArrayObject *)__pyx_t_1));
+  __pyx_t_1 = 0;
+
+  /* "cbclib/bin/data_processing.pyx":645
+ *     """
+ *     image = check_array(image, np.NPY_UINT32)
+ *     lines = check_array(lines, np.NPY_FLOAT64)             # <<<<<<<<<<<<<<
+ * 
+ *     if image.ndim != 2:
+ */
+  __pyx_t_1 = ((PyObject *)__pyx_f_6cbclib_3bin_15data_processing_check_array(__pyx_v_lines, NPY_FLOAT64)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 645, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_DECREF_SET(__pyx_v_lines, ((PyArrayObject *)__pyx_t_1));
+  __pyx_t_1 = 0;
+
+  /* "cbclib/bin/data_processing.pyx":647
+ *     lines = check_array(lines, np.NPY_FLOAT64)
+ * 
+ *     if image.ndim != 2:             # <<<<<<<<<<<<<<
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ */
+  __pyx_t_2 = ((__pyx_v_image->nd != 2) != 0);
+  if (unlikely(__pyx_t_2)) {
+
+    /* "cbclib/bin/data_processing.pyx":648
+ * 
+ *     if image.ndim != 2:
+ *         raise ValueError("image array must be two-dimensional")             # <<<<<<<<<<<<<<
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ *         raise ValueError(f"lines array has an incompatible shape")
+ */
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__9, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 648, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 648, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":647
+ *     lines = check_array(lines, np.NPY_FLOAT64)
+ * 
+ *     if image.ndim != 2:             # <<<<<<<<<<<<<<
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":649
+ *     if image.ndim != 2:
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:             # <<<<<<<<<<<<<<
+ *         raise ValueError(f"lines array has an incompatible shape")
+ * 
+ */
+  __pyx_t_3 = ((__pyx_v_lines->nd != 2) != 0);
+  if (!__pyx_t_3) {
+  } else {
+    __pyx_t_2 = __pyx_t_3;
+    goto __pyx_L5_bool_binop_done;
+  }
+  __pyx_t_3 = (((__pyx_v_lines->dimensions[1]) != 7) != 0);
+  __pyx_t_2 = __pyx_t_3;
+  __pyx_L5_bool_binop_done:;
+  if (unlikely(__pyx_t_2)) {
+
+    /* "cbclib/bin/data_processing.pyx":650
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ *         raise ValueError(f"lines array has an incompatible shape")             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
+ */
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_ValueError, __pyx_tuple__10, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 650, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 650, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":649
+ *     if image.ndim != 2:
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:             # <<<<<<<<<<<<<<
+ *         raise ValueError(f"lines array has an incompatible shape")
+ * 
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":652
+ *         raise ValueError(f"lines array has an incompatible shape")
+ * 
+ *     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)             # <<<<<<<<<<<<<<
+ *     cdef unsigned long _Y = image.shape[0]
+ *     cdef unsigned long _X = image.shape[1]
+ */
+  __pyx_v__image = ((unsigned int *)PyArray_DATA(__pyx_v_image));
+
+  /* "cbclib/bin/data_processing.pyx":653
+ * 
+ *     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
+ *     cdef unsigned long _Y = image.shape[0]             # <<<<<<<<<<<<<<
+ *     cdef unsigned long _X = image.shape[1]
+ *     cdef double *_lines = <double *>np.PyArray_DATA(lines)
+ */
+  __pyx_v__Y = (__pyx_v_image->dimensions[0]);
+
+  /* "cbclib/bin/data_processing.pyx":654
+ *     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
+ *     cdef unsigned long _Y = image.shape[0]
+ *     cdef unsigned long _X = image.shape[1]             # <<<<<<<<<<<<<<
+ *     cdef double *_lines = <double *>np.PyArray_DATA(lines)
+ *     cdef unsigned long _n_lines = lines.shape[0]
+ */
+  __pyx_v__X = (__pyx_v_image->dimensions[1]);
+
+  /* "cbclib/bin/data_processing.pyx":655
+ *     cdef unsigned long _Y = image.shape[0]
+ *     cdef unsigned long _X = image.shape[1]
+ *     cdef double *_lines = <double *>np.PyArray_DATA(lines)             # <<<<<<<<<<<<<<
+ *     cdef unsigned long _n_lines = lines.shape[0]
+ * 
+ */
+  __pyx_v__lines = ((double *)PyArray_DATA(__pyx_v_lines));
+
+  /* "cbclib/bin/data_processing.pyx":656
+ *     cdef unsigned long _X = image.shape[1]
+ *     cdef double *_lines = <double *>np.PyArray_DATA(lines)
+ *     cdef unsigned long _n_lines = lines.shape[0]             # <<<<<<<<<<<<<<
+ * 
+ *     with nogil:
+ */
+  __pyx_v__n_lines = (__pyx_v_lines->dimensions[0]);
+
+  /* "cbclib/bin/data_processing.pyx":658
+ *     cdef unsigned long _n_lines = lines.shape[0]
+ * 
+ *     with nogil:             # <<<<<<<<<<<<<<
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+ *     if fail:
+ */
+  {
+      #ifdef WITH_THREAD
+      PyThreadState *_save;
+      Py_UNBLOCK_THREADS
+      __Pyx_FastGIL_Remember();
+      #endif
+      /*try:*/ {
+
+        /* "cbclib/bin/data_processing.pyx":659
+ * 
+ *     with nogil:
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)             # <<<<<<<<<<<<<<
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')
+ */
+        __pyx_v_fail = draw_lines(__pyx_v__image, __pyx_v__Y, __pyx_v__X, __pyx_v_max_val, __pyx_v__lines, __pyx_v__n_lines, __pyx_v_dilation);
+      }
+
+      /* "cbclib/bin/data_processing.pyx":658
+ *     cdef unsigned long _n_lines = lines.shape[0]
+ * 
+ *     with nogil:             # <<<<<<<<<<<<<<
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+ *     if fail:
+ */
+      /*finally:*/ {
+        /*normal exit:*/{
+          #ifdef WITH_THREAD
+          __Pyx_FastGIL_Forget();
+          Py_BLOCK_THREADS
+          #endif
+          goto __pyx_L9;
+        }
+        __pyx_L9:;
+      }
+  }
+
+  /* "cbclib/bin/data_processing.pyx":660
+ *     with nogil:
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return image
+ */
+  __pyx_t_2 = (__pyx_v_fail != 0);
+  if (unlikely(__pyx_t_2)) {
+
+    /* "cbclib/bin/data_processing.pyx":661
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')             # <<<<<<<<<<<<<<
+ *     return image
+ */
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_builtin_RuntimeError, __pyx_tuple__5, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 661, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_Raise(__pyx_t_1, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+    __PYX_ERR(0, 661, __pyx_L1_error)
+
+    /* "cbclib/bin/data_processing.pyx":660
+ *     with nogil:
+ *         fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+ *     if fail:             # <<<<<<<<<<<<<<
+ *         raise RuntimeError('C backend exited with error.')
+ *     return image
+ */
+  }
+
+  /* "cbclib/bin/data_processing.pyx":662
+ *     if fail:
+ *         raise RuntimeError('C backend exited with error.')
+ *     return image             # <<<<<<<<<<<<<<
+ */
+  __Pyx_XDECREF(((PyObject *)__pyx_r));
+  __Pyx_INCREF(((PyObject *)__pyx_v_image));
+  __pyx_r = __pyx_v_image;
+  goto __pyx_L0;
+
+  /* "cbclib/bin/data_processing.pyx":611
+ *     return out
+ * 
+ * def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Draw thick lines with variable thickness. The lines must follow
+ *     the LSD convention, see the parameters for more info.
  */
 
   /* function exit code */
   __pyx_L1_error:;
   __Pyx_XDECREF(__pyx_t_1);
-  __Pyx_XDECREF(__pyx_t_6);
-  __Pyx_XDECREF(__pyx_t_7);
-  __Pyx_XDECREF(__pyx_t_8);
-  __Pyx_AddTraceback("cbclib.bin.data_processing.median_filter", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("cbclib.bin.data_processing.draw_lines", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
-  __Pyx_XDECREF((PyObject *)__pyx_v_out);
-  __Pyx_XDECREF((PyObject *)__pyx_v_data);
-  __Pyx_XDECREF((PyObject *)__pyx_v_mask);
+  __Pyx_XDECREF((PyObject *)__pyx_v_image);
+  __Pyx_XDECREF((PyObject *)__pyx_v_lines);
   __Pyx_XGIVEREF((PyObject *)__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
@@ -6499,7 +8045,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_array(void) {
  * 
  * cdef inline int import_umath() except -1:
  */
-      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__8, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 947, __pyx_L5_except_error)
+      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__11, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 947, __pyx_L5_except_error)
       __Pyx_GOTREF(__pyx_t_8);
       __Pyx_Raise(__pyx_t_8, 0, 0, 0);
       __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
@@ -6631,7 +8177,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_umath(void) {
  * 
  * cdef inline int import_ufunc() except -1:
  */
-      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__9, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 953, __pyx_L5_except_error)
+      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__12, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 953, __pyx_L5_except_error)
       __Pyx_GOTREF(__pyx_t_8);
       __Pyx_Raise(__pyx_t_8, 0, 0, 0);
       __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
@@ -6763,7 +8309,7 @@ static CYTHON_INLINE int __pyx_f_5numpy_import_ufunc(void) {
  * 
  * cdef extern from *:
  */
-      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__9, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 959, __pyx_L5_except_error)
+      __pyx_t_8 = __Pyx_PyObject_Call(__pyx_builtin_ImportError, __pyx_tuple__12, NULL); if (unlikely(!__pyx_t_8)) __PYX_ERR(1, 959, __pyx_L5_except_error)
       __Pyx_GOTREF(__pyx_t_8);
       __Pyx_Raise(__pyx_t_8, 0, 0, 0);
       __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
@@ -7039,6 +8585,8 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_TypeError, __pyx_k_TypeError, sizeof(__pyx_k_TypeError), 0, 0, 1, 1},
   {&__pyx_n_s_ValueError, __pyx_k_ValueError, sizeof(__pyx_k_ValueError), 0, 0, 1, 1},
   {&__pyx_kp_u_Wrong_sequence_argument_type, __pyx_k_Wrong_sequence_argument_type, sizeof(__pyx_k_Wrong_sequence_argument_type), 0, 1, 0, 0},
+  {&__pyx_n_s_X, __pyx_k_X, sizeof(__pyx_k_X), 0, 0, 1, 1},
+  {&__pyx_n_s_Y, __pyx_k_Y, sizeof(__pyx_k_Y), 0, 0, 1, 1},
   {&__pyx_n_s_array, __pyx_k_array, sizeof(__pyx_k_array), 0, 0, 1, 1},
   {&__pyx_n_s_axis, __pyx_k_axis, sizeof(__pyx_k_axis), 0, 0, 1, 1},
   {&__pyx_n_s_backend, __pyx_k_backend, sizeof(__pyx_k_backend), 0, 0, 1, 1},
@@ -7052,18 +8600,27 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_data, __pyx_k_data, sizeof(__pyx_k_data), 0, 0, 1, 1},
   {&__pyx_n_s_data_2, __pyx_k_data_2, sizeof(__pyx_k_data_2), 0, 0, 1, 1},
   {&__pyx_kp_u_data_argument_has_incompatible_t, __pyx_k_data_argument_has_incompatible_t, sizeof(__pyx_k_data_argument_has_incompatible_t), 0, 1, 0, 0},
+  {&__pyx_n_s_dilation, __pyx_k_dilation, sizeof(__pyx_k_dilation), 0, 0, 1, 1},
   {&__pyx_n_s_dims, __pyx_k_dims, sizeof(__pyx_k_dims), 0, 0, 1, 1},
   {&__pyx_n_s_dims_2, __pyx_k_dims_2, sizeof(__pyx_k_dims_2), 0, 0, 1, 1},
   {&__pyx_n_u_double, __pyx_k_double, sizeof(__pyx_k_double), 0, 1, 0, 1},
+  {&__pyx_n_s_draw_lines, __pyx_k_draw_lines, sizeof(__pyx_k_draw_lines), 0, 0, 1, 1},
   {&__pyx_n_s_dtype, __pyx_k_dtype, sizeof(__pyx_k_dtype), 0, 0, 1, 1},
   {&__pyx_n_s_fail, __pyx_k_fail, sizeof(__pyx_k_fail), 0, 0, 1, 1},
   {&__pyx_n_s_fft_convolve, __pyx_k_fft_convolve, sizeof(__pyx_k_fft_convolve), 0, 0, 1, 1},
   {&__pyx_n_u_fftw, __pyx_k_fftw, sizeof(__pyx_k_fftw), 0, 1, 0, 1},
+  {&__pyx_n_s_fmask, __pyx_k_fmask, sizeof(__pyx_k_fmask), 0, 0, 1, 1},
+  {&__pyx_n_s_footprint, __pyx_k_footprint, sizeof(__pyx_k_footprint), 0, 0, 1, 1},
   {&__pyx_n_s_format, __pyx_k_format, sizeof(__pyx_k_format), 0, 0, 1, 1},
+  {&__pyx_n_s_fsize, __pyx_k_fsize, sizeof(__pyx_k_fsize), 0, 0, 1, 1},
+  {&__pyx_n_s_fsize_2, __pyx_k_fsize_2, sizeof(__pyx_k_fsize_2), 0, 0, 1, 1},
   {&__pyx_n_s_gaussian_filter, __pyx_k_gaussian_filter, sizeof(__pyx_k_gaussian_filter), 0, 0, 1, 1},
   {&__pyx_n_s_gaussian_gradient_magnitude, __pyx_k_gaussian_gradient_magnitude, sizeof(__pyx_k_gaussian_gradient_magnitude), 0, 0, 1, 1},
   {&__pyx_n_s_gaussian_kernel, __pyx_k_gaussian_kernel, sizeof(__pyx_k_gaussian_kernel), 0, 0, 1, 1},
   {&__pyx_n_s_i, __pyx_k_i, sizeof(__pyx_k_i), 0, 0, 1, 1},
+  {&__pyx_n_s_image, __pyx_k_image, sizeof(__pyx_k_image), 0, 0, 1, 1},
+  {&__pyx_n_s_image_2, __pyx_k_image_2, sizeof(__pyx_k_image_2), 0, 0, 1, 1},
+  {&__pyx_kp_u_image_array_must_be_two_dimensio, __pyx_k_image_array_must_be_two_dimensio, sizeof(__pyx_k_image_array_must_be_two_dimensio), 0, 1, 0, 0},
   {&__pyx_n_s_import, __pyx_k_import, sizeof(__pyx_k_import), 0, 0, 1, 1},
   {&__pyx_n_s_inp, __pyx_k_inp, sizeof(__pyx_k_inp), 0, 0, 1, 1},
   {&__pyx_n_s_inp_2, __pyx_k_inp_2, sizeof(__pyx_k_inp_2), 0, 0, 1, 1},
@@ -7071,15 +8628,21 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_kernel, __pyx_k_kernel, sizeof(__pyx_k_kernel), 0, 0, 1, 1},
   {&__pyx_n_s_krn, __pyx_k_krn, sizeof(__pyx_k_krn), 0, 0, 1, 1},
   {&__pyx_n_s_ksize, __pyx_k_ksize, sizeof(__pyx_k_ksize), 0, 0, 1, 1},
+  {&__pyx_n_s_lines, __pyx_k_lines, sizeof(__pyx_k_lines), 0, 0, 1, 1},
+  {&__pyx_n_s_lines_2, __pyx_k_lines_2, sizeof(__pyx_k_lines_2), 0, 0, 1, 1},
+  {&__pyx_kp_u_lines_array_has_an_incompatible, __pyx_k_lines_array_has_an_incompatible, sizeof(__pyx_k_lines_array_has_an_incompatible), 0, 1, 0, 0},
   {&__pyx_n_s_main, __pyx_k_main, sizeof(__pyx_k_main), 0, 0, 1, 1},
   {&__pyx_n_s_mask, __pyx_k_mask, sizeof(__pyx_k_mask), 0, 0, 1, 1},
   {&__pyx_n_s_mask_2, __pyx_k_mask_2, sizeof(__pyx_k_mask_2), 0, 0, 1, 1},
   {&__pyx_kp_u_mask_and_data_arrays_must_have_i, __pyx_k_mask_and_data_arrays_must_have_i, sizeof(__pyx_k_mask_and_data_arrays_must_have_i), 0, 1, 0, 0},
+  {&__pyx_n_s_max_val, __pyx_k_max_val, sizeof(__pyx_k_max_val), 0, 0, 1, 1},
+  {&__pyx_n_s_maximum_filter, __pyx_k_maximum_filter, sizeof(__pyx_k_maximum_filter), 0, 0, 1, 1},
   {&__pyx_n_s_median, __pyx_k_median, sizeof(__pyx_k_median), 0, 0, 1, 1},
   {&__pyx_n_s_median_filter, __pyx_k_median_filter, sizeof(__pyx_k_median_filter), 0, 0, 1, 1},
   {&__pyx_n_u_mirror, __pyx_k_mirror, sizeof(__pyx_k_mirror), 0, 1, 0, 1},
   {&__pyx_n_s_mode, __pyx_k_mode, sizeof(__pyx_k_mode), 0, 0, 1, 1},
   {&__pyx_n_s_mode_2, __pyx_k_mode_2, sizeof(__pyx_k_mode_2), 0, 0, 1, 1},
+  {&__pyx_n_s_n_lines, __pyx_k_n_lines, sizeof(__pyx_k_n_lines), 0, 0, 1, 1},
   {&__pyx_n_s_name, __pyx_k_name, sizeof(__pyx_k_name), 0, 0, 1, 1},
   {&__pyx_n_u_ndarray, __pyx_k_ndarray, sizeof(__pyx_k_ndarray), 0, 1, 0, 1},
   {&__pyx_n_s_ndim, __pyx_k_ndim, sizeof(__pyx_k_ndim), 0, 0, 1, 1},
@@ -7108,6 +8671,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_sigma, __pyx_k_sigma, sizeof(__pyx_k_sigma), 0, 0, 1, 1},
   {&__pyx_n_s_sigmas, __pyx_k_sigmas, sizeof(__pyx_k_sigmas), 0, 0, 1, 1},
   {&__pyx_n_s_size, __pyx_k_size, sizeof(__pyx_k_size), 0, 0, 1, 1},
+  {&__pyx_kp_u_size_or_footprint_must_be_provid, __pyx_k_size_or_footprint_must_be_provid, sizeof(__pyx_k_size_or_footprint_must_be_provid), 0, 1, 0, 0},
   {&__pyx_n_s_target, __pyx_k_target, sizeof(__pyx_k_target), 0, 0, 1, 1},
   {&__pyx_n_s_test, __pyx_k_test, sizeof(__pyx_k_test), 0, 0, 1, 1},
   {&__pyx_n_s_truncate, __pyx_k_truncate, sizeof(__pyx_k_truncate), 0, 0, 1, 1},
@@ -7121,8 +8685,8 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedBuiltins(void) {
   __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(0, 34, __pyx_L1_error)
   __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 48, __pyx_L1_error)
   __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(0, 68, __pyx_L1_error)
-  __pyx_builtin_MemoryError = __Pyx_GetBuiltinName(__pyx_n_s_MemoryError); if (!__pyx_builtin_MemoryError) __PYX_ERR(0, 375, __pyx_L1_error)
-  __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(0, 394, __pyx_L1_error)
+  __pyx_builtin_MemoryError = __Pyx_GetBuiltinName(__pyx_n_s_MemoryError); if (!__pyx_builtin_MemoryError) __PYX_ERR(0, 383, __pyx_L1_error)
+  __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(0, 406, __pyx_L1_error)
   __pyx_builtin_ImportError = __Pyx_GetBuiltinName(__pyx_n_s_ImportError); if (!__pyx_builtin_ImportError) __PYX_ERR(1, 947, __pyx_L1_error)
   return 0;
   __pyx_L1_error:;
@@ -7188,27 +8752,60 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GOTREF(__pyx_tuple__5);
   __Pyx_GIVEREF(__pyx_tuple__5);
 
-  /* "cbclib/bin/data_processing.pyx":369
- *     cdef int ndim = data.ndim
- *     if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
- *         raise ValueError('mask and data arrays must have identical shapes')             # <<<<<<<<<<<<<<
- *     axis = axis if axis >= 0 else ndim + axis
- *     axis = axis if axis <= ndim - 1 else ndim - 1
+  /* "cbclib/bin/data_processing.pyx":377
+ *         mask = check_array(mask, np.NPY_BOOL)
+ *         if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
+ *             raise ValueError('mask and data arrays must have identical shapes')             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_dims = <unsigned long *>data.shape
  */
-  __pyx_tuple__6 = PyTuple_Pack(1, __pyx_kp_u_mask_and_data_arrays_must_have_i); if (unlikely(!__pyx_tuple__6)) __PYX_ERR(0, 369, __pyx_L1_error)
+  __pyx_tuple__6 = PyTuple_Pack(1, __pyx_kp_u_mask_and_data_arrays_must_have_i); if (unlikely(!__pyx_tuple__6)) __PYX_ERR(0, 377, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__6);
   __Pyx_GIVEREF(__pyx_tuple__6);
 
-  /* "cbclib/bin/data_processing.pyx":375
+  /* "cbclib/bin/data_processing.pyx":383
  *     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
  *     if odims is NULL:
  *         raise MemoryError('not enough memory')             # <<<<<<<<<<<<<<
  *     cdef int i
  *     for i in range(axis):
  */
-  __pyx_tuple__7 = PyTuple_Pack(1, __pyx_kp_u_not_enough_memory); if (unlikely(!__pyx_tuple__7)) __PYX_ERR(0, 375, __pyx_L1_error)
+  __pyx_tuple__7 = PyTuple_Pack(1, __pyx_kp_u_not_enough_memory); if (unlikely(!__pyx_tuple__7)) __PYX_ERR(0, 383, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__7);
   __Pyx_GIVEREF(__pyx_tuple__7);
+
+  /* "cbclib/bin/data_processing.pyx":472
+ * 
+ *     if size is None and footprint is None:
+ *         raise ValueError('size or footprint must be provided.')             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned long *_fsize
+ */
+  __pyx_tuple__8 = PyTuple_Pack(1, __pyx_kp_u_size_or_footprint_must_be_provid); if (unlikely(!__pyx_tuple__8)) __PYX_ERR(0, 472, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__8);
+  __Pyx_GIVEREF(__pyx_tuple__8);
+
+  /* "cbclib/bin/data_processing.pyx":648
+ * 
+ *     if image.ndim != 2:
+ *         raise ValueError("image array must be two-dimensional")             # <<<<<<<<<<<<<<
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ *         raise ValueError(f"lines array has an incompatible shape")
+ */
+  __pyx_tuple__9 = PyTuple_Pack(1, __pyx_kp_u_image_array_must_be_two_dimensio); if (unlikely(!__pyx_tuple__9)) __PYX_ERR(0, 648, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__9);
+  __Pyx_GIVEREF(__pyx_tuple__9);
+
+  /* "cbclib/bin/data_processing.pyx":650
+ *         raise ValueError("image array must be two-dimensional")
+ *     if lines.ndim != 2 or lines.shape[1] != 7:
+ *         raise ValueError(f"lines array has an incompatible shape")             # <<<<<<<<<<<<<<
+ * 
+ *     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
+ */
+  __pyx_tuple__10 = PyTuple_Pack(1, __pyx_kp_u_lines_array_has_an_incompatible); if (unlikely(!__pyx_tuple__10)) __PYX_ERR(0, 650, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__10);
+  __Pyx_GIVEREF(__pyx_tuple__10);
 
   /* "../.conda/envs/cbc/lib/python3.7/site-packages/numpy/__init__.pxd":947
  *         __pyx_import_array()
@@ -7217,9 +8814,9 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  * 
  * cdef inline int import_umath() except -1:
  */
-  __pyx_tuple__8 = PyTuple_Pack(1, __pyx_kp_u_numpy_core_multiarray_failed_to); if (unlikely(!__pyx_tuple__8)) __PYX_ERR(1, 947, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__8);
-  __Pyx_GIVEREF(__pyx_tuple__8);
+  __pyx_tuple__11 = PyTuple_Pack(1, __pyx_kp_u_numpy_core_multiarray_failed_to); if (unlikely(!__pyx_tuple__11)) __PYX_ERR(1, 947, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__11);
+  __Pyx_GIVEREF(__pyx_tuple__11);
 
   /* "../.conda/envs/cbc/lib/python3.7/site-packages/numpy/__init__.pxd":953
  *         _import_umath()
@@ -7228,9 +8825,9 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  * 
  * cdef inline int import_ufunc() except -1:
  */
-  __pyx_tuple__9 = PyTuple_Pack(1, __pyx_kp_u_numpy_core_umath_failed_to_impor); if (unlikely(!__pyx_tuple__9)) __PYX_ERR(1, 953, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__9);
-  __Pyx_GIVEREF(__pyx_tuple__9);
+  __pyx_tuple__12 = PyTuple_Pack(1, __pyx_kp_u_numpy_core_umath_failed_to_impor); if (unlikely(!__pyx_tuple__12)) __PYX_ERR(1, 953, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__12);
+  __Pyx_GIVEREF(__pyx_tuple__12);
 
   /* "cbclib/bin/data_processing.pyx":74
  *     return arr
@@ -7239,13 +8836,13 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *     r"""Find the next fast size of input data to fft, for zero-padding, etc.
  *     FFT algorithms gain their speed by a recursive divide and conquer strategy.
  */
-  __pyx_tuple__10 = PyTuple_Pack(2, __pyx_n_s_target, __pyx_n_s_backend); if (unlikely(!__pyx_tuple__10)) __PYX_ERR(0, 74, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__10);
-  __Pyx_GIVEREF(__pyx_tuple__10);
-  __pyx_codeobj__11 = (PyObject*)__Pyx_PyCode_New(2, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__10, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_next_fast_len, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__11)) __PYX_ERR(0, 74, __pyx_L1_error)
-  __pyx_tuple__12 = PyTuple_Pack(1, ((PyObject*)__pyx_n_u_numpy)); if (unlikely(!__pyx_tuple__12)) __PYX_ERR(0, 74, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__12);
-  __Pyx_GIVEREF(__pyx_tuple__12);
+  __pyx_tuple__13 = PyTuple_Pack(2, __pyx_n_s_target, __pyx_n_s_backend); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__13);
+  __Pyx_GIVEREF(__pyx_tuple__13);
+  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(2, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_next_fast_len, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_tuple__15 = PyTuple_Pack(1, ((PyObject*)__pyx_n_u_numpy)); if (unlikely(!__pyx_tuple__15)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__15);
+  __Pyx_GIVEREF(__pyx_tuple__15);
 
   /* "cbclib/bin/data_processing.pyx":105
  *         raise ValueError('{:s} is invalid backend'.format(backend))
@@ -7254,10 +8851,10 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *                  mode: str='constant', cval: cython.double=0.0, backend: str='numpy',
  *                  num_threads: cython.uint=1) -> np.ndarray:
  */
-  __pyx_tuple__13 = PyTuple_Pack(17, __pyx_n_s_array, __pyx_n_s_kernel, __pyx_n_s_axis, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_fail, __pyx_n_s_ndim, __pyx_n_s_ksize, __pyx_n_s_mode_2, __pyx_n_s_dims, __pyx_n_s_dims_2, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_krn); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(0, 105, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__13);
-  __Pyx_GIVEREF(__pyx_tuple__13);
-  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(7, 0, 17, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_fft_convolve, 105, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(0, 105, __pyx_L1_error)
+  __pyx_tuple__16 = PyTuple_Pack(17, __pyx_n_s_array, __pyx_n_s_kernel, __pyx_n_s_axis, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_fail, __pyx_n_s_ndim, __pyx_n_s_ksize, __pyx_n_s_mode_2, __pyx_n_s_dims, __pyx_n_s_dims_2, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_krn); if (unlikely(!__pyx_tuple__16)) __PYX_ERR(0, 105, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__16);
+  __Pyx_GIVEREF(__pyx_tuple__16);
+  __pyx_codeobj__17 = (PyObject*)__Pyx_PyCode_New(7, 0, 17, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__16, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_fft_convolve, 105, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__17)) __PYX_ERR(0, 105, __pyx_L1_error)
 
   /* "cbclib/bin/data_processing.pyx":177
  *     return out
@@ -7266,10 +8863,10 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *                     cval: cython.double=0., truncate: cython.double=4., backend: str='numpy',
  *                     num_threads: cython.uint=1) -> np.ndarray:
  */
-  __pyx_tuple__15 = PyTuple_Pack(20, __pyx_n_s_inp, __pyx_n_s_sigma, __pyx_n_s_order, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_truncate, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_sigmas, __pyx_n_s_orders, __pyx_n_s_fail, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_dims_2, __pyx_n_s_sig, __pyx_n_s_ord, __pyx_n_s_mode_2); if (unlikely(!__pyx_tuple__15)) __PYX_ERR(0, 177, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__15);
-  __Pyx_GIVEREF(__pyx_tuple__15);
-  __pyx_codeobj__16 = (PyObject*)__Pyx_PyCode_New(8, 0, 20, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__15, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_filter, 177, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__16)) __PYX_ERR(0, 177, __pyx_L1_error)
+  __pyx_tuple__18 = PyTuple_Pack(20, __pyx_n_s_inp, __pyx_n_s_sigma, __pyx_n_s_order, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_truncate, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_sigmas, __pyx_n_s_orders, __pyx_n_s_fail, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_dims_2, __pyx_n_s_sig, __pyx_n_s_ord, __pyx_n_s_mode_2); if (unlikely(!__pyx_tuple__18)) __PYX_ERR(0, 177, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__18);
+  __Pyx_GIVEREF(__pyx_tuple__18);
+  __pyx_codeobj__19 = (PyObject*)__Pyx_PyCode_New(8, 0, 20, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__18, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_filter, 177, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__19)) __PYX_ERR(0, 177, __pyx_L1_error)
 
   /* "cbclib/bin/data_processing.pyx":253
  *     return out
@@ -7278,10 +8875,10 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *     """Discrete Gaussian kernel.
  * 
  */
-  __pyx_tuple__17 = PyTuple_Pack(7, __pyx_n_s_sigma, __pyx_n_s_order, __pyx_n_s_truncate, __pyx_n_s_radius, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2); if (unlikely(!__pyx_tuple__17)) __PYX_ERR(0, 253, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__17);
-  __Pyx_GIVEREF(__pyx_tuple__17);
-  __pyx_codeobj__18 = (PyObject*)__Pyx_PyCode_New(3, 0, 7, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__17, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_kernel, 253, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__18)) __PYX_ERR(0, 253, __pyx_L1_error)
+  __pyx_tuple__20 = PyTuple_Pack(7, __pyx_n_s_sigma, __pyx_n_s_order, __pyx_n_s_truncate, __pyx_n_s_radius, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2); if (unlikely(!__pyx_tuple__20)) __PYX_ERR(0, 253, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__20);
+  __Pyx_GIVEREF(__pyx_tuple__20);
+  __pyx_codeobj__21 = (PyObject*)__Pyx_PyCode_New(3, 0, 7, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__20, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_kernel, 253, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__21)) __PYX_ERR(0, 253, __pyx_L1_error)
 
   /* "cbclib/bin/data_processing.pyx":280
  *     return out
@@ -7290,10 +8887,10 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *                                 cval: cython.double=0., truncate: cython.double=4.,
  *                                 backend: str='numpy', num_threads: cython.uint=1) -> np.ndarray:
  */
-  __pyx_tuple__19 = PyTuple_Pack(17, __pyx_n_s_inp, __pyx_n_s_sigma, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_truncate, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_sigmas, __pyx_n_s_fail, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_dims_2, __pyx_n_s_sig, __pyx_n_s_mode_2); if (unlikely(!__pyx_tuple__19)) __PYX_ERR(0, 280, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__19);
-  __Pyx_GIVEREF(__pyx_tuple__19);
-  __pyx_codeobj__20 = (PyObject*)__Pyx_PyCode_New(7, 0, 17, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__19, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_gradient_magnitude, 280, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__20)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __pyx_tuple__22 = PyTuple_Pack(17, __pyx_n_s_inp, __pyx_n_s_sigma, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_truncate, __pyx_n_s_backend, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_sigmas, __pyx_n_s_fail, __pyx_n_s_dims, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_inp_2, __pyx_n_s_dims_2, __pyx_n_s_sig, __pyx_n_s_mode_2); if (unlikely(!__pyx_tuple__22)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__22);
+  __Pyx_GIVEREF(__pyx_tuple__22);
+  __pyx_codeobj__23 = (PyObject*)__Pyx_PyCode_New(7, 0, 17, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__22, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_gaussian_gradient_magnitude, 280, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__23)) __PYX_ERR(0, 280, __pyx_L1_error)
 
   /* "cbclib/bin/data_processing.pyx":344
  *     return out
@@ -7302,22 +8899,46 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  *            num_threads: cython.uint=1) -> np.ndarray:
  *     """Calculate a median along the `axis`.
  */
-  __pyx_tuple__21 = PyTuple_Pack(14, __pyx_n_s_data, __pyx_n_s_mask, __pyx_n_s_axis, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_dims_2, __pyx_n_s_odims, __pyx_n_s_i, __pyx_n_s_type_num, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_data_2, __pyx_n_s_mask_2, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__21)) __PYX_ERR(0, 344, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__21);
-  __Pyx_GIVEREF(__pyx_tuple__21);
-  __pyx_codeobj__22 = (PyObject*)__Pyx_PyCode_New(4, 0, 14, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__21, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_median, 344, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__22)) __PYX_ERR(0, 344, __pyx_L1_error)
+  __pyx_tuple__24 = PyTuple_Pack(14, __pyx_n_s_data, __pyx_n_s_mask, __pyx_n_s_axis, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_dims_2, __pyx_n_s_odims, __pyx_n_s_i, __pyx_n_s_type_num, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_data_2, __pyx_n_s_mask_2, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__24)) __PYX_ERR(0, 344, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__24);
+  __Pyx_GIVEREF(__pyx_tuple__24);
+  __pyx_codeobj__25 = (PyObject*)__Pyx_PyCode_New(4, 0, 14, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__24, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_median, 344, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__25)) __PYX_ERR(0, 344, __pyx_L1_error)
 
-  /* "cbclib/bin/data_processing.pyx":398
+  /* "cbclib/bin/data_processing.pyx":413
  *     return out
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,             # <<<<<<<<<<<<<<
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
  *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
- *     """Calculate a median along the `axis`.
+ *     """Calculate a multidimensional median filter.
  */
-  __pyx_tuple__23 = PyTuple_Pack(18, __pyx_n_s_data, __pyx_n_s_mask, __pyx_n_s_size, __pyx_n_s_axis, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_dims, __pyx_n_s_dims_2, __pyx_n_s_type_num, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_data_2, __pyx_n_s_mask_2, __pyx_n_s_mode_2, __pyx_n_s_cval_2, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__23)) __PYX_ERR(0, 398, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__23);
-  __Pyx_GIVEREF(__pyx_tuple__23);
-  __pyx_codeobj__24 = (PyObject*)__Pyx_PyCode_New(7, 0, 18, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__23, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_median_filter, 398, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__24)) __PYX_ERR(0, 398, __pyx_L1_error)
+  __pyx_tuple__26 = PyTuple_Pack(21, __pyx_n_s_data, __pyx_n_s_size, __pyx_n_s_footprint, __pyx_n_s_mask, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_dims, __pyx_n_s_fsize, __pyx_n_s_fsize_2, __pyx_n_s_fmask, __pyx_n_s_dims_2, __pyx_n_s_type_num, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_data_2, __pyx_n_s_mask_2, __pyx_n_s_mode_2, __pyx_n_s_cval_2, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__26)) __PYX_ERR(0, 413, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__26);
+  __Pyx_GIVEREF(__pyx_tuple__26);
+  __pyx_codeobj__27 = (PyObject*)__Pyx_PyCode_New(7, 0, 21, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__26, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_median_filter, 413, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__27)) __PYX_ERR(0, 413, __pyx_L1_error)
+
+  /* "cbclib/bin/data_processing.pyx":512
+ *     return out
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
+ *                    mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
+ *     """Calculate a multidimensional maximum filter.
+ */
+  __pyx_tuple__28 = PyTuple_Pack(21, __pyx_n_s_data, __pyx_n_s_size, __pyx_n_s_footprint, __pyx_n_s_mask, __pyx_n_s_mode, __pyx_n_s_cval, __pyx_n_s_num_threads, __pyx_n_s_ndim, __pyx_n_s_dims, __pyx_n_s_fsize, __pyx_n_s_fsize_2, __pyx_n_s_fmask, __pyx_n_s_dims_2, __pyx_n_s_type_num, __pyx_n_s_out, __pyx_n_s_out_2, __pyx_n_s_data_2, __pyx_n_s_mask_2, __pyx_n_s_mode_2, __pyx_n_s_cval_2, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__28)) __PYX_ERR(0, 512, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__28);
+  __Pyx_GIVEREF(__pyx_tuple__28);
+  __pyx_codeobj__29 = (PyObject*)__Pyx_PyCode_New(7, 0, 21, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__28, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_maximum_filter, 512, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__29)) __PYX_ERR(0, 512, __pyx_L1_error)
+
+  /* "cbclib/bin/data_processing.pyx":611
+ *     return out
+ * 
+ * def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Draw thick lines with variable thickness. The lines must follow
+ *     the LSD convention, see the parameters for more info.
+ */
+  __pyx_tuple__30 = PyTuple_Pack(10, __pyx_n_s_image, __pyx_n_s_lines, __pyx_n_s_max_val, __pyx_n_s_dilation, __pyx_n_s_image_2, __pyx_n_s_Y, __pyx_n_s_X, __pyx_n_s_lines_2, __pyx_n_s_n_lines, __pyx_n_s_fail); if (unlikely(!__pyx_tuple__30)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__30);
+  __Pyx_GIVEREF(__pyx_tuple__30);
+  __pyx_codeobj__31 = (PyObject*)__Pyx_PyCode_New(4, 0, 10, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__30, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cbclib_bin_data_processing_pyx, __pyx_n_s_draw_lines, 611, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__31)) __PYX_ERR(0, 611, __pyx_L1_error)
   __Pyx_RefNannyFinishContext();
   return 0;
   __pyx_L1_error:;
@@ -7548,7 +9169,6 @@ static CYTHON_SMALL_CODE int __pyx_pymod_exec_data_processing(PyObject *__pyx_py
   PyObject *__pyx_t_3 = NULL;
   PyObject *__pyx_t_4 = NULL;
   PyObject *__pyx_t_5 = NULL;
-  PyObject *__pyx_t_6 = NULL;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -7706,9 +9326,9 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_target, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 74, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_backend, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 74, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_return, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 74, __pyx_L1_error)
-  __pyx_t_3 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_1next_fast_len, 0, __pyx_n_s_next_fast_len, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__11)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_1next_fast_len, 0, __pyx_n_s_next_fast_len, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__14)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 74, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_3, __pyx_tuple__12);
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_3, __pyx_tuple__15);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_3, __pyx_t_1);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_next_fast_len, __pyx_t_3) < 0) __PYX_ERR(0, 74, __pyx_L1_error)
@@ -7778,7 +9398,7 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_backend, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 105, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 105, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 105, __pyx_L1_error)
-  __pyx_t_1 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_3fft_convolve, 0, __pyx_n_s_fft_convolve, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__14)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_3fft_convolve, 0, __pyx_n_s_fft_convolve, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__17)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 105, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_1, __pyx_t_5);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_1, __pyx_t_4);
@@ -7847,7 +9467,7 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_backend, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 177, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 177, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 177, __pyx_L1_error)
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_5gaussian_filter, 0, __pyx_n_s_gaussian_filter, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__16)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 177, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_5gaussian_filter, 0, __pyx_n_s_gaussian_filter, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__19)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 177, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_t_3);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_4, __pyx_t_5);
@@ -7881,7 +9501,7 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_order, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 253, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_truncate, __pyx_n_u_double) < 0) __PYX_ERR(0, 253, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_5, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 253, __pyx_L1_error)
-  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_7gaussian_kernel, 0, __pyx_n_s_gaussian_kernel, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__18)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 253, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_7gaussian_kernel, 0, __pyx_n_s_gaussian_kernel, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__21)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 253, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_4, __pyx_t_3);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_4, __pyx_t_5);
@@ -7946,7 +9566,7 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_backend, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 280, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 280, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 280, __pyx_L1_error)
-  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_9gaussian_gradient_magnitude, 0, __pyx_n_s_gaussian_gradient_magnitude, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__20)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 280, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_9gaussian_gradient_magnitude, 0, __pyx_n_s_gaussian_gradient_magnitude, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__23)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 280, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_5, __pyx_t_1);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_3);
@@ -7997,7 +9617,7 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_axis, __pyx_n_u_int) < 0) __PYX_ERR(0, 344, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 344, __pyx_L1_error)
   if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 344, __pyx_L1_error)
-  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_11median, 0, __pyx_n_s_median, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__22)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 344, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_11median, 0, __pyx_n_s_median, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__25)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 344, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_5, __pyx_t_1);
   __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_3);
@@ -8006,82 +9626,166 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_median, __pyx_t_5) < 0) __PYX_ERR(0, 344, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
-  /* "cbclib/bin/data_processing.pyx":398
- *     return out
+  /* "cbclib/bin/data_processing.pyx":414
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,             # <<<<<<<<<<<<<<
- *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
- *     """Calculate a median along the `axis`.
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
+ *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Calculate a multidimensional median filter.
+ * 
  */
-  __pyx_t_5 = __Pyx_PyInt_From_unsigned_int(((unsigned int)3)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 398, __pyx_L1_error)
+  __pyx_t_5 = PyFloat_FromDouble(((double)0.)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 414, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_3 = __Pyx_PyInt_From_int(((int)0)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 398, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyInt_From_unsigned_int(((unsigned int)1)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 414, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
 
-  /* "cbclib/bin/data_processing.pyx":399
- * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,
- *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:             # <<<<<<<<<<<<<<
- *     """Calculate a median along the `axis`.
- * 
- */
-  __pyx_t_1 = PyFloat_FromDouble(((double)0.)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 399, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_4 = __Pyx_PyInt_From_unsigned_int(((unsigned int)1)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 399, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_4);
-
-  /* "cbclib/bin/data_processing.pyx":398
+  /* "cbclib/bin/data_processing.pyx":413
  *     return out
  * 
- * def median_filter(data: np.ndarray, mask: np.ndarray, size: cython.uint=3, axis: cython.int=0,             # <<<<<<<<<<<<<<
+ * def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
  *                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
- *     """Calculate a median along the `axis`.
+ *     """Calculate a multidimensional median filter.
  */
-  __pyx_t_6 = PyTuple_New(5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 398, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_6);
-  __Pyx_GIVEREF(__pyx_t_5);
-  PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_5);
-  __Pyx_GIVEREF(__pyx_t_3);
-  PyTuple_SET_ITEM(__pyx_t_6, 1, __pyx_t_3);
+  __pyx_t_1 = PyTuple_New(6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 413, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 0, ((PyObject *)Py_None));
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 1, ((PyObject *)Py_None));
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 2, ((PyObject *)Py_None));
   __Pyx_INCREF(((PyObject*)__pyx_n_u_reflect));
   __Pyx_GIVEREF(((PyObject*)__pyx_n_u_reflect));
-  PyTuple_SET_ITEM(__pyx_t_6, 2, ((PyObject*)__pyx_n_u_reflect));
-  __Pyx_GIVEREF(__pyx_t_1);
-  PyTuple_SET_ITEM(__pyx_t_6, 3, __pyx_t_1);
-  __Pyx_GIVEREF(__pyx_t_4);
-  PyTuple_SET_ITEM(__pyx_t_6, 4, __pyx_t_4);
+  PyTuple_SET_ITEM(__pyx_t_1, 3, ((PyObject*)__pyx_n_u_reflect));
+  __Pyx_GIVEREF(__pyx_t_5);
+  PyTuple_SET_ITEM(__pyx_t_1, 4, __pyx_t_5);
+  __Pyx_GIVEREF(__pyx_t_3);
+  PyTuple_SET_ITEM(__pyx_t_1, 5, __pyx_t_3);
   __pyx_t_5 = 0;
   __pyx_t_3 = 0;
-  __pyx_t_1 = 0;
-  __pyx_t_4 = 0;
-  __pyx_t_4 = __Pyx_PyDict_NewPresized(8); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 398, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_4);
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_data, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_mask, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_size, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_axis, __pyx_n_u_int) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_mode, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_cval, __pyx_n_u_double) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
-  __pyx_t_1 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_13median_filter, 0, __pyx_n_s_median_filter, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__24)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 398, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_1, __pyx_t_6);
-  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_1, __pyx_t_4);
-  __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_median_filter, __pyx_t_1) < 0) __PYX_ERR(0, 398, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(8); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 413, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_data, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_size, __pyx_n_u_object) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_footprint, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_mask, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_mode, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_cval, __pyx_n_u_double) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_13median_filter, 0, __pyx_n_s_median_filter, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__27)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 413, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_5, __pyx_t_1);
+  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_3);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_median_filter, __pyx_t_5) < 0) __PYX_ERR(0, 413, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+
+  /* "cbclib/bin/data_processing.pyx":513
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
+ *                    mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Calculate a multidimensional maximum filter.
+ * 
+ */
+  __pyx_t_5 = PyFloat_FromDouble(((double)0.)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 513, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_3 = __Pyx_PyInt_From_unsigned_int(((unsigned int)1)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 513, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+
+  /* "cbclib/bin/data_processing.pyx":512
+ *     return out
+ * 
+ * def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,             # <<<<<<<<<<<<<<
+ *                    mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
+ *     """Calculate a multidimensional maximum filter.
+ */
+  __pyx_t_1 = PyTuple_New(6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 512, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 0, ((PyObject *)Py_None));
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 1, ((PyObject *)Py_None));
+  __Pyx_INCREF(((PyObject *)Py_None));
+  __Pyx_GIVEREF(((PyObject *)Py_None));
+  PyTuple_SET_ITEM(__pyx_t_1, 2, ((PyObject *)Py_None));
+  __Pyx_INCREF(((PyObject*)__pyx_n_u_reflect));
+  __Pyx_GIVEREF(((PyObject*)__pyx_n_u_reflect));
+  PyTuple_SET_ITEM(__pyx_t_1, 3, ((PyObject*)__pyx_n_u_reflect));
+  __Pyx_GIVEREF(__pyx_t_5);
+  PyTuple_SET_ITEM(__pyx_t_1, 4, __pyx_t_5);
+  __Pyx_GIVEREF(__pyx_t_3);
+  PyTuple_SET_ITEM(__pyx_t_1, 5, __pyx_t_3);
+  __pyx_t_5 = 0;
+  __pyx_t_3 = 0;
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(8); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 512, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_data, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_size, __pyx_n_u_object) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_footprint, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_mask, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_mode, __pyx_n_u_unicode) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_cval, __pyx_n_u_double) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_num_threads, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_15maximum_filter, 0, __pyx_n_s_maximum_filter, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__29)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 512, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_5, __pyx_t_1);
+  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_3);
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_maximum_filter, __pyx_t_5) < 0) __PYX_ERR(0, 512, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+
+  /* "cbclib/bin/data_processing.pyx":611
+ *     return out
+ * 
+ * def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:             # <<<<<<<<<<<<<<
+ *     """Draw thick lines with variable thickness. The lines must follow
+ *     the LSD convention, see the parameters for more info.
+ */
+  __pyx_t_5 = __Pyx_PyInt_From_unsigned_int(((unsigned int)0xFF)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_3 = __Pyx_PyInt_From_unsigned_int(((unsigned int)0)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __pyx_t_1 = PyTuple_New(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __Pyx_GIVEREF(__pyx_t_5);
+  PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_t_5);
+  __Pyx_GIVEREF(__pyx_t_3);
+  PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_t_3);
+  __pyx_t_5 = 0;
+  __pyx_t_3 = 0;
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(5); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_image, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_lines, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_max_val, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_dilation, __pyx_kp_u_unsigned_int) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_return, __pyx_n_u_ndarray) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_CyFunction_New(&__pyx_mdef_6cbclib_3bin_15data_processing_17draw_lines, 0, __pyx_n_s_draw_lines, NULL, __pyx_n_s_cbclib_bin_data_processing, __pyx_d, ((PyObject *)__pyx_codeobj__31)); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __Pyx_CyFunction_SetDefaultsTuple(__pyx_t_5, __pyx_t_1);
+  __Pyx_CyFunction_SetAnnotationsDict(__pyx_t_5, __pyx_t_3);
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_draw_lines, __pyx_t_5) < 0) __PYX_ERR(0, 611, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "cbclib/bin/data_processing.pyx":1
  * cimport numpy as np             # <<<<<<<<<<<<<<
  * import numpy as np
  * import cython
  */
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 1, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_test, __pyx_t_1) < 0) __PYX_ERR(0, 1, __pyx_L1_error)
-  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+  __pyx_t_5 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 1, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_test, __pyx_t_5) < 0) __PYX_ERR(0, 1, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
 
   /* "../.conda/envs/cbc/lib/python3.7/site-packages/numpy/__init__.pxd":1016
  * 
@@ -8099,7 +9803,6 @@ if (!__Pyx_RefNanny) {
   __Pyx_XDECREF(__pyx_t_3);
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
-  __Pyx_XDECREF(__pyx_t_6);
   if (__pyx_m) {
     if (__pyx_d) {
       __Pyx_AddTraceback("init cbclib.bin.data_processing", __pyx_clineno, __pyx_lineno, __pyx_filename);

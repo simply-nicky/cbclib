@@ -56,8 +56,9 @@ int fft_convolve_np(double *out, double *inp, int ndim, size_t *dims,
         #pragma omp for
         for (int i = 0; i < (int)repeats; i++)
         {
-            update_line(iline, iarr, i);
-            update_line(oline, oarr, i);
+            UPDATE_LINE(iline, iarr, i);
+            UPDATE_LINE(oline, oarr, i);
+
             extend_line((void *)inpft, flen, iline, mode, (void *)&cval);
             fail |= fft_convolve_calc((void *)plan, (void *)plan, oline, inpft, krnft,
                 flen, rfft_np, irfft_np);
@@ -119,8 +120,9 @@ int fft_convolve_fftw(double *out, double *inp, int ndim, size_t *dims,
         #pragma omp for
         for (int i = 0; i < (int)repeats; i++)
         {
-            update_line(iline, iarr, i);
-            update_line(oline, oarr, i);
+            UPDATE_LINE(iline, iarr, i);
+            UPDATE_LINE(oline, oarr, i);
+
             extend_line((void *)inpft, flen, iline, mode, (void *)&cval);
             fail |= fft_convolve_calc((void *)rfft_plan, (void *)irfft_plan, oline,
                 inpft, krnft, flen, rfft_fftw, irfft_fftw);

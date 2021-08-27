@@ -1,6 +1,6 @@
 #include "median.h"
 
-footprint init_footprint(int ndim, size_t item_size, size_t *fsize)
+footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned char *fmask)
 {
     /* check parameters */
     if(ndim <= 0) {ERROR("new_footprint: ndim must be positive."); return NULL;}
@@ -9,8 +9,12 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize)
 
     footprint fpt = (footprint)malloc(sizeof(struct footprint_s));
     fpt->ndim = farr->ndim;
-    fpt->npts = farr->size;
-    fpt->counter = 0;
+
+    fpt->npts = 0; fpt->counter = 0;
+    for (int i = 0; i < (int)farr->size; i++) if (fmask[i]) fpt->npts++;
+
+    if (fpt->npts == 0) {ERROR("new_footprint: zerro number of points in a footprint."); return NULL;}
+    
 
     fpt->offsets = (int *)malloc(fpt->npts * fpt->ndim * sizeof(int));
     fpt->coordinates = (int *)malloc(fpt->npts * fpt->ndim * sizeof(int));
@@ -21,10 +25,14 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize)
     if (!fpt || !fpt->offsets || !fpt->coordinates || !fpt->data)
     {ERROR("new_footprint: not enough memory."); return NULL;}
 
-    for (int i = 0; i < fpt->npts; i++)
+    for (int i = 0, j = 0; i < (int)farr->size; i++)
     {
-        unravel_index(&(fpt->offsets[ndim * i]), i, farr);
-        for (int n = 0; n < fpt->ndim; n++) fpt->offsets[ndim * i + n] -= farr->dims[n] / 2;
+        if (fmask[i])
+        {
+            UNRAVEL_INDEX((fpt->offsets + ndim * j), &i, farr);
+            for (int n = 0; n < fpt->ndim; n++) fpt->offsets[ndim * j + n] -= farr->dims[n] / 2;
+            j++;
+        }
     }
 
     free_array(farr);
@@ -62,7 +70,7 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
         }
         else
         {
-            index = ravel_index(&(fpt->coordinates[i * fpt->ndim]), arr);
+            RAVEL_INDEX(fpt->coordinates + i * fpt->ndim, &index, arr);
             memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
                 arr->item_size);
             fpt->counter++;
@@ -84,9 +92,16 @@ int compare_float(const void *a, const void *b)
     else return 0;
 }
 
-int compare_long(const void *a, const void *b)
+int compare_int(const void *a, const void *b)
 {
-    return (*(long *)a - *(long *)b);
+    return (*(int *)a - *(int *)b);
+}
+
+int compare_uint(const void *a, const void *b)
+{
+    if (*(unsigned int *)a > *(unsigned int *)b) return 1;
+    else if (*(unsigned int *)a < *(unsigned int *)b) return -1;
+    else return 0;
 }
 
 static void wirthselect(void *data, void *key, int k, int l, int m, size_t size,
@@ -141,8 +156,8 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
         #pragma omp for
         for (int i = 0; i < (int)repeats; i++)
         {
-            update_line(iline, iarr, i);
-            update_line(mline, marr, i);
+            UPDATE_LINE(iline, iarr, i);
+            UPDATE_LINE(mline, marr, i);
 
             int len = 0;
             for (int n = 0; n < (int)iline->npts; n++)
@@ -171,7 +186,8 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
 }
 
 int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size,
-    size_t *fsize, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*), unsigned threads)
+    size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+    unsigned threads)
 {
     /* check parameters */
     if (!out || !data || !fsize || !cval)
@@ -181,17 +197,18 @@ int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *
 
     array iarr = new_array(ndim, dims, item_size, data);
     array marr = new_array(ndim, dims, 1, mask);
+    threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
     {
-        footprint fpt = init_footprint(iarr->ndim, iarr->item_size, fsize);
+        footprint fpt = init_footprint(iarr->ndim, iarr->item_size, fsize, fmask);
         int *coord = (int *)malloc(iarr->ndim * sizeof(int));
         void *key = malloc(iarr->item_size);
 
-        #pragma omp for
+        #pragma omp for schedule(guided)
         for (int i = 0; i < (int)iarr->size; i++)
         {
-            unravel_index(coord, i, iarr);
+            UNRAVEL_INDEX(coord, &i, iarr);
 
             update_footprint(fpt, coord, iarr, marr, mode, cval);
 
@@ -206,7 +223,62 @@ int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *
         free_footprint(fpt); free(coord); free(key);
     }
 
-    free_array(iarr);
+    free_array(iarr); free(marr);
+
+    return 0;
+}
+
+int maximum_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size,
+    size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+    unsigned threads)
+{
+    /* check parameters */
+    if (!out || !data || !fsize || !cval)
+    {ERROR("maximum_filter: one of the arguments is NULL."); return -1;}
+    if (ndim <= 0) {ERROR("maximum_filter: ndim must be positive."); return -1;}
+    if (threads == 0) {ERROR("maximum_filter: threads must be positive."); return -1;}
+
+    array iarr = new_array(ndim, dims, item_size, data);
+    array marr = new_array(ndim, dims, 1, mask);
+    threads = (threads > iarr->size) ? iarr->size : threads;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        footprint fpt = init_footprint(iarr->ndim, iarr->item_size, fsize, fmask);
+        int *coord = (int *)malloc(iarr->ndim * sizeof(int));
+        void *key = malloc(iarr->item_size), *iter, *last;
+
+        #pragma omp for schedule(guided)
+        for (int i = 0; i < (int)iarr->size; i++)
+        {
+            if (mask[i])
+            {
+                UNRAVEL_INDEX(coord, &i, iarr);
+
+                update_footprint(fpt, coord, iarr, marr, mode, cval);
+
+                if (fpt->counter)
+                {
+                    iter = fpt->data + fpt->item_size;
+                    last = fpt->data + fpt->counter * fpt->item_size;
+                    memcpy(key, fpt->data, fpt->item_size);
+
+                    while (iter != last)
+                    {
+                        if (compar(key, iter) < 0) memcpy(key, iter, fpt->item_size);
+                        iter += fpt->item_size;
+                    }
+
+                    memcpy(out + i * fpt->item_size, key, fpt->item_size);
+                }
+            }
+            else memset(out + i * fpt->item_size, 0, fpt->item_size);
+        }
+
+        free_footprint(fpt); free(coord); free(key);
+    }
+
+    free_array(iarr); free(marr);
 
     return 0;
 }

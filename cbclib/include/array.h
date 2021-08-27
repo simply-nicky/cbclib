@@ -16,21 +16,43 @@ typedef struct array_s *array;
 array new_array(int ndim, size_t *dims, size_t item_size, void *data);
 void free_array(array arr);
 
-void unravel_index(int *coord, int idx, array arr);
-int ravel_index(int *coord, array arr);
+#define UNRAVEL_INDEX(_coord, _idx, _arr)           \
+{                                                   \
+    int _i = *_idx, _n;                             \
+    for (_n = 0; _n < _arr->ndim; _n++)             \
+    {                                               \
+        (_coord)[_n] = _i / _arr->strides[_n];      \
+        _i -= (_coord)[_n] * _arr->strides[_n];     \
+    }                                               \
+}
+
+#define RAVEL_INDEX(_coord, _idx, _arr)             \
+{                                                   \
+    *_idx = 0; int _n;                              \
+    for (_n = 0; _n < _arr->ndim; _n++)             \
+        *_idx += _arr->strides[_n] * (_coord)[_n];  \
+}
 
 typedef struct line_s
 {
     size_t npts;
     size_t stride;
     size_t item_size;
+    size_t line_size;
     void *data;
 } line_s;
 typedef struct line_s *line;
 
 line new_line(size_t npts, size_t stride, size_t item_size, void *data);
 line init_line(array arr, int axis);
-void update_line(line ln, array arr, int iter);
+
+#define UPDATE_LINE(_line, _arr, _iter)                     \
+{                                                           \
+    int _div;                                               \
+    _div = _iter / _line->stride;                           \
+    _line->data = _arr->data + _line->line_size * _div +    \
+    (_iter - _div * _line->stride) * _line->item_size;      \
+}
 
 // -----------Extend line modes-----------
 //
@@ -54,5 +76,8 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
 // Array search
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
     int (*compar)(const void*, const void*));
+
+// Line draw
+int draw_lines(unsigned int *out, size_t X, size_t Y, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation);
 
 #endif
