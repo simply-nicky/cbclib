@@ -29,7 +29,7 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned cha
     {
         if (fmask[i])
         {
-            UNRAVEL_INDEX((fpt->offsets + ndim * j), &i, farr);
+            UNRAVEL_INDEX(fpt->offsets + ndim * j, &i, farr);
             for (int n = 0; n < fpt->ndim; n++) fpt->offsets[ndim * j + n] -= farr->dims[n] / 2;
             j++;
         }

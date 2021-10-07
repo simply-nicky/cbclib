@@ -4,9 +4,10 @@ cdef extern from "Python.h":
 ctypedef int (*convolve_func)(double*, double*, int, unsigned long*, double*,
                               unsigned long, int, int, double, unsigned)
 
-cdef extern from "array.h":
-    int draw_lines_c "draw_lines" (unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
-                     double *lines, unsigned long lines, unsigned int dilation) nogil
+cdef extern from "img_proc.h":
+    int draw_lines(unsigned int *out, unsigned long Y, unsigned long X,
+                   unsigned int max_val, double *lines, unsigned long lines,
+                   unsigned int dilation) nogil
 
 cdef extern from "pocket_fft.h":
     unsigned long next_fast_len_fftw(unsigned long target) nogil
@@ -17,7 +18,7 @@ cdef extern from "fft_functions.h":
                           unsigned long ksize, int axis, int mode, double cval, unsigned threads) nogil
 
     int fft_convolve_np(double *out, double *inp, int ndim, unsigned long* dims, double *krn,
-                          unsigned long ksize, int axis, int mode, double cval, unsigned threads) nogil
+                        unsigned long ksize, int axis, int mode, double cval, unsigned threads) nogil
 
     int gauss_kernel1d(double *out, double sigma, unsigned order, unsigned long ksize) nogil
 

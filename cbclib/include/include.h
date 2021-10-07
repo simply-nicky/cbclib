@@ -1,6 +1,8 @@
 #ifndef INCLUDE_H
 #define INCLUDE_H
 
+#define _GNU_SOURCE 1
+
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -19,17 +21,32 @@
 #define WARN_UNUSED_RESULT
 #endif
 
+/** pi **/
 #ifndef M_PI
-    #define M_PI 3.14159265358979323846264338327950288
+#define M_PI    3.14159265358979323846
 #endif
+
+/** pi / 2 **/
+#ifndef M_PI_2
+#define M_PI_2  1.57079632679489661923
+#endif
+
+/** ln(10) **/
+#ifndef M_LN10
+#define M_LN10 2.30258509299404568402
+#endif /* !M_LN10 */
+
+#define SQ(x)   ((x) * (x))
 
 #define RALLOC(type,num) \
     ((type *)malloc((num)*sizeof(type)))
+
 #define DEALLOC(ptr) \
     do { free(ptr); (ptr)=NULL; } while(0)
 
 #define SWAP(a,b,type) \
     do { type tmp_=(a); (a)=(b); (b)=tmp_; } while(0)
+
 #define SWAP_BUF(a,b,size) \
     do{ unsigned char buf[(size)]; memmove(buf, (a), (size)); memmove((a), (b), (size)); memmove((b), buf, (size)); } while(0)
 

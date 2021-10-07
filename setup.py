@@ -22,13 +22,15 @@ extension_args = {'language': 'c',
                                    os.path.join(sys.prefix, 'include'),
                                    os.path.join(os.path.dirname(__file__), 'cbclib/include')]}
 
-src_files = ['cbclib/include/pocket_fft.c', 'cbclib/include/array.c',
-             'cbclib/include/fft_functions.c', 'cbclib/include/median.c']
 extensions = [Extension(name='cbclib.bin.line_detector',
-                        sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c', 'cbclib/include/array.c'],
+                        sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c',
+                                 'cbclib/include/img_proc.c', 'cbclib/include/array.c'],
                         **extension_args),
               Extension(name='cbclib.bin.data_processing',
-                        sources=['cbclib/bin/data_processing' + ext,] + src_files, **extension_args)]
+                        sources=['cbclib/bin/data_processing' + ext, 'cbclib/include/pocket_fft.c',
+                                 'cbclib/include/img_proc.c', 'cbclib/include/fft_functions.c',
+                                 'cbclib/include/median.c', 'cbclib/include/array.c'],
+                                 **extension_args)]
 
 if USE_CYTHON:
     extensions = cythonize(extensions, annotate=True, language_level="3",

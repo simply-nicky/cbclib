@@ -1,10 +1,10 @@
 cimport numpy as np
 import numpy as np
 import cython
-from libc.math cimport log
-from libc.math cimport sqrt, pi
+from libc.math cimport log, sqrt, pi
 from libc.string cimport memcmp
 from libc.stdlib cimport malloc, free
+from cython.parallel import prange
 
 # Set the cleanup routine
 cdef void _cleanup():
@@ -341,7 +341,7 @@ def gaussian_gradient_magnitude(inp: np.ndarray, sigma: object, mode: str='refle
         raise RuntimeError('C backend exited with error.')
     return out
 
-def median(data: np.ndarray, mask: np.ndarray, axis: cython.int=0,
+def median(data: np.ndarray, mask: np.ndarray=None, axis: cython.int=0,
            num_threads: cython.uint=1) -> np.ndarray:
     """Calculate a median along the `axis`.
 
@@ -608,9 +608,9 @@ def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=No
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:
-    """Draw thick lines with variable thickness. The lines must follow
-    the LSD convention, see the parameters for more info.
+def draw_lines_aa(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:
+    """Draw thick lines with variable thickness and the antialiasing applied.
+    The lines must follow the LSD convention, see the parameters for more info.
 
     Parameters
     ----------
@@ -656,7 +656,37 @@ def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, d
     cdef unsigned long _n_lines = lines.shape[0]
 
     with nogil:
-        fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+        fail = draw_lines(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
     if fail:
         raise RuntimeError('C backend exited with error.')    
     return image
+
+def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray, good_frames: np.ndarray, 
+                        num_threads: cython.uint=1) -> np.ndarray:
+    data = check_array(data, np.NPY_UINT32)
+    mask = check_array(mask, np.NPY_BOOL)
+    whitefield = check_array(whitefield, np.NPY_FLOAT64)
+    good_frames = check_array(good_frames, np.NPY_UINT32)
+
+    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(data.ndim, data.shape, np.NPY_FLOAT64, 0)
+
+    cdef int i, j, idx
+    cdef int repeats = good_frames.size
+    cdef int frame_size = data.size / data.shape[0]
+    cdef double val
+
+    cdef double *out_ptr = <double *>np.PyArray_DATA(out)
+    cdef unsigned int *data_ptr = <unsigned int *>np.PyArray_DATA(data)
+    cdef unsigned char *mask_ptr = <unsigned char *>np.PyArray_DATA(mask)
+    cdef double *wf_ptr = <double *>np.PyArray_DATA(whitefield)
+    cdef unsigned int *idx_ptr = <unsigned int *>np.PyArray_DATA(good_frames)
+
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        for j in range(frame_size):
+            idx = idx_ptr[i] * frame_size + j
+            if mask_ptr[idx]:
+                val = <double>data_ptr[idx] - wf_ptr[j]
+                out_ptr[idx] = val if val > 0.0 else 0.0
+
+    return out

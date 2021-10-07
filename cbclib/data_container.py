@@ -21,12 +21,13 @@ class return_obj_method:
 
     def __call__(self, *args, **kwargs):
         dct = {}
-        for key, val in self.instance.items():
-            if isinstance(val, np.ndarray):
-                dct[key] = np.copy(val)
-            else:
-                dct[key] = val
         dct.update(self.__wrapped__(*args, **kwargs))
+        for key, val in self.instance.items():
+            if not key in dct:
+                if isinstance(val, np.ndarray):
+                    dct[key] = np.copy(val)
+                else:
+                    dct[key] = val
         return self.cls(**dct)
 
     def inplace_update(self, *args, **kwargs):

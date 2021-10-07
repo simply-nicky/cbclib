@@ -6,10 +6,6 @@ cdef extern from "lsd.h":
                              double density_th, int n_bins,
                              int **reg_img, int *reg_x, int *reg_y) nogil
 
-cdef extern from "array.h":
-    int draw_lines_c "draw_lines" (unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
-                     double *lines, unsigned long lines, unsigned int dilation) nogil
-
 cdef extern from "median.h":
     int compare_double(void *a, void *b) nogil
     int compare_float(void *a, void *b) nogil
@@ -28,6 +24,14 @@ cdef extern from "median.h":
                          unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                          unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                          unsigned threads) nogil
+
+cdef extern from "img_proc.h":
+    int draw_lines_c "draw_lines" (unsigned int *out, unsigned long Y, unsigned long X,
+                                   unsigned int max_val, double *lines, unsigned long lines,
+                                   unsigned int dilation) nogil
+
+    int filter_lines_c "filter_lines" (double *olines, double *data, unsigned long Y, unsigned long X, double *lines,
+                       unsigned long n_lines, double x_c, double y_c, double radius) nogil
 
 cdef enum:
     EXTEND_CONSTANT = 0

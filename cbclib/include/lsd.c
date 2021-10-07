@@ -97,15 +97,6 @@
 #include "include.h"
 #include "lsd.h"
 
-/** ln(10) */
-#ifndef M_LN10
-#define M_LN10 2.30258509299404568402
-#endif /* !M_LN10 */
-
-/** PI */
-#ifndef M_PI
-#define M_PI     3.14159265358979323846
-#endif /* !M_PI */
 
 #ifndef FALSE
 #define FALSE 0
@@ -290,7 +281,7 @@ static void enlarge_ntuple_list(ntuple_list n_tuple)
 /** Add a 7-tuple to an n-tuple list.
  */
 static void add_7tuple(ntuple_list out, double v1, double v2, double v3,
-                                                double v4, double v5, double v6, double v7)
+                       double v4, double v5, double v6, double v7)
 {
     /* check parameters */
     if (out == NULL) LSD_ERROR("add_7tuple: invalid n-tuple input.");
@@ -2009,11 +2000,10 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
 /*----------------------------------------------------------------------------*/
 /** LSD full interface.
  */
-int LineSegmentDetection(double ** out, int * n_out,
-                         double * img, int X, int Y,
+int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
                          double scale, double sigma_scale, double quant,
                          double ang_th, double log_eps, double density_th,
-                         int n_bins, int ** reg_img, int * reg_x, int * reg_y)
+                         int n_bins, int ** reg_img, int * reg_y, int * reg_x)
 {
     image_double image;
     ntuple_list out_buf = new_ntuple_list(7);
@@ -2197,9 +2187,8 @@ int LineSegmentDetection(double ** out, int * n_out,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
  */
-int lsd_scale_region(double ** out, int * n_out,
-                                            double * img, int X, int Y, double scale,
-                                            int ** reg_img, int * reg_x, int * reg_y)
+int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
+                     double scale, int ** reg_img, int * reg_y, int * reg_x)
 {
     /* LSD parameters */
     double sigma_scale = 0.6; 	/* Sigma for Gaussian filter is computed as sigma = sigma_scale/scale. */
@@ -2209,27 +2198,27 @@ int lsd_scale_region(double ** out, int * n_out,
     double density_th = 0.7;    /* Minimal density of region points in rectangle. */
     int n_bins = 1024;          /* Number of bins in pseudo-ordering of gradient modulus. */
 
-    return LineSegmentDetection(out, n_out, img, X, Y, scale, sigma_scale, quant,
+    return LineSegmentDetection(out, n_out, img, Y, X, scale, sigma_scale, quant,
                                 ang_th, log_eps, density_th, n_bins,
-                                reg_img, reg_x, reg_y);
+                                reg_img, reg_y, reg_x);
 }
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale.
  */
-int lsd_scale(double ** out, int * n_out, double * img, int X, int Y, double scale)
+int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double scale)
 {
-    return lsd_scale_region(out, n_out, img, X, Y, scale, NULL, NULL, NULL);
+    return lsd_scale_region(out, n_out, img, Y, X, scale, NULL, NULL, NULL);
 }
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface.
  */
-int lsd(double ** out, int * n_out, double * img, int X, int Y)
+int lsd(double ** out, int * n_out, double * img, int Y, int X)
 {
     /* LSD parameters */
     double scale = 0.8;             /* Scale the image by Gaussian filter to 'scale'. */
 
-    return lsd_scale(out, n_out, img, X, Y, scale);
+    return lsd_scale(out, n_out, img, Y, X, scale);
 }
 /*----------------------------------------------------------------------------*/

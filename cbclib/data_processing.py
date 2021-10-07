@@ -1,11 +1,12 @@
 from multiprocessing import cpu_count
 import numpy as np
 from .data_container import DataContainer, dict_to_object
-from .bin import median, median_filter, LSD, maximum_filter
+from .bin import subtract_background, median, median_filter, LSD, maximum_filter
 
 class CrystData(DataContainer):
-    attr_set = {'data', 'wavelength', 'x_pixel_size', 'y_pixel_size'}
-    init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads', 'roi', 'whitefield'}
+    attr_set = {'data', 'tilts', 'translations', 'wavelength', 'x_pixel_size', 'y_pixel_size'}
+    init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads', 'pupil',
+                'roi', 'whitefield'}
 
     def __init__(self, protocol, **kwargs):
         # Initialize protocol for the proper data type conversion in __setattr__
@@ -29,14 +30,17 @@ class CrystData(DataContainer):
             self.roi = np.array([0, self.data.shape[1], 0, self.data.shape[2]])
         if self.good_frames is None:
             self.good_frames = np.arange(self.data.shape[0])
-        if self.mask is None or self.mask.shape != self.data.shape:
+        if self.mask is None:
             self.mask = np.ones(self.data.shape, dtype=self.protocol.get_dtype('mask'))
+        if self.mask.shape == self.data.shape[1:]:
+            self.mask = np.tile(self.mask[None, :], (self.data.shape[0], 1, 1))
 
-        if self._iswhitefield:
-            cor_data = self.get('mask') * (self.get('data') - self.get('whitefield'))
-            cor_data = np.around(np.clip(cor_data, 0, np.inf))
-            self.cor_data = np.zeros(self.data.shape, dtype=self.protocol.get_dtype('cor_data'))
-            self.cor_data[self.good_frames, self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = cor_data
+        if self._iswhitefield and self.cor_data is None:
+            self.cor_data = subtract_background(self.data, self.mask, self.whitefield,
+                                                self.good_frames, self.num_threads)
+
+        if not self.pupil is None:
+            self.mask_region.inplace_update(self.pupil)
 
         # Initialize a list of StreakDetector objects
         self._det_objects = []
@@ -50,7 +54,7 @@ class CrystData(DataContainer):
             dtype = self.protocol.get_dtype(attr)
             if not dtype is None:
                 if isinstance(value, np.ndarray):
-                    value = np.array(value, dtype=dtype)
+                    value = np.asarray(value, dtype=dtype)
                 elif not value is None:
                     value = dtype(value)
             super(CrystData, self).__setattr__(attr, value)
@@ -187,15 +191,15 @@ class CrystData(DataContainer):
         CrystData
             New :class:`CrystData` object with the updated `mask`.
         """
-        data_dict = {}
+        mask = self.mask.copy()
+        mask[:, roi[0]:roi[1], roi[2]:roi[3]] = False
+
         if self._iswhitefield:
             cor_data = self.cor_data.copy()
             cor_data[:, roi[0]:roi[1], roi[2]:roi[3]] = 0
-            data_dict['cor_data'] = cor_data
-        mask = self.mask.copy()
-        mask[:, roi[0]:roi[1], roi[2]:roi[3]] = False
-        data_dict['mask'] = mask
-        return data_dict
+            return {'cor_data': cor_data, 'mask': mask}
+
+        return {'mask': mask}
 
     @dict_to_object
     def import_whitefield(self, whitefield):
@@ -289,7 +293,7 @@ class CrystData(DataContainer):
         return {'flatfields': flatfields}
 
     @dict_to_object
-    def update_mask(self, method='perc-bad', pmin=0., pmax=99.99, vmin=0, vmax=65535,
+    def update_mask(self, method='perc-bad', pmin=0.01, pmax=99.99, vmin=0, vmax=65535,
                     update='reset'):
         """Return a new :class:`CrystData` object with the updated
         bad pixels mask.
@@ -319,14 +323,22 @@ class CrystData(DataContainer):
         CrystData
             New :class:`CrystData` object with the updated `mask`.
         """
-        data = self.get('data')
+        if update == 'reset':
+            data = self.get('data')
+        elif update == 'multiply':
+            data = self.get('data') * self.get('mask')
+        else:
+            raise ValueError(f'Invalid update keyword: {update:s}')
+
         if method == 'no-bad':
             mask = np.ones((self.good_frames.size, self.roi[1] - self.roi[0],
                             self.roi[3] - self.roi[2]), dtype=bool)
         elif method == 'range-bad':
             mask = (data >= vmin) & (data < vmax)
         elif method == 'perc-bad':
-            offsets = (data - np.median(data))
+            offsets = (data.astype(np.int32) -
+                       median_filter(data, (1, 3, 3),
+                                     num_threads=self.num_threads).astype(np.int32))
             mask = (offsets >= np.percentile(offsets, pmin)) & \
                    (offsets <= np.percentile(offsets, pmax))
         else:
@@ -335,11 +347,17 @@ class CrystData(DataContainer):
 
         if update == 'reset':
             mask_full[self.good_frames, self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = mask
-            return {'mask': mask_full}
-
-        if update == 'multiply':
+        elif update == 'multiply':
             mask_full[self.good_frames, self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] *= mask
-            return {'mask': mask_full}
+        else:
+            raise ValueError(f'Invalid update keyword: {update:s}')
+
+        if self._iswhitefield:
+            cor_data = self.cor_data.copy()
+            cor_data[mask_full] = 0
+            return {'cor_data': cor_data, 'mask': mask_full}
+
+        return {'mask': mask_full}
 
     @dict_to_object
     def update_whitefield(self):
@@ -359,6 +377,8 @@ class CrystData(DataContainer):
         return {'whitefield': whitefield}
 
     def get_detector(self, vmin, vmax, size=(1, 3, 3)):
+        if self.pupil is None:
+            return None
         return StreakDetector.import_data(self, vmin, vmax, size)
 
     def write_cxi(self, cxi_file, overwrite=True):
@@ -382,41 +402,46 @@ class CrystData(DataContainer):
                 self.protocol.write_cxi(attr, data, cxi_file, overwrite=overwrite)
 
 class StreakDetector(DataContainer):
-    attr_set = {'data', 'num_threads', 'streak_data'}
-    init_set = {'lsd_obj', 'streak_mask'}
+    attr_set = {'center', 'data', 'num_threads', 'streak_data'}
+    init_set = {'lsd_obj', 'streak_mask', 'streaks'}
     footprint = np.array([[[False, False,  True, False, False],
                            [False,  True,  True,  True, False],
                            [ True,  True,  True,  True,  True],
                            [False,  True,  True,  True, False],
                            [False, False,  True, False, False]]])
 
-    def __init__(self, cryst_data, data, streak_data, num_threads, lsd_obj=LSD(), streak_mask=None):
+    def __init__(self, cryst_data, **kwargs):
         self.__dict__['_reference'] = cryst_data
         self._reference._det_objects.append(self)
 
-        super(StreakDetector, self).__init__(data=data, streak_data=streak_data, lsd_obj=lsd_obj,
-                                             streak_mask=streak_mask, num_threads=num_threads)
+        super(StreakDetector, self).__init__(**kwargs)
 
     @classmethod
     def import_data(cls, cryst_data, vmin, vmax, size=(1, 3, 3)):
-        data = median_filter(cryst_data.get('cor_data'), size=size,
-                             num_threads=cryst_data.num_threads)
+        data = cryst_data.get('cor_data')
+        if not size is None:
+            data = median_filter(data, size=size, num_threads=cryst_data.num_threads)
         streak_data = (np.clip(data, vmin, vmax) - vmin) / (vmax - vmin)
-        return cls(cryst_data=cryst_data, data=data, streak_data=streak_data,
-                   num_threads=cryst_data.num_threads)
+        center = np.array([cryst_data.pupil[:2].mean() - cryst_data.roi[0],
+                           cryst_data.pupil[2:].mean() - cryst_data.roi[2]])
+        return cls(cryst_data=cryst_data, center=center, data=data,
+                   streak_data=streak_data, num_threads=cryst_data.num_threads)
 
     @dict_to_object
     def update_lsd(self, scale=0.9, sigma_scale=0.9, log_eps=0.,
                    ang_th=60.0, density_th=0.5, quant=3e-3):
         return {'cryst_data': self._reference, 'lsd_obj': LSD(scale=scale,
                 sigma_scale=sigma_scale, log_eps=log_eps, ang_th=ang_th,
-                density_th=density_th, quant=quant)}
+                density_th=density_th, quant=quant, y_c=self.center[0],
+                x_c=self.center[1])}
 
     @dict_to_object
-    def update_mask(self, dilation=15):
-        streak_mask = self.lsd_obj.mask(self.streak_data, max_val=1, dilation=dilation,
-                                        num_threads=self.num_threads)
-        return {'cryst_data': self._reference, 'streak_mask': streak_mask}
+    def update_mask(self, dilation=15, radius=1.0, filter_lines=True):
+        out_dict = self.lsd_obj.mask(self.streak_data, max_val=1, dilation=dilation,
+                                     radius=radius, filter_lines=filter_lines,
+                                     return_lines=True, num_threads=self.num_threads)
+        return {'cryst_data': self._reference, 'streak_mask': out_dict['mask'],
+                'streaks': out_dict['lines']}
 
     @dict_to_object
     def update_streak_data(self, iterations=10):
@@ -426,7 +451,7 @@ class StreakDetector(DataContainer):
         divisor = self.data.copy()
         for _ in range(iterations):
             divisor = maximum_filter(divisor, mask=self.streak_mask,
-                                    footprint=self.footprint,
-                                    num_threads=self.num_threads)
+                                     footprint=self.footprint,
+                                     num_threads=self.num_threads)
         streak_data = np.where(divisor, self.data / divisor, 0)
         return {'cryst_data': self._reference, 'streak_data': streak_data}

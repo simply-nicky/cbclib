@@ -1,31 +1,31 @@
 /*----------------------------------------------------------------------------
 
-  LSD - Line Segment Detector on digital images
+    LSD - Line Segment Detector on digital images
 
-  This code is part of the following publication and was subject
-  to peer review:
+    This code is part of the following publication and was subject
+    to peer review:
 
-    "LSD: a Line Segment Detector" by Rafael Grompone von Gioi,
-    Jeremie Jakubowicz, Jean-Michel Morel, and Gregory Randall,
-    Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
-    http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
+        "LSD: a Line Segment Detector" by Rafael Grompone von Gioi,
+        Jeremie Jakubowicz, Jean-Michel Morel, and Gregory Randall,
+        Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
+        http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
 
-  Copyright (c) 2007-2011 rafael grompone von gioi <grompone@gmail.com>
+    Copyright (c) 2007-2011 rafael grompone von gioi <grompone@gmail.com>
 
-  This program is free software: you can redistribute it and/or modify
-  it under the terms of the GNU Affero General Public License as
-  published by the Free Software Foundation, either version 3 of the
-  License, or (at your option) any later version.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or (at your option) any later version.
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-  GNU Affero General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU Affero General Public License for more details.
 
-  You should have received a copy of the GNU Affero General Public License
-  along with this program. If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU Affero General Public License
+    along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-  ----------------------------------------------------------------------------*/
+----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------*/
 /** @file lsd.h
@@ -61,9 +61,9 @@
                        doubles of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
-    @param X           X size of the image: the number of columns.
-
     @param Y           Y size of the image: the number of rows.
+
+    @param X           X size of the image: the number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
@@ -127,22 +127,20 @@
                        its value is given by reg_x and reg_y.
                        Suggested value: NULL
 
-    @param reg_x       Pointer to an int where LSD will put the X size
+    @param reg_y       Pointer to an int where LSD will put the Y size
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @param reg_y       Pointer to an int where LSD will put the Y size
+    @param reg_x       Pointer to an int where LSD will put the X size
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int LineSegmentDetection( double ** out, int * n_out,
-                          double * img, int X, int Y,
-                          double scale, double sigma_scale, double quant,
-                          double ang_th, double log_eps, double density_th,
-                          int n_bins,
-                          int ** reg_img, int * reg_x, int * reg_y );
+int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
+                         double scale, double sigma_scale, double quant,
+                         double ang_th, double log_eps, double density_th,
+                         int n_bins, int ** reg_img, int * reg_y, int * reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
@@ -169,9 +167,9 @@ int LineSegmentDetection( double ** out, int * n_out,
                        doubles of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
-    @param X           X size of the image: the number of columns.
-
     @param Y           Y size of the image: the number of rows.
+
+    @param X           X size of the image: the number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
@@ -197,19 +195,18 @@ int LineSegmentDetection( double ** out, int * n_out,
                        its value is given by reg_x and reg_y.
                        Suggested value: NULL
 
-    @param reg_x       Pointer to an int where LSD will put the X size
+    @param reg_y       Pointer to an int where LSD will put the Y size
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @param reg_y       Pointer to an int where LSD will put the Y size
+    @param reg_x       Pointer to an int where LSD will put the X size
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd_scale_region( double ** out, int * n_out,
-                      double * img, int X, int Y, double scale,
-                      int ** reg_img, int * reg_x, int * reg_y );
+int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
+                     double scale, int ** reg_img, int * reg_y, int * reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale
@@ -236,9 +233,9 @@ int lsd_scale_region( double ** out, int * n_out,
                        doubles of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
-    @param X           X size of the image: the number of columns.
-
     @param Y           Y size of the image: the number of rows.
+
+    @param X           X size of the image: the number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
@@ -250,7 +247,7 @@ int lsd_scale_region( double ** out, int * n_out,
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd_scale(double ** out, int * n_out, double * img, int X, int Y, double scale);
+int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double scale);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface
@@ -277,13 +274,13 @@ int lsd_scale(double ** out, int * n_out, double * img, int X, int Y, double sca
                        doubles of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
-    @param X           X size of the image: the number of columns.
-
     @param Y           Y size of the image: the number of rows.
+
+    @param X           X size of the image: the number of columns.
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd(double ** out, int * n_out, double * img, int X, int Y);
+int lsd(double ** out, int * n_out, double * img, int Y, int X);
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/

@@ -153,7 +153,7 @@ int gauss_kernel1d(double *out, double sigma, unsigned order, size_t ksize)
     double sigma2 = sigma * sigma;
     for (int i = 0; i < (int) ksize; i++)
     {
-        out[i] = exp(-0.5 * pow(i - radius, 2) / sigma2); sum += out[i];
+        out[i] = exp(-0.5 * SQ(i - radius) / sigma2); sum += out[i];
     }
     for (int i = 0; i < (int) ksize; i++) out[i] /= sum;
     if (order)

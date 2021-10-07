@@ -77,7 +77,4 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
     int (*compar)(const void*, const void*));
 
-// Line draw
-int draw_lines(unsigned int *out, size_t X, size_t Y, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation);
-
 #endif
