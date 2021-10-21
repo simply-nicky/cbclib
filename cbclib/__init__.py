@@ -9,4 +9,4 @@ from .cbc_indexing import ScanSetup
 from .cxi_protocol import CXIProtocol, CXILoader
 from .log_protocol import LogProtocol, converter_petra
 from .data_processing import CrystData, StreakDetector
-from . import bin, Qt
+from . import bin
