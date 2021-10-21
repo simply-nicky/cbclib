@@ -434,11 +434,11 @@ int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats)
     if (!eulers || !rot_mats) {ERROR("compute_euler_angles: one of the arguments is NULL."); return -1;}
     if (!n_mats) {ERROR("compute_euler_angles: number of matrices must be positive."); return -1;}   
 
-    size_t rm_dims = {n_mats, 9};
+    size_t rm_dims[2] = {n_mats, 9};
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 
-    size_t e_dims = {n_mats, 3};
+    size_t e_dims[2] = {n_mats, 3};
     array e_arr = new_array(2, e_dims, sizeof(double), eulers);
     line e_ln = init_line(e_arr, 1);
 
@@ -478,11 +478,11 @@ int compute_rot_matrix(double *rot_mats, double *eulers, size_t n_mats)
     if (!eulers || !rot_mats) {ERROR("compute_rot_matrix: one of the arguments is NULL."); return -1;}
     if (!n_mats) {ERROR("compute_rot_matrix: number of matrices must be positive."); return -1;}   
 
-    size_t rm_dims = {n_mats, 9};
+    size_t rm_dims[2] = {n_mats, 9};
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 
-    size_t e_dims = {n_mats, 3};
+    size_t e_dims[2] = {n_mats, 3};
     array e_arr = new_array(2, e_dims, sizeof(double), eulers);
     line e_ln = init_line(e_arr, 1);
 
@@ -522,7 +522,7 @@ int generate_rot_matrix(double *rot_mats, double *angles, size_t n_mats, double 
     if (!angles || !rot_mats) {ERROR("compute_rot_matrix: one of the arguments is NULL."); return -1;}
     if (!n_mats) {ERROR("compute_rot_matrix: number of matrices must be positive."); return -1;}   
 
-    size_t rm_dims = {n_mats, 9};
+    size_t rm_dims[2] = {n_mats, 9};
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 

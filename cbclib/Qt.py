@@ -4,23 +4,29 @@ Qt.py - PyQt based classes for 3D visualisation using OpenGl library
 import sys
 import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
-from OpenGL import GLScatterPlotItem, GLSurfacePlotItem, GLVolumeItem
 from OpenGL.GL import glEnable, glBlendFunc, glBegin, glColor4f, glVertex3f, glEnd, glHint
 from OpenGL.GL import (GL_LINE_SMOOTH, GL_BLEND, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
                        GL_LINE_SMOOTH_HINT, GL_NICEST, GL_LINES)
 from pyqtgraph.opengl.GLGraphicsItem import GLGraphicsItem
-from pyqtgraph.opengl import GLViewWidget
+from pyqtgraph.opengl import GLViewWidget, GLScatterPlotItem, GLSurfacePlotItem, GLVolumeItem
 from pyqtgraph import ImageView, glColor
 
 def make_app():
-    app = QtCore.QCoreApplication.instance()
+    # QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_UseSoftwareOpenGL)
+    # QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
+
+    app = QtWidgets.QApplication.instance()
     if app is None:
         app = QtWidgets.QApplication(sys.argv)
+
+    app.setAttribute(QtCore.Qt.AA_UseSoftwareOpenGL)
+    app.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)
+
     return app
 
-class Viewer2D(QtGui.QMainWindow):
+class Viewer2D(QtWidgets.QMainWindow):
     def __init__(self, data, label, levels, parent=None, size=(640, 480)):
-        QtGui.QMainWindow.__init__(parent=parent, size=QtCore.QSize(size[0], size[1]))
+        QtWidgets.QMainWindow.__init__(parent=parent, size=QtCore.QSize(size[0], size[1]))
         self.setWindowTitle('CBC Viewer')
         self.update_ui(data, label, levels)
 

@@ -45,8 +45,9 @@ class LogProtocol(INIParser):
     """
     attr_dict = {'datatypes': ('ALL',), 'log_keys': ('ALL',), 'part_keys': ('ALL',)}
     fmt_dict = {'datatypes': 'str', 'log_keys': 'str', 'part_keys': 'str'}
-    unit_dict = {'percent': 1e-2, 'mm,mdeg': 1e-3, 'µm,um,udeg,µdeg': 1e-6,
-                 'nm,ndeg': 1e-9, 'pm,pdeg': 1e-12}
+    unit_dict = {'percent': 1e-2, 'mm': 1e-3, 'mdeg': 1.7453292519943296e-05, 'µm,um': 1e-6,
+                 'udeg,µdeg': 1.7453292519943296e-08, 'nm': 1e-9, 'ndeg': 1.7453292519943296e-11,
+                 'pm': 1e-12,  'pdeg': 1.7453292519943296e-14}
 
     def __init__(self, datatypes=None, log_keys=None, part_keys=None):
         if datatypes is None:
@@ -204,7 +205,7 @@ class LogProtocol(INIParser):
                                 attr_dict[part_name][attr] *= self._get_unit(raw_str)
         return attr_dict
 
-    def load_data(self, path):
+    def load_data(self, path, frame_indices=None):
         """Retrieve the main data array from the log file.
 
         Parameters
@@ -250,12 +251,18 @@ class LogProtocol(INIParser):
             else:
                 dtypes['formats'].append('<S' + str(len(val)))
                 converters[idx] = lambda item: item.strip(b' []')
+        if frame_indices is None:
+            return dict(zip(keys, np.loadtxt(path, delimiter=';',
+                                             converters=converters,
+                                             dtype=dtypes, unpack=True)))
+        skiprows = np.min(frame_indices)
+        max_rows = np.max(frame_indices - skiprows)
+        data_tuple = np.loadtxt(path, delimiter=';', converters=converters,
+                                dtype=dtypes, unpack=True, skiprows=skiprows,
+                                max_rows=max_rows + 1)
+        return {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
 
-        return dict(zip(keys, np.loadtxt(path, delimiter=';',
-                                         converters=converters,
-                                         dtype=dtypes, unpack=True)))
-
-def converter_petra(dir_path, scan_num, roi=None):
+def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
     cxi_loader = CXILoader()
     log_prt = LogProtocol()
 
@@ -270,38 +277,30 @@ def converter_petra(dir_path, scan_num, roi=None):
     else:
         h5_master = h5_files[0]
 
-    attrs = cxi_loader.load_attributes(h5_master)
     log_attrs = log_prt.load_attributes(log_path)
-    log_data = log_prt.load_data(log_path)
+    log_data = log_prt.load_data(log_path, frame_indices)
 
-    paths, cxi_paths, indices = cxi_loader.read_data_indices(h5_files)
-    if not roi is None:
-        indices = [(index, slice(roi[0], roi[1]), slice(roi[2], roi[3])) for index in indices]
-    data = cxi_loader.load_data(paths, cxi_paths, indices)
-    n_steps = min(next(iter(log_data.values())).shape[0], data.shape[0])
+    data_dict = cxi_loader.load_to_dict(h5_files, h5_master, frame_indices, **attributes)
 
     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
     z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
     r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-    translations = np.tile([[x_sample, y_sample, z_sample]], (n_steps, 1))
-    tilts = r_sample * np.ones(n_steps)
+    data_dict['translations'] = np.tile([[x_sample, y_sample, z_sample]],
+                                        (data_dict['data'].shape[0], 1))
+    data_dict['tilts'] = r_sample * np.ones(data_dict['data'].shape[0])
     for data_key, log_dset in log_data.items():
         for log_key in log_prt.log_keys['x_sample']:
             if log_key in data_key:
-                translations[:, 0] = log_dset[:n_steps]
+                data_dict['translations'][:, 0] = log_dset
         for log_key in log_prt.log_keys['y_sample']:
             if log_key in data_key:
-                translations[:, 1] = log_dset[:n_steps]
+                data_dict['translations'][:, 1] = log_dset
         for log_key in log_prt.log_keys['z_sample']:
             if log_key in data_key:
-                translations[:, 2] = log_dset[:n_steps]
+                data_dict['translations'][:, 2] = log_dset
         for log_key in log_prt.log_keys['r_sample']:
             if log_key in data_key:
-                tilts = log_dset[:n_steps]
+                data_dict['tilts'] = log_dset
 
-    return CrystData(protocol=CXIProtocol(), data=data[:n_steps],
-                     translations=translations, tilts=tilts,
-                     wavelength=attrs['wavelength'],
-                     x_pixel_size=attrs['x_pixel_size'] * 1e-6,
-                     y_pixel_size=attrs['y_pixel_size'] * 1e-6)
+    return CrystData(protocol=CXIProtocol(), **data_dict)

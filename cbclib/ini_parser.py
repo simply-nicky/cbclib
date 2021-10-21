@@ -3,6 +3,7 @@
 import os
 import configparser
 import re
+import numpy as np
 
 ROOT_PATH = os.path.dirname(__file__)
 
@@ -118,8 +119,15 @@ class INIParser:
         if not option in kwargs[section]:
             raise AttributeError("The '{:s}' option has not been provided".format(option))
         fmt = self.get_format(section, option)
-        if isinstance(kwargs[section][option], list):
+
+        if isinstance(kwargs[section][option], (list, tuple)):
             return [fmt(part) for part in kwargs[section][option]]
+
+        if isinstance(kwargs[section][option], np.ndarray):
+            if kwargs[section][option].ndim > 1:
+                raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
+            return [fmt(part) for part in kwargs[section][option]]
+
         return fmt(kwargs[section][option])
 
     @classmethod
@@ -131,7 +139,11 @@ class INIParser:
         dict
             Look-up dictionary.
         """
-        return {}
+        lookup = {}
+        for section in cls.attr_dict:
+            for option in cls.attr_dict[section]:
+                lookup[option] = section
+        return lookup
 
     @classmethod
     def read_ini(cls, protocol_file):

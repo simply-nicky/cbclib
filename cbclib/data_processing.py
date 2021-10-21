@@ -4,9 +4,9 @@ from .data_container import DataContainer, dict_to_object
 from .bin import subtract_background, median, median_filter, LSD, maximum_filter
 
 class CrystData(DataContainer):
-    attr_set = {'data', 'tilts', 'translations', 'wavelength', 'x_pixel_size', 'y_pixel_size'}
-    init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads', 'pupil',
-                'roi', 'whitefield'}
+    attr_set = {'data', 'tilts', 'translations'}
+    init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads',
+                'pupil', 'roi', 'streak_data', 'streaks', 'whitefield'}
 
     def __init__(self, protocol, **kwargs):
         # Initialize protocol for the proper data type conversion in __setattr__
@@ -49,14 +49,21 @@ class CrystData(DataContainer):
     def _iswhitefield(self):
         return not self.whitefield is None
 
+    def _check_dtype(self, attr, value):
+        dtype = self.protocol.get_dtype(attr)
+        if dtype is None:
+            return value
+        if isinstance(value, np.ndarray):
+            return np.asarray(value, dtype=dtype)
+        return dtype(value)
+
     def __setattr__(self, attr, value):
-        if attr in self.attr_set | self.init_set:
-            dtype = self.protocol.get_dtype(attr)
-            if not dtype is None:
-                if isinstance(value, np.ndarray):
-                    value = np.asarray(value, dtype=dtype)
-                elif not value is None:
-                    value = dtype(value)
+        if attr in self.attr_set | self.init_set and not value is None:
+            if isinstance(value, dict):
+                for key in value:
+                    value[key] = self._check_dtype(attr, value[key])
+            else:
+                value = self._check_dtype(attr, value)
             super(CrystData, self).__setattr__(attr, value)
         else:
             super(CrystData, self).__setattr__(attr, value)
@@ -79,9 +86,7 @@ class CrystData(DataContainer):
         """
         data = self.data[:, ::bin_ratio, ::bin_ratio]
         mask = self.mask[:, ::bin_ratio, ::bin_ratio]
-        data_dict = {'data': data, 'mask': mask, 'roi': self.roi // bin_ratio,
-                     'x_pixel_size': bin_ratio * self.x_pixel_size,
-                     'y_pixel_size': bin_ratio * self.y_pixel_size}
+        data_dict = {'data': data, 'mask': mask, 'roi': self.roi // bin_ratio}
 
         if self._iswhitefield:
             data_dict['whitefield'] = self.whitefield[::bin_ratio, ::bin_ratio]
@@ -202,6 +207,39 @@ class CrystData(DataContainer):
         return {'mask': mask}
 
     @dict_to_object
+    def import_mask(self, mask, update='reset'):
+        """Return a new :class:`CrystData` object with the new
+        mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            New mask array.
+        update : {'reset', 'multiply'}, optional
+            Multiply the new mask and the old one if 'multiply',
+            use the new one if 'reset'.
+
+        Raises
+        ------
+        ValueError
+            If the mask shape is incompatible with the data.
+
+        Returns
+        -------
+        CrystData
+            New :class:`CrystData` object with the updated `mask`.
+        """
+        if mask.shape != self.data.shape[1:]:
+            raise ValueError('mask and data have incompatible shapes: '\
+                             f'{mask.shape:s} != {self.data.shape[1:]:s}')
+        if update == 'reset':
+            return {'mask': mask, 'cor_data': None}
+        elif update == 'multiply':
+            return {'mask': mask * self.mask, 'cor_data': None}
+        else:
+            raise ValueError(f'Invalid update keyword: {update:s}')
+
+    @dict_to_object
     def import_whitefield(self, whitefield):
         """Return a new :class:`CrystData` object with the new
         whitefield.
@@ -224,7 +262,7 @@ class CrystData(DataContainer):
         if whitefield.shape != self.data.shape[1:]:
             raise ValueError('whitefield and data have incompatible shapes: '\
                              f'{whitefield.shape:s} != {self.data.shape[1:]:s}')
-        return {'whitefield': whitefield}
+        return {'whitefield': whitefield, 'cor_data': None}
 
     @dict_to_object
     def update_flatfields(self, method='median', size=11, effs=None):
@@ -374,12 +412,26 @@ class CrystData(DataContainer):
                          num_threads=self.num_threads)
         whitefield = np.zeros(self.data.shape[1:], dtype=self.protocol.get_dtype('whitefield'))
         whitefield[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = good_wf
-        return {'whitefield': whitefield}
+        return {'whitefield': whitefield, 'cor_data': None}
 
-    def get_detector(self, vmin, vmax, size=(1, 3, 3)):
+    def detect_streaks(self, vmin, vmax, size=(1, 3, 3)):
         if self.pupil is None:
             return None
         return StreakDetector.import_data(self, vmin, vmax, size)
+
+    def update_streaks(self, det_obj):
+        if not det_obj in self._det_objects:
+            raise ValueError("The StreakDetector object doesn't belong to the data container")
+
+        self.streak_data = np.zeros(self.data.shape, dtype=np.float64)
+        self.streak_data[self.good_frames, self.roi[0]:self.roi[1],
+                         self.roi[2]:self.roi[3]] = det_obj.streak_data
+
+        self.streaks = {}
+        for frame_idx in det_obj.streaks:
+            self.streaks[frame_idx] = det_obj.streaks[frame_idx].copy()
+            self.streaks[frame_idx][:, :4:2] += self.roi[2]
+            self.streaks[frame_idx][:, 1:4:2] += self.roi[0]
 
     def write_cxi(self, cxi_file, overwrite=True):
         """Write all the `attr` to a CXI file `cxi_file`.
@@ -416,6 +468,9 @@ class StreakDetector(DataContainer):
 
         super(StreakDetector, self).__init__(**kwargs)
 
+        if self.lsd_obj is None:
+            self.update_lsd.inplace_update()
+
     @classmethod
     def import_data(cls, cryst_data, vmin, vmax, size=(1, 3, 3)):
         data = cryst_data.get('cor_data')
@@ -429,7 +484,7 @@ class StreakDetector(DataContainer):
 
     @dict_to_object
     def update_lsd(self, scale=0.9, sigma_scale=0.9, log_eps=0.,
-                   ang_th=60.0, density_th=0.5, quant=3e-3):
+                   ang_th=60.0, density_th=0.5, quant=2.0e-2):
         return {'cryst_data': self._reference, 'lsd_obj': LSD(scale=scale,
                 sigma_scale=sigma_scale, log_eps=log_eps, ang_th=ang_th,
                 density_th=density_th, quant=quant, y_c=self.center[0],

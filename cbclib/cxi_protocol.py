@@ -204,15 +204,16 @@ class CXIProtocol(INIParser):
             if isinstance(cxi_obj, h5py.Dataset):
                 return [(cxi_path, cxi_obj.shape),]
             elif isinstance(cxi_obj, h5py.Group):
-                return [(cxi_path, dset.shape) for cxi_path, dset in cxi_obj.items()]
+                return [(os.path.join(cxi_path, sub_path), dset.shape)
+                        for sub_path, dset in cxi_obj.items()]
             else:
                 raise ValueError(f"Invalid CXI object at '{cxi_path:s}'")
+
         return None
 
-    def read_cxi(self, attr, cxi_file, idxs):
+    def read_cxi(self, attr, cxi_file, cxi_path=None):
         """Read `attr` from the CXI file `cxi_file` at the path
-        defined by the protocol. If `cxi_path` or `dtype` argument
-        are provided, it will override the protocol.
+        defined by the protocol.
 
         Parameters
         ----------
@@ -220,27 +221,34 @@ class CXIProtocol(INIParser):
             Data attribute.
         cxi_file : h5py.File
             h5py File object of the CXI file.
-        cxi_path : str, optional
-            Path to the data attribute. If `cxi_path` is None,
-            the path will be inferred according to the protocol.
-        dtype : type, optional
-            Data type of the attribute. If `dtype` is None,
-            the type will be inferred according to the protocol.
 
         Returns
         -------
         numpy.ndarray or None
             The value of the attribute extracted from the CXI file.
         """
-        data = []
-        for cxi_path, _ in idxs:
-            if cxi_path in cxi_file:
-                data.append(np.atleast_1d(cxi_file[cxi_path][()]))
-        if data:
-            data = np.concatenate(data, axis=0, dtype=self.get_dtype(attr), casting='unsafe')
+        if cxi_path is None:
+            cxi_path = self.get_default_path(attr)
+        shapes = self.read_shape(cxi_file, cxi_path)
+        if shapes is None:
+            return None
+
+        data_dict = {}
+        prefix = os.path.commonprefix(list([cxi_path for cxi_path, _ in shapes]))
+        for cxi_path, _ in shapes:
+            key = os.path.relpath(cxi_path, prefix)
+            if key.isnumeric():
+                key = int(key)
+            data_dict[key] = cxi_file[cxi_path][()]
+
+        if '.' in data_dict:
+            data = np.asarray(data_dict['.'], dtype=self.get_dtype(attr))
             if data.size == 1:
                 return np.asscalar(data)
             return data
+
+        if data_dict:
+            return data_dict
 
         return None
 
@@ -280,7 +288,12 @@ class CXIProtocol(INIParser):
                 else:
                     raise ValueError('{:s} is already present in {:s}'.format(attr,
                                                                               cxi_file.filename))
-            cxi_file.create_dataset(cxi_path, data=np.asarray(data, dtype=self.get_dtype(attr)))
+            if isinstance(data, dict):
+                for key, val in data.items():
+                    cxi_file.create_dataset(os.path.join(cxi_path, str(key)), data=val,
+                                            dtype=self.get_dtype(attr))
+            else:
+                cxi_file.create_dataset(cxi_path, data=data, dtype=self.get_dtype(attr))
 
 class CXILoader(CXIProtocol):
     """CXI file loader class. Loads data from a
@@ -517,20 +530,19 @@ class CXILoader(CXIProtocol):
                     attr_dict[attr] = np.asarray(attributes[attr], dtype=self.get_dtype(attr))
                 elif self.get_policy(attr, False):
                     cxi_path = self.find_path(attr, cxi_file)
-                    if cxi_path is None:
-                        attr_dict[attr] = None
-                    else:
-                        idxs = self.read_shape(cxi_file, cxi_path)
-                        attr_dict[attr] = self.read_cxi(attr, cxi_file, idxs)
+                    attr_dict[attr] = self.read_cxi(attr, cxi_file, cxi_path)
                 else:
                     attr_dict[attr] = None
         return attr_dict
 
-    def read_data_shape(self, data_files):
-        """Retrieve the shape of the main data array from the CXI files.
+    def read_indices(self, attr, data_files):
+        """Retrieve the indices of the datasets from the CXI files for the
+        given attribute `attr`.
 
         Parameters
         ----------
+        attr : str
+            The attribute to read.
         data_files : str or list of str
             Paths to the data CXI files.
 
@@ -544,19 +556,12 @@ class CXILoader(CXIProtocol):
                 data_files = [data_files,]
         else:
             raise ValueError('data_files must be a string or a list of strings')
-        shapes = {}
-        for path in data_files:
-            with h5py.File(path, 'r') as cxi_file:
-                cxi_path = self.find_path('data', cxi_file)
-                shapes[path] = self.read_shape(cxi_file, cxi_path)
-        return shapes
-
-    def read_data_indices(self, data_files):
-        shapes = self.read_data_shape(data_files)
 
         paths, cxi_paths, indices = [], [], []
-        for path, dset_shapes in shapes.items():
-            for cxi_path, dset_shape in dset_shapes:
+        for path in data_files:
+            with h5py.File(path, 'r') as cxi_file:
+                shape = self.read_shape(cxi_file, self.find_path(attr, cxi_file))
+            for cxi_path, dset_shape in shape:
                 paths.append(np.repeat(path, dset_shape[0]))
                 cxi_paths.append(np.repeat(cxi_path, dset_shape[0]))
                 indices.append(np.arange(dset_shape[0]))
@@ -587,7 +592,7 @@ class CXILoader(CXIProtocol):
                 data.append(cxi_file[cxi_path][index])
         return np.asarray(np.stack(data, axis=0), dtype=self.get_dtype('data'))
 
-    def load_to_dict(self, data_files, master_file=None, data_indices=None, **attributes):
+    def load_to_dict(self, data_files, master_file=None, frame_indices=None, **attributes):
         """Load CXI files and return a :class:`dict` with
         all the data fetched from the files.
 
@@ -617,12 +622,15 @@ class CXILoader(CXIProtocol):
                 raise ValueError('data_files must be a string or a list of strings')
 
         data_dict.update(self.load_attributes(master_file, **attributes))
-        if data_indices is None:
-            data_indices = self.read_data_indices(data_files)
-        data_dict['data'] = self.load_data(data_indices)
+        paths, cxi_paths, indices = self.read_indices('data', data_files)
+        if frame_indices is None:
+            data_dict['data'] = self.load_data(paths, cxi_paths, indices)
+        else:
+            data_dict['data'] = self.load_data(paths[frame_indices], cxi_paths[frame_indices],
+                                               indices[frame_indices])
         return data_dict
 
-    def load(self, data_files, master_file=None, data_indices=None, **attributes):
+    def load(self, data_files, master_file=None, frame_indices=None, **attributes):
         """Load a CXI file and return an :class:`CrystData` class object.
 
         Parameters
@@ -642,4 +650,4 @@ class CXILoader(CXIProtocol):
             data.
         """
         return CrystData(self.get_protocol(), **self.load_to_dict(data_files, master_file,
-                                                                  data_indices, **attributes))
+                                                                  frame_indices, **attributes))

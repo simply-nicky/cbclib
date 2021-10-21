@@ -33,6 +33,9 @@ cdef extern from "img_proc.h":
     int filter_lines_c "filter_lines" (double *olines, double *data, unsigned long Y, unsigned long X, double *lines,
                        unsigned long n_lines, double x_c, double y_c, double radius) nogil
 
+    int generate_rot_matrix(double *rot_mats, double *angles, unsigned long n_mats, 
+                            double a0, double a1, double a2) nogil
+
 cdef enum:
     EXTEND_CONSTANT = 0
     EXTEND_NEAREST = 1

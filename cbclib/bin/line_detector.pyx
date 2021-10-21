@@ -176,6 +176,7 @@ cdef class LSD:
         cdef int _X = <int>image.shape[ndim - 1]
         cdef int _Y = <int>image.shape[ndim - 2]
         cdef int repeats = image.size / _X / _Y
+        cdef np.ndarray streaks
 
         cdef double **_outs = <double **>malloc(repeats * sizeof(double *))
         if _outs is NULL:
@@ -224,10 +225,11 @@ cdef class LSD:
 
         if fail:
             raise RuntimeError("LSD execution finished with an error")
-        
+
         for i in range(repeats):
             out_dims[0] = _ns[i]
-            line_dict[i] = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+            streaks = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+            line_dict[i] = np.PyArray_Compress(streaks, streaks[:, 0], 0, <np.ndarray>NULL)
 
         out_dict['lines'] = line_dict
 
@@ -279,6 +281,7 @@ cdef class LSD:
         cdef int _X = <int>image.shape[ndim - 1]
         cdef int _Y = <int>image.shape[ndim - 2]
 
+        cdef np.ndarray streaks
         cdef np.ndarray mask = np.PyArray_ZEROS(ndim, image.shape, np.NPY_UINT32, 0)
         cdef unsigned int *msk_ptr = <unsigned int *>np.PyArray_DATA(mask)
         cdef int repeats = image.size / _X / _Y
@@ -323,7 +326,8 @@ cdef class LSD:
         if return_lines:
             for i in range(repeats):
                 out_dims[0] = _ns[i]
-                line_dict[i] = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+                streaks = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+                line_dict[i] = np.PyArray_Compress(streaks, streaks[:, 0], 0, <np.ndarray>NULL)
 
             out_dict['lines'] = line_dict
         else:

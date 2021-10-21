@@ -179,6 +179,7 @@ cdef class LSD:
         cdef int _X = <int>image.shape[ndim - 1]
         cdef int _Y = <int>image.shape[ndim - 2]
         cdef int repeats = image.size / _X / _Y
+        cdef np.ndarray streaks
 
         cdef double **_outs = <double **>malloc(repeats * sizeof(double *))
         if _outs is NULL:
@@ -227,10 +228,11 @@ cdef class LSD:
 
         if fail:
             raise RuntimeError("LSD execution finished with an error")
-        
+
         for i in range(repeats):
             out_dims[0] = _ns[i]
-            line_dict[i] = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+            streaks = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+            line_dict[i] = np.PyArray_Compress(streaks, streaks[:, 0], 0, <np.ndarray>NULL)
 
         out_dict['lines'] = line_dict
 
@@ -282,6 +284,7 @@ cdef class LSD:
         cdef int _X = <int>image.shape[ndim - 1]
         cdef int _Y = <int>image.shape[ndim - 2]
 
+        cdef np.ndarray streaks
         cdef np.ndarray mask = np.PyArray_ZEROS(ndim, image.shape, np.NPY_UINT32, 0)
         cdef unsigned int *msk_ptr = <unsigned int *>np.PyArray_DATA(mask)
         cdef int repeats = image.size / _X / _Y
@@ -326,7 +329,8 @@ cdef class LSD:
         if return_lines:
             for i in range(repeats):
                 out_dims[0] = _ns[i]
-                line_dict[i] = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+                streaks = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT64)
+                line_dict[i] = np.PyArray_Compress(streaks, streaks[:, 0], 0, <np.ndarray>NULL)
 
             out_dict['lines'] = line_dict
         else:
@@ -643,23 +647,23 @@ def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, d
         raise RuntimeError('C backend exited with error.')    
     return image
 
-def pair_streaks(frame: np.ndarray, lines: np.ndarray, x_c: cython.double, y_c: cython.double, radius: cython.double) -> np.ndarray:
-    frame = check_array(frame, np.NPY_FLOAT64)
-    lines = check_array(lines, np.NPY_FLOAT64)
+def tilt_matrix(tilts: np.ndarray, axis: object) -> np.ndarray:
+    cdef np.ndarray _axis = normalize_sequence(axis, 3, np.NPY_FLOAT64)
 
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(lines.ndim, lines.shape, np.NPY_FLOAT64)
-    cdef double *_olines = <double *>np.PyArray_DATA(out)
-    cdef double *_lines = <double *>np.PyArray_DATA(lines)
-    cdef double *_frame = <double *>np.PyArray_DATA(frame)
-    cdef unsigned long _n_lines = lines.shape[0]
-    cdef unsigned long _Y = frame.shape[0]
-    cdef unsigned long _X = frame.shape[1]
-    cdef int fail
+    cdef np.npy_intp *rmdims = [tilts.shape[0], 3, 3]
+    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
 
+    cdef double *t_ptr = <double *>np.PyArray_DATA(tilts)
+    cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
+    cdef unsigned long n_mats = tilts.shape[0]
+    cdef double a0 = _axis[0], a1 = _axis[1], a2 = _axis[2]
+
+    cdef int fail = 0
     with nogil:
-        fail = filter_lines_c(_olines, _frame, _Y, _X, _lines, _n_lines, x_c, y_c, radius)
-
-    return out
+        fail = generate_rot_matrix(rm_ptr, t_ptr, n_mats, a0, a1, a2)
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+    return rot_mats
 
 def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray, good_frames: np.ndarray, 
                         num_threads: cython.uint=1) -> np.ndarray:
@@ -673,6 +677,7 @@ def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarr
     cdef int i, j, idx
     cdef int repeats = good_frames.size
     cdef int frame_size = data.size / data.shape[0]
+    cdef double val
 
     cdef double *out_ptr = <double *>np.PyArray_DATA(out)
     cdef unsigned int *data_ptr = <unsigned int *>np.PyArray_DATA(data)
@@ -685,7 +690,7 @@ def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarr
         for j in range(frame_size):
             idx = idx_ptr[i] * frame_size + j
             if mask_ptr[idx]:
-                out_ptr[idx] = <double>data_ptr[idx] - wf_ptr[j]
-                out_ptr[idx] = out_ptr[idx] if out_ptr[idx] > 0.0 else 0.0
+                val = <double>data_ptr[idx] - wf_ptr[j]
+                out_ptr[idx] = val if val > 0.0 else 0.0
 
     return out
