@@ -2,6 +2,7 @@
 cimport numpy as np
 import numpy as np
 import cython
+from math import ceil
 from libc.stdlib cimport free, malloc, calloc
 from libc.string cimport memcmp
 from cpython.ref cimport Py_INCREF
@@ -14,6 +15,7 @@ np.import_array()
 DEF N_BINS = 1024
 DEF LINE_SIZE = 7
 DEF NOT_DEF = -1.0
+DEF STACKSIZE = 1000000000 # If the input array is larger, you'll get an overflow segfault
 
 cdef class ArrayWrapper:
     """A wrapper class for a C data structure. """
@@ -393,206 +395,6 @@ cdef np.ndarray normalize_sequence(object inp, np.npy_intp rank, int type_num):
         raise ValueError("Sequence argument must have length equal to input rank")
     return arr
 
-def median_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
-                  mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
-    """Calculate a multidimensional median filter.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        Intensity frames.
-    size : scalar or tuple, optional
-        See footprint, below. Ignored if footprint is given.
-    footprint : numpy.ndarray, optional
-        Either size or footprint must be defined. size gives the shape that is taken from the
-        input array, at every element position, to define the input to the filter function.
-        footprint is a boolean array that specifies (implicitly) a shape, but also which of
-        the elements within this shape will get passed to the filter function. Thus size=(n,m)
-        is equivalent to footprint=np.ones((n,m)). We adjust size to the number of dimensions
-        of the input array, so that, if the input array is shape (10,10,10), and size is 2,
-        then the actual size used is (2,2,2). When footprint is given, size is ignored.
-    mode : {'constant', 'nearest', 'mirror', 'reflect', 'wrap'}, optional
-        The mode parameter determines how the input array is extended when the filter
-        overlaps a border. Default value is 'reflect'. The valid values and their behavior
-        is as follows:
-
-        * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
-          values beyond the edge with the same constant value, defined by the `cval`
-          parameter.
-        * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
-          the last pixel.
-        * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
-          about the center of the last pixel. This mode is also sometimes referred to as
-          whole-sample symmetric.
-        * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
-          about the edge of the last pixel. This mode is also sometimes referred to as
-          half-sample symmetric.
-        * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-          to the opposite edge.
-    cval : float, optional
-        Value to fill past edges of input if mode is ‘constant’. Default is 0.0.
-    num_threads : int, optional
-        Number of threads.
-
-    Returns
-    -------
-    wfield : numpy.ndarray
-        Whitefield.
-    """
-    if not np.PyArray_IS_C_CONTIGUOUS(data):
-        data = np.PyArray_GETCONTIGUOUS(data)
-
-    cdef int ndim = data.ndim
-    cdef np.npy_intp *dims = data.shape
-
-    if mask is None:
-        mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
-        np.PyArray_FILLWBYTE(mask, 1)
-    else:
-        mask = check_array(mask, np.NPY_BOOL)
-
-    if size is None and footprint is None:
-        raise ValueError('size or footprint must be provided.')
-
-    cdef unsigned long *_fsize
-    cdef np.ndarray fsize
-    if size is None:
-        _fsize = <unsigned long *>footprint.shape
-    else:
-        fsize = normalize_sequence(size, ndim, np.NPY_INTP)
-        _fsize = <unsigned long *>np.PyArray_DATA(fsize)
-
-    if footprint is None:
-        footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
-        np.PyArray_FILLWBYTE(footprint, 1)
-    cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
-
-    cdef unsigned long *_dims = <unsigned long *>dims
-    cdef int type_num = np.PyArray_TYPE(data)
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
-    cdef void *_out = <void *>np.PyArray_DATA(out)
-    cdef void *_data = <void *>np.PyArray_DATA(data)
-    cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
-    cdef int _mode = extend_mode_to_code(mode)
-    cdef void *_cval = <void *>&cval
-    cdef int fail
-
-    with nogil:
-        if type_num == np.NPY_FLOAT64:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
-        elif type_num == np.NPY_FLOAT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
-        elif type_num == np.NPY_INT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
-        elif type_num == np.NPY_UINT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
-        else:
-            raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
-
-    if fail:
-        raise RuntimeError('C backend exited with error.')
-    return out
-
-def maximum_filter(data: np.ndarray, size: object=None, footprint: np.ndarray=None, mask: np.ndarray=None,
-                   mode: str='reflect', cval: cython.double=0., num_threads: cython.uint=1) -> np.ndarray:
-    """Calculate a multidimensional maximum filter.
-
-    Parameters
-    ----------
-    data : numpy.ndarray
-        Intensity frames.
-    size : scalar or tuple, optional
-        See footprint, below. Ignored if footprint is given.
-    footprint : numpy.ndarray, optional
-        Either size or footprint must be defined. size gives the shape that is taken from the
-        input array, at every element position, to define the input to the filter function.
-        footprint is a boolean array that specifies (implicitly) a shape, but also which of
-        the elements within this shape will get passed to the filter function. Thus size=(n,m)
-        is equivalent to footprint=np.ones((n,m)). We adjust size to the number of dimensions
-        of the input array, so that, if the input array is shape (10,10,10), and size is 2,
-        then the actual size used is (2,2,2). When footprint is given, size is ignored.
-    mode : {'constant', 'nearest', 'mirror', 'reflect', 'wrap'}, optional
-        The mode parameter determines how the input array is extended when the filter
-        overlaps a border. Default value is 'reflect'. The valid values and their behavior
-        is as follows:
-
-        * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
-          values beyond the edge with the same constant value, defined by the `cval`
-          parameter.
-        * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
-          the last pixel.
-        * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
-          about the center of the last pixel. This mode is also sometimes referred to as
-          whole-sample symmetric.
-        * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
-          about the edge of the last pixel. This mode is also sometimes referred to as
-          half-sample symmetric.
-        * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-          to the opposite edge.
-    cval : float, optional
-        Value to fill past edges of input if mode is ‘constant’. Default is 0.0.
-    num_threads : int, optional
-        Number of threads.
-
-    Returns
-    -------
-    wfield : numpy.ndarray
-        Whitefield.
-    """
-    if not np.PyArray_IS_C_CONTIGUOUS(data):
-        data = np.PyArray_GETCONTIGUOUS(data)
-
-    cdef int ndim = data.ndim
-    cdef np.npy_intp *dims = data.shape
-
-    if mask is None:
-        mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
-        np.PyArray_FILLWBYTE(mask, 1)
-    else:
-        mask = check_array(mask, np.NPY_BOOL)
-
-    if size is None and footprint is None:
-        raise ValueError('size or footprint must be provided.')
-
-    cdef unsigned long *_fsize
-    cdef np.ndarray fsize
-    if size is None:
-        _fsize = <unsigned long *>footprint.shape
-    else:
-        fsize = normalize_sequence(size, ndim, np.NPY_INTP)
-        _fsize = <unsigned long *>np.PyArray_DATA(fsize)
-
-    if footprint is None:
-        footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
-        np.PyArray_FILLWBYTE(footprint, 1)
-    cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
-
-    cdef unsigned long *_dims = <unsigned long *>dims
-    cdef int type_num = np.PyArray_TYPE(data)
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
-    cdef void *_out = <void *>np.PyArray_DATA(out)
-    cdef void *_data = <void *>np.PyArray_DATA(data)
-    cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
-    cdef int _mode = extend_mode_to_code(mode)
-    cdef void *_cval = <void *>&cval
-    cdef int fail
-
-    with nogil:
-        if type_num == np.NPY_FLOAT64:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
-        elif type_num == np.NPY_FLOAT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
-        elif type_num == np.NPY_INT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
-        elif type_num == np.NPY_UINT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
-        else:
-            raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
-
-    if fail:
-        raise RuntimeError('C backend exited with error.')
-    return out
-
 def draw_lines(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255, dilation: cython.uint=0) -> np.ndarray:
     """Draw thick lines with variable thickness. The lines must follow
     the LSD convention, see the parameters for more info.
@@ -666,31 +468,43 @@ def tilt_matrix(tilts: np.ndarray, axis: object) -> np.ndarray:
     return rot_mats
 
 def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray, good_frames: np.ndarray, 
-                        num_threads: cython.uint=1) -> np.ndarray:
+                        num_threads: cython.uint=1, out: np.ndarray=None) -> np.ndarray:
     data = check_array(data, np.NPY_UINT32)
     mask = check_array(mask, np.NPY_BOOL)
-    whitefield = check_array(whitefield, np.NPY_FLOAT64)
+    whitefield = check_array(whitefield, np.NPY_FLOAT32)
     good_frames = check_array(good_frames, np.NPY_UINT32)
 
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(data.ndim, data.shape, np.NPY_FLOAT64, 0)
+    cdef int i, ii, j, k
+    cdef float res, w0, w1
 
-    cdef int i, j, idx
-    cdef int repeats = good_frames.size
-    cdef int frame_size = data.size / data.shape[0]
-    cdef double val
+    if out is None:
+        out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
+    else:
+        out = check_array(out, np.NPY_FLOAT32)
 
-    cdef double *out_ptr = <double *>np.PyArray_DATA(out)
-    cdef unsigned int *data_ptr = <unsigned int *>np.PyArray_DATA(data)
-    cdef unsigned char *mask_ptr = <unsigned char *>np.PyArray_DATA(mask)
-    cdef double *wf_ptr = <double *>np.PyArray_DATA(whitefield)
-    cdef unsigned int *idx_ptr = <unsigned int *>np.PyArray_DATA(good_frames)
+    cdef np.uint32_t[:, :, ::1] _data = data
+    cdef np.npy_bool[:, :, ::1] _mask = mask
+    cdef np.float32_t[:, ::1] _whitefield = whitefield
+    cdef np.uint32_t[::1] _good_frames = good_frames
+    cdef np.float32_t[:, :, ::1] _out = out
 
-    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
-    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(frame_size):
-            idx = idx_ptr[i] * frame_size + j
-            if mask_ptr[idx]:
-                val = <double>data_ptr[idx] - wf_ptr[j]
-                out_ptr[idx] = val if val > 0.0 else 0.0
+    cdef int n_frames = good_frames.size
+    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
+    for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
+        ii = _good_frames[i]
+        w0 = 0.0; w1 = 0.0
+        for j in range(_data.shape[1]):
+            for k in range(_data.shape[2]):
+                if _mask[ii, j, k]:
+                    w0 = w0 + <float>_data[ii, j, k] * _whitefield[j, k]
+                    w1 = w1 + _whitefield[j, k] * _whitefield[j, k]
+        w0 = w0 / w1 if w1 > 0.0 else 1.0
+        for j in range(_data.shape[1]):
+            for k in range(_data.shape[2]):
+                if _mask[ii, j, k]:
+                    res = <float>_data[ii, j, k] - w0 * _whitefield[j, k]
+                    _out[ii, j, k] = res if res > 0.0 else 0.0
+                else:
+                    _out[ii, j, k] = 0.0
 
     return out

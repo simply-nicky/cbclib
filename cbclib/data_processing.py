@@ -4,9 +4,10 @@ from .data_container import DataContainer, dict_to_object
 from .bin import subtract_background, median, median_filter, LSD, maximum_filter
 
 class CrystData(DataContainer):
-    attr_set = {'data', 'tilts', 'translations'}
+    attr_set = {'frames', 'data'}
     init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads',
-                'pupil', 'roi', 'streak_data', 'streaks', 'whitefield'}
+                'pupil', 'roi', 'streak_data', 'streaks', 'tilts', 'translations',
+                'whitefield'}
 
     def __init__(self, protocol, **kwargs):
         # Initialize protocol for the proper data type conversion in __setattr__
@@ -22,22 +23,30 @@ class CrystData(DataContainer):
         self._init_dict()
 
     def _init_dict(self):
+        # Filter tilts, translations, and streaks
+        if self.tilts is not None and len(self.tilts) != self.frames.size:
+            self.tilts = {frame: self.tilts[frame] for frame in self.frames}
+        if self.translations is not None and len(self.translations) != self.frames.size:
+            self.translations = {frame: self.translations[frame] for frame in self.frames}
+        if self.streaks is not None and len(self.streaks) != self.frames.size:
+            self.streaks = {frame: self.streaks[frame] for frame in self.frames}
+
         # Set number of threads, num_threads is not a part of the protocol
         if self.num_threads is None:
             self.num_threads = np.clip(1, 64, cpu_count())
+
         # Set ROI, good frames array, mask, and whitefield
         if self.roi is None:
             self.roi = np.array([0, self.data.shape[1], 0, self.data.shape[2]])
         if self.good_frames is None:
-            self.good_frames = np.arange(self.data.shape[0])
+            self.good_frames = np.arange(self.frames.size)
         if self.mask is None:
             self.mask = np.ones(self.data.shape, dtype=self.protocol.get_dtype('mask'))
-        if self.mask.shape == self.data.shape[1:]:
-            self.mask = np.tile(self.mask[None, :], (self.data.shape[0], 1, 1))
+        if self.mask.shape[1:] == self.data.shape[1:] and self.mask.shape[0] == 1:
+            self.mask = np.tile(self.mask, (self.frames.size, 1, 1))
 
         if self._iswhitefield and self.cor_data is None:
-            self.cor_data = subtract_background(self.data, self.mask, self.whitefield,
-                                                self.good_frames, self.num_threads)
+            self.update_cor_data.inplace_update()
 
         if not self.pupil is None:
             self.mask_region.inplace_update(self.pupil)
@@ -84,13 +93,21 @@ class CrystData(DataContainer):
         CrystData
             New :class:`CrystData` object with binned `data`.
         """
-        data = self.data[:, ::bin_ratio, ::bin_ratio]
-        mask = self.mask[:, ::bin_ratio, ::bin_ratio]
-        data_dict = {'data': data, 'mask': mask, 'roi': self.roi // bin_ratio}
+        data_dict = {'data': self.data[:, ::bin_ratio, ::bin_ratio],
+                     'mask': self.mask[:, ::bin_ratio, ::bin_ratio]}
+        data_dict['roi'] = None if self.roi is None else self.roi // bin_ratio
+        data_dict['pupil'] = None if self.pupil is None else self.pupil // bin_ratio
 
         if self._iswhitefield:
             data_dict['whitefield'] = self.whitefield[::bin_ratio, ::bin_ratio]
             data_dict['cor_data'] = self.cor_data[:, ::bin_ratio, ::bin_ratio]
+
+        if self.streak_data is not None:
+            data_dict['streaks'] = {frame: lines / bin_ratio
+                                    for frame, lines in self.streaks.items()}
+
+        if self.streak_data is not None:
+            data_dict['streak_data'] = self.streak_data[:, ::bin_ratio, ::bin_ratio]
 
         return data_dict
 
@@ -129,12 +146,12 @@ class CrystData(DataContainer):
         """
         if attr in self:
             val = super(CrystData, self).get(attr)
-            if not val is None:
-                if attr in ['cor_data', 'data', 'flatfields', 'mask', 'whitefield']:
-                    val = np.ascontiguousarray(val[..., self.roi[0]:self.roi[1],
-                                                        self.roi[2]:self.roi[3]])
-                if attr in ['cor_data', 'data', 'flatfields', 'mask']:
-                    val = np.ascontiguousarray(val[self.good_frames])
+            if val is not None:
+                if attr in ['cor_data', 'data', 'flatfields', 'mask', 'streak_data',
+                            'whitefield']:
+                    val = val[..., self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]]
+                if self.protocol.get_is_data(attr):
+                    val = val[self.good_frames]
             return val
         return value
 
@@ -265,6 +282,20 @@ class CrystData(DataContainer):
         return {'whitefield': whitefield, 'cor_data': None}
 
     @dict_to_object
+    def update_cor_data(self):
+        if self._iswhitefield:
+            cor_data = np.zeros(self.data.shape, dtype=self.protocol.get_dtype('cor_data'))
+            good_cdata = subtract_background(data=self.get('data'), mask=self.get('mask'),
+                                             whitefield=self.get('whitefield'),
+                                             flatfields=self.get('flatfields'),
+                                             num_threads=self.num_threads)
+            cor_data[self.good_frames, self.roi[0]:self.roi[1],
+                     self.roi[2]:self.roi[3]] = good_cdata
+            return {'cor_data': cor_data}
+
+        raise AttributeError("No whitefield in the container")
+
+    @dict_to_object
     def update_flatfields(self, method='median', size=11, effs=None):
         """Return a new :class:`CrystData` object with new
         flatfields. The flatfields are generated by the dint of
@@ -312,23 +343,30 @@ class CrystData(DataContainer):
         --------
         CrystData.get_pca : Method to generate Eigen Flatfields.
         """
-        if method not in ['median', 'pca']:
-            raise ValueError('invalid method argument')
+        if self._iswhitefield:
+            good_wf = self.get('whitefield')
 
-        if method == 'median':
-            good_flats = median_filter(self.get('data'), size, num_threads=self.num_threads)
-        elif method == 'pca':
-            if not self._iswhitefield:
-                raise AttributeError('No whitefield in the data container')
-            if effs is None:
-                raise ValueError('No eigen flat fields were provided')
+            if method == 'median':
+                good_data = self.get('data')
+                outliers = np.abs(good_data - good_wf) < 3 * np.sqrt(good_wf)
+                good_flats = median_filter(good_data, size=(size, 1, 1), mask=outliers,
+                                        num_threads=self.num_threads)
+            elif method == 'pca':
+                if effs is None:
+                    raise ValueError('No eigen flat fields were provided')
 
-            weights = np.tensordot(self.get('cor_data'), effs, axes=((1, 2), (1, 2))) / np.sum(effs * effs, axis=(1, 2))
-            good_flats = np.tensordot(weights, effs, axes=((1,), (0,))) + self.get('whitefield')
+                weights = np.tensordot(self.get('cor_data'), effs, axes=((1, 2), (1, 2))) / \
+                        np.sum(effs * effs, axis=(1, 2))
+                good_flats = np.tensordot(weights, effs, axes=((1,), (0,))) + good_wf
+            else:
+                raise ValueError('Invalid method argument')
 
-        flatfields = np.zeros(self.data.shape, dtype=self.protocol.get_dtype('flatfields'))
-        flatfields[self.good_frames, self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = good_flats
-        return {'flatfields': flatfields}
+            flatfields = np.zeros(self.data.shape, dtype=self.protocol.get_dtype('flatfields'))
+            flatfields[self.good_frames, self.roi[0]:self.roi[1],
+                       self.roi[2]:self.roi[3]] = good_flats
+            return {'flatfields': flatfields, 'cor_data': None}
+
+        raise AttributeError('No whitefield in the data container')
 
     @dict_to_object
     def update_mask(self, method='perc-bad', pmin=0.01, pmax=99.99, vmin=0, vmax=65535,
@@ -398,7 +436,7 @@ class CrystData(DataContainer):
         return {'mask': mask_full}
 
     @dict_to_object
-    def update_whitefield(self):
+    def update_whitefield(self, method='median'):
         """Return a new :class:`CrystData` object with new
         whitefield as the median taken through the stack of
         measured frames.
@@ -408,32 +446,39 @@ class CrystData(DataContainer):
         CrystData
             New :class:`CrystData` object with the updated `whitefield`.
         """
-        good_wf = median(data=self.get('data'), mask=self.get('mask'), axis=0,
-                         num_threads=self.num_threads)
+        if method == 'median':
+            good_wf = median(data=self.get('data'), mask=self.get('mask'), axis=0,
+                            num_threads=self.num_threads)
+        elif method == 'mean':
+            good_wf = np.mean(self.get('data') * self.get('mask'), axis=0)
+        else:
+            raise ValueError('Invalid method argument')
+
         whitefield = np.zeros(self.data.shape[1:], dtype=self.protocol.get_dtype('whitefield'))
         whitefield[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = good_wf
         return {'whitefield': whitefield, 'cor_data': None}
 
     def detect_streaks(self, vmin, vmax, size=(1, 3, 3)):
-        if self.pupil is None:
-            return None
-        return StreakDetector.import_data(self, vmin, vmax, size)
+        if self.pupil is not None and self._iswhitefield:
+            return StreakDetector.import_data(self, vmin, vmax, size)
+        return None
 
     def update_streaks(self, det_obj):
         if not det_obj in self._det_objects:
             raise ValueError("The StreakDetector object doesn't belong to the data container")
 
-        self.streak_data = np.zeros(self.data.shape, dtype=np.float64)
-        self.streak_data[self.good_frames, self.roi[0]:self.roi[1],
+        self.streak_data = np.zeros(self.data.shape, dtype=self.protocol.get_dtype('streaks'))
+        self.streak_data[self.good_frames[det_obj.indices], self.roi[0]:self.roi[1],
                          self.roi[2]:self.roi[3]] = det_obj.streak_data
 
         self.streaks = {}
-        for frame_idx in det_obj.streaks:
-            self.streaks[frame_idx] = det_obj.streaks[frame_idx].copy()
-            self.streaks[frame_idx][:, :4:2] += self.roi[2]
-            self.streaks[frame_idx][:, 1:4:2] += self.roi[0]
+        for idx in det_obj.streaks:
+            frame = self.frames[self.good_frames[idx]]
+            self.streaks[frame] = det_obj.streaks[idx].copy()
+            self.streaks[frame][:, :4:2] += self.roi[2]
+            self.streaks[frame][:, 1:4:2] += self.roi[0]
 
-    def write_cxi(self, cxi_file, overwrite=True):
+    def write_cxi(self, cxi_file):
         """Write all the `attr` to a CXI file `cxi_file`.
 
         Parameters
@@ -449,12 +494,47 @@ class CrystData(DataContainer):
             If `overwrite` is False and the data is already present
             in `cxi_file`.
         """
-        for attr, data in self.items():
-            if attr in self.protocol:
-                self.protocol.write_cxi(attr, data, cxi_file, overwrite=overwrite)
+        old_frames = self.protocol.read_cxi('frames', cxi_file)
+
+        if old_frames is None:
+            for attr, data in self.items():
+                if attr in self.protocol:
+                    self.protocol.write_cxi(attr, data, cxi_file)
+
+        else:
+            frames, idxs = np.unique(np.concatenate((old_frames, self.frames)),
+                                     return_inverse=True)
+            old_idxs, new_idxs = idxs[:old_frames.size], idxs[old_frames.size:]
+
+            for attr, data in self.items():
+                if attr in self.protocol and data is not None:
+                    if attr in ['streaks', 'tilts', 'translations']:
+                        old_data = self.protocol.read_cxi(attr, cxi_file)
+                        if old_data is not None:
+                            data.update(old_data)
+
+                        self.protocol.write_cxi(attr, data, cxi_file)
+
+                    elif self.protocol.get_is_data(attr):
+                        dset = cxi_file[self.protocol.get_default_path(attr)]
+                        dset.resize((frames.size,) + self.data.shape[1:])
+
+                        if np.all(old_idxs != np.arange(old_frames.size)):
+                            old_data = self.protocol.read_cxi(attr, cxi_file)
+                            if old_data is not None:
+                                dset[old_idxs] = old_data
+
+                        dset[new_idxs] = data
+
+                    elif attr == 'frames':
+                        self.protocol.write_cxi(attr, frames, cxi_file)
+
+                    else:
+                        self.protocol.write_cxi(attr, data, cxi_file)
+
 
 class StreakDetector(DataContainer):
-    attr_set = {'center', 'data', 'num_threads', 'streak_data'}
+    attr_set = {'center', 'data', 'indices', 'num_threads', 'streak_data'}
     init_set = {'lsd_obj', 'streak_mask', 'streaks'}
     footprint = np.array([[[False, False,  True, False, False],
                            [False,  True,  True,  True, False],
@@ -472,15 +552,19 @@ class StreakDetector(DataContainer):
             self.update_lsd.inplace_update()
 
     @classmethod
-    def import_data(cls, cryst_data, vmin, vmax, size=(1, 3, 3)):
-        data = cryst_data.get('cor_data')
-        if not size is None:
+    def import_data(cls, cryst_data, vmin, vmax, idxs=None, size=(1, 3, 3)):
+        if idxs is None:
+            idxs = np.arange(cryst_data.good_frames.size)
+
+        data = cryst_data.get('cor_data')[idxs]
+        if size is not None:
             data = median_filter(data, size=size, num_threads=cryst_data.num_threads)
-        streak_data = (np.clip(data, vmin, vmax) - vmin) / (vmax - vmin)
+
+        streak_data = np.divide(np.clip(data, vmin, vmax) - vmin, vmax - vmin, dtype=np.float64)
         center = np.array([cryst_data.pupil[:2].mean() - cryst_data.roi[0],
                            cryst_data.pupil[2:].mean() - cryst_data.roi[2]])
-        return cls(cryst_data=cryst_data, center=center, data=data,
-                   streak_data=streak_data, num_threads=cryst_data.num_threads)
+        return cls(cryst_data=cryst_data, center=center, indices=idxs,
+                   data=data, streak_data=streak_data, num_threads=cryst_data.num_threads)
 
     @dict_to_object
     def update_lsd(self, scale=0.9, sigma_scale=0.9, log_eps=0.,
@@ -496,7 +580,7 @@ class StreakDetector(DataContainer):
                                      radius=radius, filter_lines=filter_lines,
                                      return_lines=True, num_threads=self.num_threads)
         return {'cryst_data': self._reference, 'streak_mask': out_dict['mask'],
-                'streaks': out_dict['lines']}
+                'streaks': {self.indices[idx]: lines for idx, lines in out_dict['lines'].items()}}
 
     @dict_to_object
     def update_streak_data(self, iterations=10):
@@ -508,5 +592,5 @@ class StreakDetector(DataContainer):
             divisor = maximum_filter(divisor, mask=self.streak_mask,
                                      footprint=self.footprint,
                                      num_threads=self.num_threads)
-        streak_data = np.where(divisor, self.data / divisor, 0)
+        streak_data = np.where(divisor, np.divide(self.data, divisor, dtype=np.float64), 0.0)
         return {'cryst_data': self._reference, 'streak_data': streak_data}

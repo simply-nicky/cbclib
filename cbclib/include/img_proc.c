@@ -108,7 +108,8 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, doub
     /* check parameters */
     if (!out || !lines) {ERROR("line_draw: one of the arguments is NULL."); return -1;}
     if (!X && !Y) {ERROR("line_draw: image size must be positive."); return -1;}
-    if (!n_lines) {ERROR("line_draw: number of lines must be positive."); return -1;}
+
+    if (n_lines == 0) return 0;
 
     size_t ldims[2] = {n_lines, 7};
     size_t odims[2] = {Y, X};
@@ -286,10 +287,11 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
     /* Check parameters */
     if (!olines|| !data || !ilines) {ERROR("filter_lines: one of the arguments is NULL."); return -1;}
     if (!X && !Y) {ERROR("filter_lines: data array must have a positive size."); return -1;}
-    if (n_lines == 0) {ERROR("filter_lines: number of lines must be positive."); return -1;}
     if (x_c <= 0 || x_c > X || y_c <= 0 || y_c > Y)
     {ERROR("filter_lines: center coordinates are out of bounds."); return -1;}
     if (radius <= 0.0) {ERROR("filter_lines: radius must be positive."); return -1;}
+    
+    if (n_lines == 0) return 0;
 
     size_t ldims[2] = {n_lines, 7};
     array ilarr = new_array(2, ldims, sizeof(double), ilines);

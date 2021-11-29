@@ -219,13 +219,37 @@ class LogProtocol(INIParser):
             Dictionary with data fields and their names retrieved
             from the log file.
         """
+        if frame_indices is not None:
+            frame_indices.sort()
+
+        row_cnt = 0
         with open(path, 'r') as log_file:
-            for line in log_file:
+            for line_idx, line in enumerate(log_file):
                 if line.startswith('# '):
-                    keys_line = line.strip('# ')
+                    if 'WARNING' not in line:
+                        keys_line = line.strip('# ')
                 else:
                     data_line = line
-                    break
+
+                    if row_cnt == 0:
+                        first_row = line_idx
+                    if frame_indices is not None and row_cnt == frame_indices[0]:
+                        skiprows = line_idx - first_row
+                    if frame_indices is not None and row_cnt == frame_indices[-1]:
+                        max_rows = line_idx - skiprows
+                        break
+
+                    row_cnt += 1
+            else:
+                if frame_indices is None:
+                    frame_indices = np.arange(row_cnt)
+                    skiprows = 0
+                    max_rows = line_idx - skiprows
+                else:
+                    frame_indices = frame_indices[:np.searchsorted(frame_indices, row_cnt)]
+                    if not frame_indices.size:
+                        skiprows = line_idx
+                    max_rows = line_idx - skiprows
 
         keys = keys_line.strip('\n').split(';')
         data_strings = data_line.strip('\n').split(';')
@@ -251,16 +275,13 @@ class LogProtocol(INIParser):
             else:
                 dtypes['formats'].append('<S' + str(len(val)))
                 converters[idx] = lambda item: item.strip(b' []')
-        if frame_indices is None:
-            return dict(zip(keys, np.loadtxt(path, delimiter=';',
-                                             converters=converters,
-                                             dtype=dtypes, unpack=True)))
-        skiprows = np.min(frame_indices)
-        max_rows = np.max(frame_indices - skiprows)
+
         data_tuple = np.loadtxt(path, delimiter=';', converters=converters,
                                 dtype=dtypes, unpack=True, skiprows=skiprows,
                                 max_rows=max_rows + 1)
-        return {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
+        data_dict = {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
+        data_dict['indices'] = frame_indices
+        return data_dict
 
 def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
     cxi_loader = CXILoader()
@@ -280,7 +301,7 @@ def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
     log_attrs = log_prt.load_attributes(log_path)
     log_data = log_prt.load_data(log_path, frame_indices)
 
-    data_dict = cxi_loader.load_to_dict(h5_files, h5_master, frame_indices, **attributes)
+    data_dict = cxi_loader.load_to_dict(h5_files, h5_master, log_data['indices'], **attributes)
 
     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
@@ -302,5 +323,10 @@ def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
         for log_key in log_prt.log_keys['r_sample']:
             if log_key in data_key:
                 data_dict['tilts'] = log_dset
+
+    data_dict['tilts'] = {data_dict['frames'][idx]: val
+                          for idx, val in enumerate(data_dict['tilts'])}
+    data_dict['translations'] = {data_dict['frames'][idx]: val
+                                 for idx, val in enumerate(data_dict['translations'])}
 
     return CrystData(protocol=CXIProtocol(), **data_dict)

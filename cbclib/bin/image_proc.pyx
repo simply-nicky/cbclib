@@ -661,32 +661,65 @@ def draw_lines_aa(image: np.ndarray, lines: np.ndarray, max_val: cython.uint=255
         raise RuntimeError('C backend exited with error.')    
     return image
 
-def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray, good_frames: np.ndarray, 
-                        num_threads: cython.uint=1) -> np.ndarray:
+def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray,
+                        flatfields: np.ndarray=None, num_threads: cython.uint=1,
+                        out: np.ndarray=None) -> np.ndarray:
     data = check_array(data, np.NPY_UINT32)
     mask = check_array(mask, np.NPY_BOOL)
-    whitefield = check_array(whitefield, np.NPY_FLOAT64)
-    good_frames = check_array(good_frames, np.NPY_UINT32)
+    whitefield = check_array(whitefield, np.NPY_FLOAT32)
 
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(data.ndim, data.shape, np.NPY_FLOAT64, 0)
+    cdef int i, j, k
+    cdef float res, w0, w1
 
-    cdef int i, j, idx
-    cdef int repeats = good_frames.size
-    cdef int frame_size = data.size / data.shape[0]
-    cdef double val
+    if out is None:
+        out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
+    else:
+        out = check_array(out, np.NPY_FLOAT32)
 
-    cdef double *out_ptr = <double *>np.PyArray_DATA(out)
-    cdef unsigned int *data_ptr = <unsigned int *>np.PyArray_DATA(data)
-    cdef unsigned char *mask_ptr = <unsigned char *>np.PyArray_DATA(mask)
-    cdef double *wf_ptr = <double *>np.PyArray_DATA(whitefield)
-    cdef unsigned int *idx_ptr = <unsigned int *>np.PyArray_DATA(good_frames)
+    cdef np.uint32_t[:, :, ::1] _data = data
+    cdef np.npy_bool[:, :, ::1] _mask = mask
+    cdef np.float32_t[:, ::1] _whitefield = whitefield
+    cdef np.float32_t[:, :, ::1] _out = out
+    cdef np.uint32_t[:, :, ::1] _flatfields
 
-    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
-    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(frame_size):
-            idx = idx_ptr[i] * frame_size + j
-            if mask_ptr[idx]:
-                val = <double>data_ptr[idx] - wf_ptr[j]
-                out_ptr[idx] = val if val > 0.0 else 0.0
+    cdef int n_frames = _data.shape[0]
+    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
+
+    if flatfields is None:
+        for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
+            w0 = 0.0; w1 = 0.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    if _mask[i, j, k]:
+                        w0 = w0 + <float>_data[i, j, k] * _whitefield[j, k]
+                        w1 = w1 + _whitefield[j, k] * _whitefield[j, k]
+            w0 = w0 / w1 if w1 > 0.0 else 1.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    if _mask[i, j, k]:
+                        res = <float>_data[i, j, k] - w0 * _whitefield[j, k]
+                        _out[i, j, k] = res if res > 0.0 else 0.0
+                    else:
+                        _out[i, j, k] = 0.0
+
+    else:
+        flatfields = check_array(flatfields, np.NPY_UINT32)
+        _flatfields = flatfields
+
+        for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
+            w0 = 0.0; w1 = 0.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    if _mask[i, j, k]:
+                        w0 = w0 + <float>_data[i, j, k] * <float>_flatfields[i, j, k]
+                        w1 = w1 + <float>_flatfields[i, j, k] * <float>_flatfields[i, j, k]
+            w0 = w0 / w1 if w1 > 0.0 else 1.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    if _mask[i, j, k]:
+                        res = <float>_data[i, j, k] - w0 * <float>_flatfields[i, j, k]
+                        _out[i, j, k] = res if res > 0.0 else 0.0
+                    else:
+                        _out[i, j, k] = 0.0
 
     return out
