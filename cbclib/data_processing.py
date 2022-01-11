@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
-from multiprocessing import cpu_count
+from multiprocessing import cpu_count, Pool
 from tqdm.auto import tqdm
 import h5py
 import numpy as np
@@ -209,7 +209,7 @@ class CXILoader(CXIProtocol):
                     attr_dict[attr] = self.read_cxi(attr, cxi_file, cxi_path)
         return attr_dict
 
-    def read_indices(self, attr: str, data_files: Union[str, List[str]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def read_indices(self, attr: str, data_files: Union[str, List[str]]) -> np.ndarray:
         """Retrieve the indices of the datasets from the CXI files for the
         given attribute `attr`.
 
@@ -236,26 +236,24 @@ class CXILoader(CXIProtocol):
             if shapes:
                 for cxi_path, dset_shape in shapes:
                     if len(dset_shape) == 3:
-                        paths.append(np.repeat(path, dset_shape[0]))
-                        cxi_paths.append(np.repeat(cxi_path, dset_shape[0]))
-                        indices.append(np.arange(dset_shape[0]))
+                        paths.extend(np.repeat(path, dset_shape[0]).tolist())
+                        cxi_paths.extend(np.repeat(cxi_path, dset_shape[0]).tolist())
+                        indices.extend(np.arange(dset_shape[0]).tolist())
                     elif len(dset_shape) == 2:
-                        paths.append(np.atleast_1d(path))
-                        cxi_paths.append(np.atleast_1d(cxi_path))
-                        indices.append(np.atleast_1d(slice(None)))
+                        paths.append(path)
+                        cxi_paths.append(cxi_path)
+                        indices.append(slice(None))
                     else:
                         raise ValueError(f'{attr:s} dataset must be 2- or 3-dimensional: {str(dset_shape):s}')
 
-        if len(paths) == 0:
-            return np.array([]), np.array([]), np.array([])
-        elif len(paths) == 1:
-            return paths[0], cxi_paths[0], indices[0]
-        else:
-            return (np.concatenate(paths), np.concatenate(cxi_paths),
-                    np.concatenate(indices))
+        return np.array([paths, cxi_paths, indices], dtype=object).T
 
-    def load_data(self, attr: str, paths: np.ndarray, cxi_paths: np.ndarray, indices: np.ndarray,
-                  verbose: bool=True) -> np.ndarray:
+    @staticmethod
+    def _read_frame(index):
+        with h5py.File(index[0], 'r') as cxi_file:
+            return cxi_file[index[1]][index[2]]
+
+    def load_data(self, attr: str, indices: np.ndarray, verbose: bool=True, processes: int=1) -> np.ndarray:
         """Retrieve the data for the given attribute `attr` from the
         CXI files. Uses the result from :func:`CXILoader.read_indices`
         method.
@@ -270,12 +268,12 @@ class CXILoader(CXIProtocol):
         Returns:
             Data array retrieved from the CXI files.
         """
+
         data = []
-        for path, cxi_path, index in tqdm(zip(paths, cxi_paths, indices),
-                                          disable=not verbose, total=paths.size,
-                                          desc=f'Loading {attr:s}'):
-            with h5py.File(path, 'r') as cxi_file:
-                data.append(cxi_file[cxi_path][index])
+        with Pool(processes=processes) as pool:
+            for frame in tqdm(pool.imap(CXILoader._read_frame, indices), total=indices.shape[0],
+                              desc=f'Loading {attr:s}', disable=not verbose):
+                data.append(frame)
 
         if len(data) == 1:
             data = data[0]
@@ -285,7 +283,7 @@ class CXILoader(CXIProtocol):
 
     def load_to_dict(self, data_files: Union[str, List[str]],
                      master_file: Optional[str]=None,
-                     frame_indices: Optional[Iterable[int]]=None,
+                     frame_indices: Optional[Iterable[int]]=None, processes: int=1,
                      **attributes: Any) -> Dict[str, Any]:
         """Load data from the CXI files and return a :class:`dict` with
         all the data fetched from the `data_files` and `master_file`.
@@ -316,7 +314,7 @@ class CXILoader(CXIProtocol):
             n_frames = 0
             for attr in self:
                 if self.get_is_data(attr) and self.get_policy(attr):
-                    n_frames = max(self.read_indices(attr, data_files)[0].size, n_frames)
+                    n_frames = max(self.read_indices(attr, data_files).shape[0], n_frames)
             frame_indices = np.arange(n_frames)
         else:
             frame_indices = np.asarray(frame_indices)
@@ -324,12 +322,11 @@ class CXILoader(CXIProtocol):
         if frame_indices.size:
             for attr in self:
                 if self.get_is_data(attr) and self.get_policy(attr):
-                    paths, cxi_paths, indices = self.read_indices(attr, data_files)
-                    if paths.size > 0:
-                        good_frames = frame_indices[frame_indices < paths.size]
-                        data_dict[attr] = self.load_data(attr, paths[good_frames],
-                                                         cxi_paths[good_frames],
-                                                         indices[good_frames])
+                    indices = self.read_indices(attr, data_files)
+                    if indices.shape[0] > 0:
+                        good_frames = frame_indices[frame_indices < indices.shape[0]]
+                        data_dict[attr] = self.load_data(attr, indices[good_frames],
+                                                         processes=processes)
 
         if 'frames' not in data_dict:
             data_dict['frames'] = frame_indices
@@ -349,7 +346,8 @@ class CXILoader(CXIProtocol):
         return data_dict
 
     def load(self, data_files: str, master_file: Optional[str]=None,
-             frame_indices: Optional[Iterable[str]]=None, **attributes: Any) -> CrystData:
+             frame_indices: Optional[Iterable[str]]=None, processes: int=1,
+             **attributes: Any) -> CrystData:
         """Load data from the CXI files and return a :class:`STData` container
         with all the data fetched from the `data_files` and `master_file`.
 
@@ -367,7 +365,8 @@ class CXILoader(CXIProtocol):
             data processing.
         """
         return CrystData(self.get_protocol(), **self.load_to_dict(data_files, master_file,
-                                                                  frame_indices, **attributes))
+                                                                  frame_indices, processes,
+                                                                  **attributes))
 
 class CrystData(DataContainer):
     attr_set = {'protocol', 'frames', 'data'}
