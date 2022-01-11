@@ -331,7 +331,7 @@ class CXILoader(CXIProtocol):
                                                          cxi_paths[good_frames],
                                                          indices[good_frames])
 
-        if data_dict['frames'] is None:
+        if 'frames' not in data_dict:
             data_dict['frames'] = frame_indices
         else:
             data_dict['frames'] = data_dict['frames'][frame_indices]
@@ -370,7 +370,7 @@ class CXILoader(CXIProtocol):
                                                                   frame_indices, **attributes))
 
 class CrystData(DataContainer):
-    attr_set = {'frames', 'data'}
+    attr_set = {'protocol', 'frames', 'data'}
     init_set = {'cor_data', 'flatfields', 'good_frames', 'mask', 'num_threads',
                 'pupil', 'roi', 'streak_data', 'streaks', 'tilts', 'translations',
                 'whitefield'}
