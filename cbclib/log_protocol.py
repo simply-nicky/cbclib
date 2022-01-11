@@ -9,12 +9,13 @@ Generate the default built-in log protocol:
 'n_steps': ['Steps count'], '...': '...'}, 'part_keys': {'exposure': 'Type: Method',
 'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', '...': '...'}}
 """
+from __future__ import annotations
 import os
 import re
+from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 from .ini_parser import ROOT_PATH, INIParser
-from .cxi_protocol import CXILoader, CXIProtocol
-from .data_processing import CrystData
+from .data_processing import CXILoader, CrystData
 
 LOG_PROTOCOL = os.path.join(ROOT_PATH, 'config/log_protocol.ini')
 
@@ -22,89 +23,70 @@ class LogProtocol(INIParser):
     """Log file protocol class. Contains log file keys to retrieve
     and the data types of the corresponding values.
 
-    Parameters
-    ----------
-    datatypes : dict, optional
-        Dictionary with attributes' datatypes. 'float', 'int', 'bool',
-        or 'str' are allowed.
-    log_keys : dict, optional
-        Dictionary with attributes' log file keys.
-
-    Attributes
-    ----------
-    datatypes : dict
-        Dictionary with attributes' datatypes. 'float', 'int', 'bool',
-        or 'str' are allowed.
-    log_keys : dict
-        Dictionary with attributes' log file keys.
-
-    See Also
-    --------
-    protocol : Full list of data attributes and configuration
-        parameters.
+    Attributes:
+        datatypes : Dictionary with attributes' datatypes. 'float', 'int',
+            'bool', or 'str' are allowed.
+        log_keys : Dictionary with attributes' log file keys.
+        part_keys : Dictionary with the part names inside the log file
+            where the attributes are stored.
     """
     attr_dict = {'datatypes': ('ALL',), 'log_keys': ('ALL',), 'part_keys': ('ALL',)}
     fmt_dict = {'datatypes': 'str', 'log_keys': 'str', 'part_keys': 'str'}
-    unit_dict = {'percent': 1e-2, 'mm': 1e-3, 'mdeg': 1.7453292519943296e-05, 'µm,um': 1e-6,
-                 'udeg,µdeg': 1.7453292519943296e-08, 'nm': 1e-9, 'ndeg': 1.7453292519943296e-11,
-                 'pm': 1e-12,  'pdeg': 1.7453292519943296e-14}
+    unit_dict = {'percent': 1e-2, 'mm,mdeg': 1e-3, 'µm,um,udeg,µdeg': 1e-6,
+                 'nm,ndeg': 1e-9, 'pm,pdeg': 1e-12}
 
-    def __init__(self, datatypes=None, log_keys=None, part_keys=None):
-        if datatypes is None:
-            datatypes = self._import_ini(LOG_PROTOCOL)['datatypes']
-        if log_keys is None:
-            log_keys = self._import_ini(LOG_PROTOCOL)['log_keys']
-        if part_keys is None:
-            part_keys = self._import_ini(LOG_PROTOCOL)['part_keys']
+    def __init__(self, datatypes: Dict[str, str], log_keys: Dict[str, List[str]],
+                 part_keys: Dict[str, str]) -> None:
+        """
+        Args:
+            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
+                'bool', or 'str' are allowed.
+            log_keys : Dictionary with attributes' log file keys.
+            part_keys : Dictionary with the part names inside the log file
+                where the attributes are stored.
+        """
         log_keys = {attr: val for attr, val in log_keys.items() if attr in datatypes}
         datatypes = {attr: val for attr, val in datatypes.items() if attr in log_keys}
         super(LogProtocol, self).__init__(datatypes=datatypes, log_keys=log_keys,
                                           part_keys=part_keys)
 
     @classmethod
-    def import_default(cls, datatypes=None, log_keys=None, part_keys=None):
+    def import_default(cls, datatypes: Optional[Dict[str, str]]=None,
+                       log_keys: Optional[Dict[str, List[str]]]=None,
+                       part_keys: Optional[Dict[str, str]]=None) -> LogProtocol:
         """Return the default :class:`LogProtocol` object. Extra arguments
         override the default values if provided.
 
-        Parameters
-        ----------
-        datatypes : dict, optional
-            Dictionary with attributes' datatypes. 'float', 'int', or 'bool'
-            are allowed. Initialized with `ini_file` if None.
-        log_keys : dict, optional
-            Dictionary with attributes' log file keys. Initialized with
-            `ini_file` if None.
+        Args:
+            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
+                or 'bool' are allowed.
+            log_keys : Dictionary with attributes' log file keys.
+            part_keys : Dictionary with the part names inside the log file
+                where the attributes are stored.
 
-        Returns
-        -------
-        LogProtocol
+        Returns:
             A :class:`LogProtocol` object with the default parameters.
-
-        See Also
-        --------
-        log_protocol : more details about the default CXI protocol.
         """
         return cls.import_ini(LOG_PROTOCOL, datatypes, log_keys, part_keys)
 
     @classmethod
-    def import_ini(cls, ini_file, datatypes=None, log_keys=None, part_keys=None):
+    def import_ini(cls, ini_file: str, datatypes: Optional[Dict[str, str]]=None,
+                   log_keys: Optional[Dict[str, List[str]]]=None,
+                   part_keys: Optional[Dict[str, str]]=None) -> LogProtocol:
         """Initialize a :class:`LogProtocol` object class with an
         ini file.
 
-        Parameters
-        ----------
-        ini_file : str
-            Path to the ini file. Load the default log protocol if None.
-        datatypes : dict, optional
-            Dictionary with attributes' datatypes. 'float', 'int', or 'bool'
-            are allowed. Initialized with `ini_file` if None.
-        log_keys : dict, optional
-            Dictionary with attributes' log file keys. Initialized with
-            `ini_file` if None.
+        Args:
+            ini_file : Path to the ini file. Load the default log protocol if None.
+            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
+                or 'bool' are allowed. Initialized with `ini_file` if None.
+            log_keys : Dictionary with attributes' log file keys. Initialized with
+                `ini_file` if None.
+            part_keys : Dictionary with the part names inside the log file
+                where the attributes are stored. Initialized with `ini_file`
+                if None.
 
-        Returns
-        -------
-        LogProtocol
+        Returns:
             A :class:`LogProtocol` object with all the attributes imported
             from the ini file.
         """
@@ -119,16 +101,16 @@ class LogProtocol(INIParser):
                    part_keys=kwargs['part_keys'])
 
     @classmethod
-    def _get_unit(cls, key):
+    def _get_unit(cls, key: str) -> float:
         for unit_key in cls.unit_dict:
             units = unit_key.split(',')
             for unit in units:
                 if unit in key:
                     return cls.unit_dict[unit_key]
-        return 1.
+        return 1.0
 
     @classmethod
-    def _has_unit(cls, key):
+    def _has_unit(cls, key: str) -> bool:
         has_unit = False
         for unit_key in cls.unit_dict:
             units = unit_key.split(',')
@@ -136,18 +118,14 @@ class LogProtocol(INIParser):
                 has_unit |= (unit in key)
         return has_unit
 
-    def load_attributes(self, path):
+    def load_attributes(self, path: str) -> Dict[str, Any]:
         """Return attributes' values from a log file at
         the given `path`.
 
-        Parameters
-        ----------
-        path : str
-            Path to the log file.
+        Args:
+            path : Path to the log file.
 
-        Returns
-        -------
-        attr_dict : dict
+        Returns:
             Dictionary with the attributes retrieved from
             the log file.
         """
@@ -167,7 +145,6 @@ class LogProtocol(INIParser):
         # Divide log into sectors
         parts_list = [part for part in re.split('(' + '|'.join(part_keys) + \
                       '|--------------------------------)\n*', log_str) if part]
-
 
         # Rearange sectors into a dictionary
         parts = {}
@@ -205,17 +182,15 @@ class LogProtocol(INIParser):
                                 attr_dict[part_name][attr] *= self._get_unit(raw_str)
         return attr_dict
 
-    def load_data(self, path, frame_indices=None):
+    def load_data(self, path: str, frame_indices: Optional[Iterable[int]]=None) -> Dict[str, np.ndarray]:
         """Retrieve the main data array from the log file.
 
-        Parameters
-        ----------
-        path : str
-            Path to the log file.
+        Args:
+            path : Path to the log file.
+            frame_indices : Array of data indices to load. Loads info for all
+                the frames by default.
 
-        Returns
-        -------
-        data : dict
+        Returns:
             Dictionary with data fields and their names retrieved
             from the log file.
         """
@@ -284,8 +259,8 @@ class LogProtocol(INIParser):
         return data_dict
 
 def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
-    cxi_loader = CXILoader()
-    log_prt = LogProtocol()
+    cxi_loader = CXILoader.import_default()
+    log_prt = LogProtocol.import_default()
 
     h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
     log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
@@ -329,4 +304,4 @@ def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
     data_dict['translations'] = {data_dict['frames'][idx]: val
                                  for idx, val in enumerate(data_dict['translations'])}
 
-    return CrystData(protocol=CXIProtocol(), **data_dict)
+    return CrystData(**data_dict)
