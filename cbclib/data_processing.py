@@ -48,7 +48,7 @@ class CXILoader(CXIProtocol):
                 corresponding flags. If a flag is True, the attribute
                 will be loaded from a file.
         """
-        load_paths = {attr: paths for attr, paths in load_paths.items()
+        load_paths = {attr: self.str_to_list(paths) for attr, paths in load_paths.items()
                       if attr in protocol}
         policy = {attr: flag for attr, flag in policy.items() if attr in protocol}
         super(CXIProtocol, self).__init__(datatypes=protocol.datatypes,
@@ -244,7 +244,7 @@ class CXILoader(CXIProtocol):
                         cxi_paths.append(np.atleast_1d(cxi_path))
                         indices.append(np.atleast_1d(slice(None)))
                     else:
-                        raise ValueError('Dataset must be 2- or 3-dimensional')
+                        raise ValueError(f'{attr:s} dataset must be 2- or 3-dimensional: {str(dset_shape):s}')
 
         if len(paths) == 0:
             return np.array([]), np.array([]), np.array([])

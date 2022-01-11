@@ -110,7 +110,7 @@ class DataContainer:
             self.__setattr__(attr, kwargs.get(attr))
 
         for attr, init_func in self.inits.items():
-            if self.get(attr, None) is None:
+            if self.__dict__.get(attr, None) is None:
                 self.__setattr__(attr, init_func(self))
 
     def __iter__(self) -> Iterable:
