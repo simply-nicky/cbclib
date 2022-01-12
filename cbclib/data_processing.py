@@ -9,364 +9,79 @@ from .cxi_protocol import CXI_PROTOCOL, CXIProtocol
 from .data_container import DataContainer, dict_to_object
 from .bin import subtract_background, median, median_filter, LSD, maximum_filter
 
-class CXILoader(CXIProtocol):
-    """CXI file loader class. Loads data from a CXI file and returns
-    a :class:`CrystData` container or a :class:`dict` with the data. Search
-    data in the paths provided by `protocol` and `load_paths`.
+class CXIStore():
 
-    Attributes:
-        datatypes : Dictionary with attributes' datatypes. 'float', 'int',
-            or 'bool' are allowed.
-        default_paths : Dictionary with attributes' CXI default file paths.
-        is_data : Dictionary with the flags if the attribute is of data
-            type. Data type is 2- or 3-dimensional and has the same data
-            shape as `data`.
-        load_paths : Extra set of paths to the attributes enlisted in
-            `datatypes`.
-        policy: Loading policy. If a flag for the given attribute is
-            True, the attribute will be loaded from a file.
+    # _index_converters = {'stack': self._stack_shapes_to_indices,
+    #                      'frame': self._frame_shapes_to_indices,
+    #                      'sequence': self._sequence_shapes_to_indices,
+    #                      'scalar': self._scalar_shapes_to_indices}
 
-    See Also:
-        :class:`cbclib.CrystData` : Data container with all the data necessary
-            for crystallography data processing.
-    """
-    attr_dict = {'datatypes': ('ALL', ),'default_paths': ('ALL', ),
-                 'load_paths': ('ALL',), 'is_data': ('ALL', ), 'policy': ('ALL', )}
-    fmt_dict = {'datatypes': 'str', 'default_paths': 'str',
-                'load_paths': 'str', 'is_data': 'str', 'policy': 'str'}
+    def __init__(self, data_files, protocol):
+        self.protocol = protocol
 
-    def __init__(self, protocol: CXIProtocol, load_paths: Dict[str, List[str]],
-                 policy: Dict[str, Union[str, bool]]) -> None:
-        """
-        Args:
-            protocol : Protocol object.
-            load_paths : Extra paths to the data attributes in a CXI file,
-                which override `protocol`. Accepts only the attributes
-                enlisted in `protocol`.
-            policy : A dictionary with loading policy. Contains all the
-                attributes that are available in `protocol` with their
-                corresponding flags. If a flag is True, the attribute
-                will be loaded from a file.
-        """
-        load_paths = {attr: self.str_to_list(paths) for attr, paths in load_paths.items()
-                      if attr in protocol}
-        policy = {attr: flag for attr, flag in policy.items() if attr in protocol}
-        super(CXIProtocol, self).__init__(datatypes=protocol.datatypes,
-                                          default_paths=protocol.default_paths,
-                                          is_data=protocol.is_data, load_paths=load_paths,
-                                          policy=policy)
+        self.frame_shape = None
 
-    @staticmethod
-    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
-        """Convert `strings` to a list of strings.
+    def indices(self):
+        pass
 
-        Args:
-            strings : String or a list of strings
+    def _stack_shapes_to_indices(self, path, shapes):
+        paths, cxi_paths, fidxs = [], [], []
 
-        Returns:
-            List of strings.
-        """
-        if isinstance(strings, (str, list)):
-            if isinstance(strings, str):
-                return [strings,]
-            return strings
+        for cxi_path, shape in shapes.items():
+            if len(shape) != 3 or shape[1:] != self.frame_shape:
+                err_txt = f'Dataset at {path}: {cxi_path:s} has invalid shape: {str(shape):s}'
+                raise ValueError(err_txt)
 
-        raise ValueError('strings must be a string or a list of strings')
+            paths.extend(np.repeat(path, shape[0]).tolist())
+            cxi_paths.extend(np.repeat(cxi_path, shape[0]).tolist())
+            fidxs.extend(np.arange(shape[0]).tolist())
 
-    @classmethod
-    def import_default(cls, protocol: Optional[CXIProtocol]=None,
-                       load_paths: Optional[Dict[str, List[str]]]=None,
-                       policy: Optional[Dict[str, Union[str, bool]]]=None) -> CXILoader:
-        """Return the default :class:`CXILoader` object. Extra arguments
-        override the default values if provided.
+        indices = np.array([paths, cxi_paths, fidxs], dtype=object).T
+        return indices[self.indices()]
 
-        Args:
-            protocol : Protocol object.
-            load_paths : Extra paths to the data attributes in a CXI file,
-                which override `protocol`. Accepts only the attributes
-                enlisted in `protocol`.
-            policy : A dictionary with loading policy. Contains all the
-                attributes that are available in `protocol` and the
-                corresponding flags. If a flag is True, the attribute
-                will be loaded from a file.
+    def _frame_shapes_to_indices(self, path, shapes):
+        paths, cxi_paths, fidxs = [], [], []
 
-        Returns:
-            A :class:`CXILoader` object with the default parameters.
-        """
-        return cls.import_ini(CXI_PROTOCOL, protocol, load_paths, policy)
+        for cxi_path, shape in shapes.items():
+            if shape != self.frame_shape:
+                err_txt = f'Dataset at {path}: {cxi_path:s} has invalid shape: {str(shape):s}'
+                raise ValueError(err_txt)
 
-    @classmethod
-    def import_ini(cls, ini_file: str, protocol: Optional[CXIProtocol]=None,
-                   load_paths: Optional[Dict[str, List[str]]]=None,
-                   policy: Optional[Dict[str, Union[str, bool]]]=None) -> CXILoader:
-        """Initialize a :class:`CXILoader` object class with an
-        ini file.
+            paths.append(path)
+            cxi_paths.append(cxi_path)
+            fidxs.append(tuple())
 
-        Args:
-            ini_file : Path to the ini file. Loads the default CXI loader if None.
-            protocol : Protocol object. Initialized with `ini_file` if None.
-            load_paths : Extra paths to the data attributes in a CXI file,
-                which override `protocol`. Accepts only the attributes
-                enlisted in `protocol`. Initialized with `ini_file`
-                if None.
-            policy : A dictionary with loading policy. Contains all the
-                attributes that are available in `protocol` and the
-                corresponding flags. If a flag is True, the attribute
-                will be loaded from a file. Initialized with `ini_file`
-                if None.
+        indices = np.array([paths, cxi_paths, fidxs], dtype=object).T
+        return indices[self.indices()]
 
-        Returns:
-            A :class:`CXILoader` object with all the attributes imported
-            from the ini file.
-        """
-        if protocol is None:
-            protocol = CXIProtocol.import_ini(ini_file)
-        kwargs = cls._import_ini(ini_file)
-        if not load_paths is None:
-            kwargs['load_paths'].update(**load_paths)
-        if not policy is None:
-            kwargs['policy'].update(**policy)
-        return cls(protocol=protocol, load_paths=kwargs['load_paths'],
-                   policy=kwargs['policy'])
+    def _sequence_shapes_to_indices(self, path, shapes):
+        paths, cxi_paths, fidxs = [], [], []
 
-    def get_load_paths(self, attr: str, value: Optional[Union[str, List[str]]]=None) -> List[str]:
-        """Return the atrribute's path in the cxi file.
-        Return `value` if `attr` is not found.
+        for cxi_path, shape in shapes.items():
+            if len(shape) != 1:
+                err_txt = f'Dataset at {path}: {cxi_path:s} has invalid shape: {str(shape):s}'
+                raise ValueError(err_txt)
 
-        Args:
-            attr : The attribute to look for.
-            value : Value which is returned if the `attr` is not
-                found.
+            paths.append(path)
+            cxi_paths.append(cxi_path)
+            fidxs.append(tuple())
 
-        Returns:
-            Set of attribute's paths.
-        """
-        paths = self.str_to_list(super(CXILoader, self).get_default_path(attr, value))
-        if attr in self.load_paths:
-            paths.extend(self.load_paths[attr])
-        return paths
+        indices = np.array([paths, cxi_paths, fidxs], dtype=object).T
+        return indices[self.indices()]
 
-    def get_policy(self, attr: str, value: bool=False) -> bool:
-        """Return the atrribute's loding policy.
+    def _scalar_shapes_to_indices(self, path, shapes):
+        paths, cxi_paths, fidxs = [], [], []
 
-        Args:
-            attr : The attribute to look for.
-            value : Value which is returned if the `attr` is not
-                found.
+        for cxi_path, shape in shapes.items():
+            if len(shape) <= 1:
+                err_txt = f'Dataset at {path}: {cxi_path:s} has invalid shape: {str(shape):s}'
+                raise ValueError(err_txt)
 
-        Returns:
-            Attributes' loding policy.
-        """
-        policy = self.policy.get(attr, value)
-        if isinstance(policy, str):
-            return policy in ['True', 'true', '1', 'y', 'yes']
-        else:
-            return bool(policy)
+            paths.append(path)
+            cxi_paths.append(cxi_path)
+            fidxs.append(tuple())
 
-    def get_protocol(self) -> CXIProtocol:
-        """Return a CXI protocol from the loader.
-
-        Returns:
-            CXI protocol.
-        """
-        return CXIProtocol(datatypes=self.datatypes,
-                           default_paths=self.default_paths,
-                           is_data=self.is_data)
-
-    def find_path(self, attr: str, cxi_file: h5py.File) -> str:
-        """Find attribute's path in a CXI file `cxi_file`.
-
-        Args:
-            attr : Data attribute.
-            cxi_file : :class:`h5py.File` object of the CXI file.
-
-        Returns:
-            Atrribute's path in the CXI file, returns an empty
-            string if the attribute is not found.
-        """
-        paths = self.get_load_paths(attr)
-        for path in paths:
-            if path in cxi_file:
-                return path
-        return str()
-
-    def load_attributes(self, master_file: str) -> Dict[str, Any]:
-        """Return attributes' values from a CXI file at
-        the given `master_file`.
-
-        Args:
-            master_file : Path to the master CXI file.
-
-        Returns:
-            Dictionary with the attributes retrieved from
-            the CXI file.
-        """
-        attr_dict = {}
-        with h5py.File(master_file, 'r') as cxi_file:
-            for attr in self:
-                cxi_path = self.find_path(attr, cxi_file)
-                if not self.get_is_data(attr) and self.get_policy(attr, False) and cxi_path:
-                    attr_dict[attr] = self.read_cxi(attr, cxi_file, cxi_path)
-        return attr_dict
-
-    def read_indices(self, attr: str, data_files: Union[str, List[str]]) -> np.ndarray:
-        """Retrieve the indices of the datasets from the CXI files for the
-        given attribute `attr`.
-
-        Args:
-            attr : The attribute to read.
-            data_files : Paths to the data CXI files.
-
-        Returns:
-            A tuple of ('paths', 'cxi_paths', 'indices'). The elements
-            are the following:
-
-            * 'paths' : List of the file paths. None if no data is found.
-            * 'cxi_paths' : List of the paths inside the files. None if no
-              data is found.
-            * 'indices' : List of the frame indices. None if no data is found.
-
-        """
-        data_files = self.str_to_list(data_files)
-
-        paths, cxi_paths, indices = [], [], []
-        for path in data_files:
-            with h5py.File(path, 'r') as cxi_file:
-                shapes = self.read_shape(cxi_file, self.find_path(attr, cxi_file))
-            if shapes:
-                for cxi_path, dset_shape in shapes:
-                    if len(dset_shape) == 3:
-                        paths.extend(np.repeat(path, dset_shape[0]).tolist())
-                        cxi_paths.extend(np.repeat(cxi_path, dset_shape[0]).tolist())
-                        indices.extend(np.arange(dset_shape[0]).tolist())
-                    elif len(dset_shape) == 2:
-                        paths.append(path)
-                        cxi_paths.append(cxi_path)
-                        indices.append(slice(None))
-                    else:
-                        raise ValueError(f'{attr:s} dataset must be 2- or 3-dimensional: {str(dset_shape):s}')
-
-        return np.array([paths, cxi_paths, indices], dtype=object).T
-
-    @staticmethod
-    def _read_frame(index):
-        with h5py.File(index[0], 'r') as cxi_file:
-            return cxi_file[index[1]][index[2]]
-
-    def load_data(self, attr: str, indices: np.ndarray, verbose: bool=True, processes: int=1) -> np.ndarray:
-        """Retrieve the data for the given attribute `attr` from the
-        CXI files. Uses the result from :func:`CXILoader.read_indices`
-        method.
-
-        Args:
-            attr : The attribute to read.
-            paths : List of the file paths.
-            cxi_paths : List of the paths inside the files.
-            indices : List of the frame indices.
-            verbose : Print the progress bar if True.
-
-        Returns:
-            Data array retrieved from the CXI files.
-        """
-
-        data = []
-        with Pool(processes=processes) as pool:
-            for frame in tqdm(pool.imap(CXILoader._read_frame, indices), total=indices.shape[0],
-                              desc=f'Loading {attr:s}', disable=not verbose):
-                data.append(frame)
-
-        if len(data) == 1:
-            data = data[0]
-        else:
-            data = np.stack(data, axis=0)
-        return np.asarray(data, dtype=self.get_dtype(attr))
-
-    def load_to_dict(self, data_files: Union[str, List[str]],
-                     master_file: Optional[str]=None,
-                     frame_indices: Optional[Iterable[int]]=None, processes: int=1,
-                     **attributes: Any) -> Dict[str, Any]:
-        """Load data from the CXI files and return a :class:`dict` with
-        all the data fetched from the `data_files` and `master_file`.
-
-        Args:
-            data_files : Paths to the data CXI files.
-            master_file : Path to the master CXI file. First file in `data_files`
-                if not provided.
-            frame_indices : Array of frame indices to load. Loads all the frames
-                by default.
-            attributes : Dictionary of attribute values, that override the loaded
-                values.
-
-        Returns:
-            Dictionary with all the data fetched from the CXI files.
-        """
-        if master_file is None:
-            if isinstance(data_files, str):
-                master_file = data_files
-            elif isinstance(data_files, list):
-                master_file = data_files[0]
-            else:
-                raise ValueError('data_files must be a string or a list of strings')
-
-        data_dict = self.load_attributes(master_file)
-
-        if frame_indices is None:
-            n_frames = 0
-            for attr in self:
-                if self.get_is_data(attr) and self.get_policy(attr):
-                    n_frames = max(self.read_indices(attr, data_files).shape[0], n_frames)
-            frame_indices = np.arange(n_frames)
-        else:
-            frame_indices = np.asarray(frame_indices)
-
-        if frame_indices.size:
-            for attr in self:
-                if self.get_is_data(attr) and self.get_policy(attr):
-                    indices = self.read_indices(attr, data_files)
-                    if indices.shape[0] > 0:
-                        good_frames = frame_indices[frame_indices < indices.shape[0]]
-                        data_dict[attr] = self.load_data(attr, indices[good_frames],
-                                                         processes=processes)
-
-        if 'frames' not in data_dict:
-            data_dict['frames'] = frame_indices
-        else:
-            data_dict['frames'] = data_dict['frames'][frame_indices]
-
-        for attr, val in attributes.items():
-            if attr in self and val is not None:
-                if isinstance(val, dict):
-                    data_dict[attr] = {dkey: self.get_dtype(attr)(dval)
-                                       for dkey, dval in val.items()}
-                else:
-                    data_dict[attr] = np.asarray(val, dtype=self.get_dtype(attr))
-                    if data_dict[attr].size == 1:
-                        data_dict[attr] = data_dict[attr].item()
-
-        return data_dict
-
-    def load(self, data_files: str, master_file: Optional[str]=None,
-             frame_indices: Optional[Iterable[str]]=None, processes: int=1,
-             **attributes: Any) -> CrystData:
-        """Load data from the CXI files and return a :class:`STData` container
-        with all the data fetched from the `data_files` and `master_file`.
-
-        Args:
-            data_files : Paths to the data CXI files.
-            master_file : Path to the master CXI file. First file in `data_files`
-                if not provided.
-            frame_indices : Array of frame indices to load. Loads all the frames by
-                default.
-            attributes : Dictionary of attribute values, which will be parsed to
-                the :class:`cbclib.Crystdata` object instead.
-
-        Returns:
-            Data container object with all the necessary data for crystallography
-            data processing.
-        """
-        return CrystData(self.get_protocol(), **self.load_to_dict(data_files, master_file,
-                                                                  frame_indices, processes,
-                                                                  **attributes))
+        return np.array([paths, cxi_paths, fidxs], dtype=object).T
 
 class CrystData(DataContainer):
     attr_set = {'protocol', 'frames', 'data'}

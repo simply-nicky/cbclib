@@ -15,7 +15,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 from .ini_parser import ROOT_PATH, INIParser
-from .data_processing import CXILoader, CrystData
+from .data_processing import CrystData
 
 LOG_PROTOCOL = os.path.join(ROOT_PATH, 'config/log_protocol.ini')
 
@@ -257,51 +257,3 @@ class LogProtocol(INIParser):
         data_dict = {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
         data_dict['indices'] = frame_indices
         return data_dict
-
-def converter_petra(dir_path, scan_num, frame_indices=None, **attributes):
-    cxi_loader = CXILoader.import_default()
-    log_prt = LogProtocol.import_default()
-
-    h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
-    log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
-    h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
-                       if path.endswith(('LambdaFar.nxs', '.h5')) and not path.endswith('master.h5')])
-    h5_master = [os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
-                 if path.endswith('master.h5')]
-    if h5_master:
-        h5_master = h5_master[0]
-    else:
-        h5_master = h5_files[0]
-
-    log_attrs = log_prt.load_attributes(log_path)
-    log_data = log_prt.load_data(log_path, frame_indices)
-
-    data_dict = cxi_loader.load_to_dict(h5_files, h5_master, log_data['indices'], **attributes)
-
-    x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
-    y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
-    z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
-    r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-    data_dict['translations'] = np.tile([[x_sample, y_sample, z_sample]],
-                                        (data_dict['data'].shape[0], 1))
-    data_dict['tilts'] = r_sample * np.ones(data_dict['data'].shape[0])
-    for data_key, log_dset in log_data.items():
-        for log_key in log_prt.log_keys['x_sample']:
-            if log_key in data_key:
-                data_dict['translations'][:, 0] = log_dset
-        for log_key in log_prt.log_keys['y_sample']:
-            if log_key in data_key:
-                data_dict['translations'][:, 1] = log_dset
-        for log_key in log_prt.log_keys['z_sample']:
-            if log_key in data_key:
-                data_dict['translations'][:, 2] = log_dset
-        for log_key in log_prt.log_keys['r_sample']:
-            if log_key in data_key:
-                data_dict['tilts'] = log_dset
-
-    data_dict['tilts'] = {data_dict['frames'][idx]: val
-                          for idx, val in enumerate(data_dict['tilts'])}
-    data_dict['translations'] = {data_dict['frames'][idx]: val
-                                 for idx, val in enumerate(data_dict['translations'])}
-
-    return CrystData(**data_dict)

@@ -15,11 +15,13 @@ Examples:
     'data': 'True', 'defocus_x': 'False', '...': '...'}}
 """
 from __future__ import annotations
+from multiprocessing import Pool
 import os
 from configparser import ConfigParser
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 import h5py
 import numpy as np
+from tqdm.auto import tqdm
 from .ini_parser import ROOT_PATH, INIParser
 
 CXI_PROTOCOL = os.path.join(ROOT_PATH, 'config/cxi_protocol.ini')
@@ -37,55 +39,74 @@ class CXIProtocol(INIParser):
         is_data : Dictionary with the flags if the attribute is of data type.
             Data type is 2- or 3-dimensional and has the same data shape
             as `data`.
-        default_paths : Dictionary with attributes' CXI default file paths.
+        load_paths : Dictionary with attributes' CXI default file paths.
     """
-    known_types = {'int': np.int64, 'bool': np.bool, 'float': np.float64, 'str': str,
-                   'uint': np.uint32}
-    attr_dict = {'datatypes': ('ALL', ), 'default_paths': ('ALL', ), 'is_data': ('ALL', )}
-    fmt_dict = {'datatypes': 'str', 'default_paths': 'str', 'is_data': 'str'}
+    known_types = {'int': np.integer, 'bool': np.bool, 'float': np.floating, 'str': str,
+                   'uint': np.unsignedinteger}
+    known_ndims = {'stack': 3, 'frame': 2, 'sequence': 1, 'scalar': 0}
+    attr_dict = {'datatypes': ('ALL', ), 'load_paths': ('ALL', ), 'kinds': ('ALL', )}
+    fmt_dict = {'datatypes': 'str', 'load_paths': 'str', 'kinds': 'str'}
 
-    def __init__(self, datatypes: Dict[str, str], default_paths: Dict[str, str],
-                 is_data: Dict[str, str]) -> None:
+    def __init__(self, datatypes: Dict[str, str], load_paths: Dict[str, Union[str, List[str]]],
+                 kinds: Dict[str, str]) -> None:
         """
         Args:
             datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
                 or 'bool' are allowed.
-            default_paths : Dictionary with attributes path in the CXI file.
-            is_data : Dictionary with the flags if the attribute is of data type.
+            load_paths : Dictionary with attributes path in the CXI file.
+            kinds : Dictionary with the flags if the attribute is of data type.
                 Data type is 2- or 3-dimensional and has the same data shape
                 as `data`.
             float_precision : Choose between 32-bit floating point precision ('float32')
                 or 64-bit floating point precision ('float64').
         """
-        default_paths = {attr: val for attr, val in default_paths.items() if attr in datatypes}
-        is_data = {attr: val for attr, val in is_data.items() if attr in datatypes}
-        super(CXIProtocol, self).__init__(datatypes=datatypes, default_paths=default_paths,
-                                          is_data=is_data)
+        load_paths = {attr: self.str_to_list(val)
+                      for attr, val in load_paths.items() if attr in datatypes}
+        kinds = {attr: val for attr, val in kinds.items() if attr in datatypes}
+        super(CXIProtocol, self).__init__(datatypes=datatypes, load_paths=load_paths,
+                                          kinds=kinds)
+
+    @staticmethod
+    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
+        """Convert `strings` to a list of strings.
+
+        Args:
+            strings : String or a list of strings
+
+        Returns:
+            List of strings.
+        """
+        if isinstance(strings, (str, list)):
+            if isinstance(strings, str):
+                return [strings,]
+            return strings
+
+        raise ValueError('strings must be a string or a list of strings')
 
     @classmethod
     def import_default(cls, datatypes: Optional[Dict[str, str]]=None,
-                       default_paths: Optional[Dict[str, str]]=None,
-                       is_data: Optional[Dict[str, str]]=None) -> CXIProtocol:
+                       load_paths: Optional[Dict[str, Union[str, List[str]]]]=None,
+                       kinds: Optional[Dict[str, str]]=None) -> CXIProtocol:
         """Return the default :class:`CXIProtocol` object. Extra arguments
         override the default values if provided.
 
         Args:
             datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
                 or 'bool' are allowed.
-            default_paths : Dictionary with attributes path in the CXI file.
-            is_data : Dictionary with the flags if the attribute is of data type.
+            load_paths : Dictionary with attributes path in the CXI file.
+            kinds : Dictionary with the flags if the attribute is of data type.
                 Data type is 2- or 3-dimensional and has the same data shape
                 as `data`.
 
         Returns:
             A :class:`CXIProtocol` object with the default parameters.
         """
-        return cls.import_ini(CXI_PROTOCOL, datatypes, default_paths, is_data)
+        return cls.import_ini(CXI_PROTOCOL, datatypes, load_paths, kinds)
 
     @classmethod
     def import_ini(cls, ini_file: str, datatypes: Optional[Dict[str, str]]=None,
-                   default_paths: Optional[Dict[str, str]]=None,
-                   is_data: Optional[Dict[str, str]]=None) -> CXIProtocol:
+                   load_paths: Optional[Dict[str, Union[str, List[str]]]]=None,
+                   kinds: Optional[Dict[str, str]]=None) -> CXIProtocol:
         """Initialize a :class:`CXIProtocol` object class with an
         ini file.
 
@@ -93,9 +114,9 @@ class CXIProtocol(INIParser):
             ini_file : Path to the ini file. Load the default CXI protocol if None.
             datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
                 or 'bool' are allowed. Initialized with `ini_file` if None.
-            default_paths : Dictionary with attributes path in the CXI file. Initialized
+            load_paths : Dictionary with attributes path in the CXI file. Initialized
                 with `ini_file` if None.
-            is_data : Dictionary with the flags if the attribute is of data type.
+            kinds : Dictionary with the flags if the attribute is of data type.
                 Data type is 2- or 3-dimensional and has the same data shape
                 as `data`. Initialized with `ini_file` if None.
 
@@ -106,12 +127,29 @@ class CXIProtocol(INIParser):
         kwargs = cls._import_ini(ini_file)
         if not datatypes is None:
             kwargs['datatypes'].update(**datatypes)
-        if not default_paths is None:
-            kwargs['default_paths'].update(**default_paths)
-        if not is_data is None:
-            kwargs['is_data'].update(**is_data)
-        return cls(datatypes=kwargs['datatypes'], default_paths=kwargs['default_paths'],
-                   is_data=kwargs['is_data'])
+        if not load_paths is None:
+            kwargs['load_paths'].update(**load_paths)
+        if not kinds is None:
+            kwargs['kinds'].update(**kinds)
+        return cls(datatypes=kwargs['datatypes'], load_paths=kwargs['load_paths'],
+                   kinds=kwargs['kinds'])
+
+    def find_path(self, attr: str, cxi_file: h5py.File) -> str:
+        """Find attribute's path in a CXI file `cxi_file`.
+
+        Args:
+            attr : Data attribute.
+            cxi_file : :class:`h5py.File` object of the CXI file.
+
+        Returns:
+            Atrribute's path in the CXI file, returns an empty
+            string if the attribute is not found.
+        """
+        paths = self.get_load_paths(attr)
+        for path in paths:
+            if path in cxi_file:
+                return path
+        return str()
 
     def parser_from_template(self, path: str) -> ConfigParser:
         """Return a :class:`configparser.ConfigParser` object using
@@ -133,12 +171,12 @@ class CXIProtocol(INIParser):
         return parser
 
     def __iter__(self) -> Iterator:
-        return self.default_paths.__iter__()
+        return self.datatypes.__iter__()
 
     def __contains__(self, attr: str) -> bool:
-        return attr in self.default_paths
+        return attr in self.datatypes
 
-    def get_default_path(self, attr: str, value: Optional[str]=None) -> str:
+    def get_load_paths(self, attr: str, value: Optional[List[str]]=None) -> List[str]:
         """Return the atrribute's default path in the CXI file.
         Return `value` if `attr` is not found.
 
@@ -149,7 +187,7 @@ class CXIProtocol(INIParser):
         Returns:
             Attribute's cxi file path.
         """
-        return self.default_paths.get(attr, value)
+        return self.load_paths.get(attr, value)
 
     def get_dtype(self, attr: str, dtype: Optional[str]='float') -> type:
         """Return the attribute's data type. Return `dtype` if the attribute's
@@ -165,7 +203,7 @@ class CXIProtocol(INIParser):
         """
         return self.known_types.get(self.datatypes.get(attr, dtype))
 
-    def get_is_data(self, attr: str, value: bool=False) -> bool:
+    def get_kind(self, attr: str, value: str='scalar') -> str:
         """Return if the attribute is of data type. Data type is 2- or
         3-dimensional and has the same data shape as `data`.
 
@@ -176,14 +214,19 @@ class CXIProtocol(INIParser):
         Returns:
             True if `attr` is of data type.
         """
-        is_data = self.is_data.get(attr, value)
-        if isinstance(is_data, str):
-            return is_data in ['True', 'true', '1', 'y', 'yes']
-        else:
-            return bool(is_data)
+        return self.kinds.get(attr, value)        
+
+    def get_ndim(self, attr: str, value: int=0) -> int:
+        return self.known_ndims.get((self.get_kind(attr)), value)
+
+    def cast(self, attr: str, array: np.ndarray):
+        dtype = self.get_dtype(attr)
+        if np.issubdtype(array.dtype, dtype):
+            return array
+        return np.asarray(array, dtype=dtype)
 
     @staticmethod
-    def get_dataset_shapes(cxi_path: str, cxi_obj: h5py.Group) -> List[Union[str, Tuple]]:
+    def read_dataset_shapes(cxi_path: str, cxi_file: h5py.File) -> Dict[str, Tuple]:
         """Visit recursively all the underlying datasets and return
         their names and shapes.
 
@@ -194,116 +237,119 @@ class CXIProtocol(INIParser):
         Returns:
             List of all the datasets and their shapes inside `cxi_obj`.
         """
-        shapes = []
+        shapes = {}
 
         def caller(sub_path, obj):
             if isinstance(obj, h5py.Dataset):
-                shapes.append((os.path.join(cxi_path, sub_path), obj.shape))
+                shapes[os.path.join(cxi_path, sub_path)] = obj.shape
+
+        if cxi_path in cxi_file:
+            cxi_obj = cxi_file[cxi_path]
+            if isinstance(cxi_obj, h5py.Dataset):
+                shapes[cxi_path] = cxi_obj.shape
+            elif isinstance(cxi_obj, h5py.Group):
+                cxi_obj.visititems(caller)
+            else:
+                raise ValueError(f"Invalid CXI object at '{cxi_path:s}'")
 
         cxi_obj.visititems(caller)
         return shapes
 
-    def read_shape(self, cxi_file: h5py.File, cxi_path: str) -> List[Union[str, Tuple]]:
-        """Read data shapes from the CXI file `cxi_file` at
-        the `cxi_path` path inside the CXI file recursively.
+    def read_attribute_shapes(self, attr: str, data_file: str):
+        with h5py.File(data_file, 'r') as cxi_file:
+            cxi_path = self.find_path(attr, cxi_file)
+            return self.read_dataset_shapes(cxi_path, cxi_file)
 
-        Args:
-            cxi_file : h5py File object of the CXI file.
-            cxi_path : Path to the data attribute.
+    def read_attribute_indices(self, attr, data_files):
+        files, cxi_paths, fidxs = [], [], []
+        kind = self.get_kind(attr)
 
-        Returns:
-            A list of the attribute's data shapes for each dataset
-            found at the given path. Returns an empty list if no
-            datasets has been found.
-        """
-        shapes = []
-        if cxi_path is not None and cxi_path in cxi_file:
-            cxi_obj = cxi_file[cxi_path]
-            if isinstance(cxi_obj, h5py.Dataset):
-                shapes.append((cxi_path, cxi_obj.shape))
-            elif isinstance(cxi_obj, h5py.Group):
-                shapes.extend(self.get_dataset_shapes(cxi_path, cxi_obj))
-            else:
-                raise ValueError(f"Invalid CXI object at '{cxi_path:s}'")
+        for data_file in data_files:
+            shapes = self.read_attribute_shapes(attr, data_file)
+            for cxi_path, shape in shapes.items():
+                if len(shape) != self.get_ndim(attr):
+                    err_txt = f'Dataset at {data_file}: {cxi_path} has invalid shape: {str(shape)}'
+                    raise ValueError(err_txt)
 
-        return shapes
+                if kind in ['stack', 'sequence']:
+                    files.extend(np.repeat(data_file, shape[0]).tolist())
+                    cxi_paths.extend(np.repeat(cxi_path, shape[0]).tolist())
+                    fidxs.extend(np.arange(shape[0]).tolist())
+                if kind  == 'frame':
+                    files.append(data_file)
+                    cxi_paths.append(cxi_path)
+                    fidxs.append(tuple())
 
-    def read_cxi(self, attr: str, cxi_file: h5py.File,
-                 cxi_path: Optional[str]=None) -> Union[np.ndarray, Dict[str, np.ndarray]]:
-        """Read `attr` from the CXI file `cxi_file` at the `cxi_path` path.
-        If `cxi_path` is not provided the default path for the given attribute
-        is used.
+        return np.array([files, cxi_paths, fidxs], dtype=object).T
 
-        Args:
-            attr : Data attribute.
-            cxi_file : h5py File object of the CXI file.
-            cxi_path : Path to the data attribute. If `cxi_path` is None,
-                the path will be inferred according to the protocol.
+class CXIStore():
+    def __init__(self, data_files: Union[str, List[str]],
+                 protocol: CXIProtocol=CXIProtocol.import_default()) -> None:
+        data_files = protocol.str_to_list(data_files)
 
-        Returns:
-            Returns data array if :code:`cxi_file[cxi_path]` is a dataset or
-            a dictionary if :code:`cxi_file[cxi_path]` is a group.
-        """
-        if cxi_path is None:
-            cxi_path = self.get_default_path(attr)
-        shapes = self.read_shape(cxi_file, cxi_path)
+        for data_file in data_files:
+            if not os.path.isfile(data_file):
+                raise ValueError(f'There is no file under the given path: {data_file}')
 
-        data_dict = {}
-        if shapes:
-            prefix = os.path.commonpath(list([cxi_path for cxi_path, _ in shapes]))
-            for cxi_path, _ in shapes:
-                key = os.path.relpath(cxi_path, prefix)
-                if key.isnumeric():
-                    key = int(key)
-                data_dict[key] = cxi_file[cxi_path][()]
+        self.data_files, self.protocol = data_files, protocol
+        self._indices = self.read_indices()
 
-            if '.' in data_dict:
-                data = np.asarray(data_dict['.'], dtype=self.get_dtype(attr))
-                if data.size == 1:
-                    return data.item()
-                return data
+        if 'data' not in self._indices:
+            raise ValueError("Data files don't contain 'data' attribute")
 
-        return data_dict
+    def read_indices(self):
+        indices = {}
+        for attr in self.protocol:
+            kind = self.protocol.get_kind(attr)
+            if kind in ['stack', 'sequence']:
+                indices[attr] = self.read_attribute_indices(attr)
+            if kind == 'frames':
+                indices[attr] = self.read_attribute_indices(attr)[0]
+        return indices
+
+    def indices(self):
+        return np.arange(self._indices['data'].shape[0])
+
+    def keys(self):
+        return self._indices.keys()
+
+    def values(self):
+        return self._indices.values()
+
+    def items(self):
+        return self._indices.items()
 
     @staticmethod
-    def _write_dset(cxi_file: h5py.File, cxi_path: str, data: np.ndarray, dtype: type,
-                    **kwargs: Any) -> None:
-        try:
-            cxi_file[cxi_path][...] = data
-        except TypeError:
-            del cxi_file[cxi_path]
-            cxi_file.create_dataset(cxi_path, data=data, dtype=dtype, **kwargs)
-        except (KeyError, ValueError):
-            cxi_file.create_dataset(cxi_path, data=data, dtype=dtype, **kwargs)
+    def _read_chunk(index: np.ndarray) -> np.ndarray:
+        with h5py.File(index[0], 'r') as cxi_file:
+            return cxi_file[index[1]][index[2]]
 
-    def write_cxi(self, attr: str, data: np.ndarray, cxi_file: h5py.File,
-                  cxi_path: Optional[str]=None) -> None:
-        """Write data to the CXI file `cxi_file` under the path specified
-        by the protocol. If `cxi_path` or `dtype` argument are provided,
-        it will override the protocol.
+    def _load_stack(self, attr: str, indices: Iterable[int], processes: int=1, verbose: bool=True) -> np.ndarray:
+        stack = []
 
-        Args:
-            attr : Data attribute.
-            data : Data which is bound to be saved.
-            cxi_file : :class:`h5py.File` object of the CXI file.
-            cxi_path : Path to the data attribute. If `cxi_path` is None,
-                the path will be inferred according to the protocol.
+        with Pool(processes=processes) as pool:
+            for frame in tqdm(pool.imap(type(self)._read_chunk,
+                                        self._indices[attr][indices]),
+                              total=self.indices()[indices].size, disable=not verbose):
+                stack.append(frame)
 
-        Raises:
-            ValueError : If `overwrite` is False and the data is already
-                present at the given location in `cxi_file`.
-        """
-        if cxi_path is None:
-            cxi_path = self.get_default_path(attr, cxi_path)
+        return self.protocol.cast(attr, np.stack(stack, axis=0))
 
-        if isinstance(data, dict):
-            for key, val in data.items():
-                self._write_dset(cxi_file, os.path.join(cxi_path, str(key)), data=val,
-                                    dtype=self.get_dtype(attr))
+    def _load_frame(self, attr: str) -> np.ndarray:
+        return self.protocol.cast(attr, self._read_chunk(self._indices[attr]))
 
-        elif self.get_is_data(attr):
-            self._write_dset(cxi_file, cxi_path, data=data, dtype=self.get_dtype(attr),
-                                chunks=(1,) + data.shape[1:], maxshape=(None,) + data.shape[1:])
+    def _load_sequence(self, attr: str, indices: Iterable[int]) -> np.ndarray:
+        sequence = []
 
-        else:
-            self._write_dset(cxi_file, cxi_path, data=data, dtype=self.get_dtype(attr))
+        for index in self._indices[attr][indices]):
+            with h5py.File(index[0], 'r') as cxi_file:
+                sequence.append(cxi_file[index[1]][index[2]])
+
+        return self.protocol.cast(attr, np.array(sequence))
+
+    def load_attribute(self, attr: str, indices: Optional[Iterable[int]]=None, processes: int=1,
+                       verbose: bool=True) -> np.ndarray:
+        kind = self.protocol.get_kind(attr)
+
+        if kind == 'stack':
+            return self._load_stack()
