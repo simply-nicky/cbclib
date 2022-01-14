@@ -15,6 +15,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 from .ini_parser import ROOT_PATH, INIParser
+from .cxi_protocol import CXIStore
 from .data_processing import CrystData
 
 LOG_PROTOCOL = os.path.join(ROOT_PATH, 'config/log_protocol.ini')
@@ -257,3 +258,39 @@ class LogProtocol(INIParser):
         data_dict = {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
         data_dict['indices'] = frame_indices
         return data_dict
+
+def converter_petra(dir_path, scan_num, out_path):
+    log_prt = LogProtocol.import_default()
+
+    h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
+    log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
+    h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
+                       if path.endswith(('LambdaFar.nxs', '.h5'))])
+
+    files = CXIStore(input_files=h5_files, output_file=out_path)
+    n_steps = files.indices().size
+
+    log_attrs = log_prt.load_attributes(log_path)
+    log_data = log_prt.load_data(log_path)
+
+    x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
+    y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
+    z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
+    r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
+    translations = np.tile([[x_sample, y_sample, z_sample]], (n_steps, 1))
+    tilts = r_sample * np.ones(n_steps)
+    for data_key, log_dset in log_data.items():
+        for log_key in log_prt.log_keys['x_sample']:
+            if log_key in data_key:
+                translations[:, 0] = log_dset[:n_steps]
+        for log_key in log_prt.log_keys['y_sample']:
+            if log_key in data_key:
+                translations[:, 1] = log_dset[:n_steps]
+        for log_key in log_prt.log_keys['z_sample']:
+            if log_key in data_key:
+                translations[:, 2] = log_dset[:n_steps]
+        for log_key in log_prt.log_keys['r_sample']:
+            if log_key in data_key:
+                tilts = log_dset[:n_steps]
+
+    return CrystData(files=files, translations=translations, tilts=tilts)

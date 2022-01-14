@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from configparser import ConfigParser
 import re
-from typing import Any, Dict, TypeVar, Type
+from typing import Any, Dict, List, TypeVar, Type, Union
 import numpy as np
 
 T = TypeVar('T')            # Object type
@@ -98,20 +98,22 @@ class INIParser:
             self.__setattr__(section, value)
         self._lookup = self._lookup_dict()
 
-    def _get_value(self, section: str, option: str, kwargs: Dict) -> Any:
-        if not option in kwargs[section]:
-            raise AttributeError("The '{:s}' option has not been provided".format(option))
-        fmt = self.get_format(section, option)
+    @staticmethod
+    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
+        """Convert `strings` to a list of strings.
 
-        if isinstance(kwargs[section][option], (list, tuple)):
-            return [fmt(part) for part in kwargs[section][option]]
+        Args:
+            strings : String or a list of strings
 
-        if isinstance(kwargs[section][option], np.ndarray):
-            if kwargs[section][option].ndim > 1:
-                raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
-            return [fmt(part) for part in kwargs[section][option]]
+        Returns:
+            List of strings.
+        """
+        if isinstance(strings, (str, list)):
+            if isinstance(strings, str):
+                return [strings,]
+            return strings
 
-        return fmt(kwargs[section][option])
+        raise ValueError('strings must be a string or a list of strings')
 
     @classmethod
     def _lookup_dict(cls) -> Dict:
@@ -182,7 +184,7 @@ class INIParser:
             return fmt(string.strip())
 
     @classmethod
-    def _import_ini(cls, protocol_file: str) -> Dict:
+    def _import_ini(cls, protocol_file: str) -> Dict[str, Dict]:
         ini_parser = cls.read_ini(protocol_file)
         kwargs = {}
         for section in cls.attr_dict:
@@ -199,7 +201,7 @@ class INIParser:
         return kwargs
 
     @classmethod
-    def _format(cls, obj: INIParser) -> Dict:
+    def _format(cls, obj: Dict) -> Dict:
         crop_obj = {}
         for key, val in list(obj.items())[:cls.FMT_LEN]:
             if isinstance(val, dict):
@@ -210,6 +212,21 @@ class INIParser:
         if len(obj) > cls.FMT_LEN:
             crop_obj['...'] = '...'
         return crop_obj
+
+    def _get_value(self, section: str, option: str, kwargs: Dict) -> Any:
+        if not option in kwargs[section]:
+            raise AttributeError("The '{:s}' option has not been provided".format(option))
+        fmt = self.get_format(section, option)
+
+        if isinstance(kwargs[section][option], (list, tuple)):
+            return [fmt(part) for part in kwargs[section][option]]
+
+        if isinstance(kwargs[section][option], np.ndarray):
+            if kwargs[section][option].ndim > 1:
+                raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
+            return [fmt(part) for part in kwargs[section][option]]
+
+        return fmt(kwargs[section][option])
 
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dict__.get('_lookup', {}):

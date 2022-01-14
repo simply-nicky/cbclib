@@ -88,9 +88,8 @@ class DataContainer:
     init_set : Set of optional data attributes.
     """
     attr_set, init_set = set(), set()
-    inits = {}
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, init_funcs, **kwargs: Any) -> None:
         """
         Args:
             kwargs : Values of the attributes specified in `attr_set` and
@@ -102,16 +101,16 @@ class DataContainer:
         """
         for attr in self.attr_set:
             if kwargs.get(attr, None) is None:
-                raise ValueError('Attribute {:s} has not been provided'.format(attr))
+                raise ValueError(f'Attribute {attr} has not been provided')
 
             self.__setattr__(attr, kwargs.get(attr))
 
         for attr in self.init_set:
             self.__setattr__(attr, kwargs.get(attr))
 
-        for attr, init_func in self.inits.items():
+        for attr, init_func in init_funcs.items():
             if self.__dict__.get(attr, None) is None:
-                self.__setattr__(attr, init_func(self))
+                self.__setattr__(attr, init_func())
 
     def __iter__(self) -> Iterable:
         return (self.attr_set | self.init_set).__iter__()
