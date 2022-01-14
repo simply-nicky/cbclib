@@ -103,20 +103,26 @@ class CrystData(DataContainer):
     whitefield:     Optional[np.ndarray]
 
     def __init__(self, files: CXIStore, transform: Optional[Transform]=None, **kwargs):
-        init_funcs = {'num_threads': lambda: np.clip(1, 64, cpu_count())}
-        if kwargs.get('data') is not None:
-            init_funcs.update(good_frames=lambda: np.arange(self.data.shape[0]),
-                              mask=self._generate_mask,
-                              cor_data=self.update_cor_data.inplace_update)
+        super(CrystData, self).__init__(files=files, transform=transform, **kwargs)
 
-        super(CrystData, self).__init__(init_funcs=init_funcs, files=files,
-                                        transform=transform, **kwargs)
+        self._init_functions(num_threads=lambda: np.clip(1, 64, cpu_count()))
+        if self.get('data') is not None:
+            self._init_functions(good_frames=lambda: np.arange(self.data.shape[0]),
+                                 mask=self._mask, cor_data=self._cor_data)
 
-    def _generate_mask(self) -> np.ndarray:
+        self._init_attributes()
+
+    def _mask(self) -> np.ndarray:
         mask = np.ones(self.data.shape, dtype=bool)
         if self.pupil is not None:
             mask[:, self.pupil[0]:self.pupil[1], self.pupil[2]:self.pupil[3]] = False
         return mask
+
+    def _cor_data(self) -> np.ndarray:
+        if self._iswhitefield:
+            return subtract_background(data=self.data, mask=self.mask, whitefield=self.whitefield,
+                                       flatfields=self.flatfields, num_threads=self.num_threads)
+        return None
 
     @dict_to_object
     def load(self, attributes: Union[str, List[str]], indices: Iterable[int]=None,
@@ -265,13 +271,6 @@ class CrystData(DataContainer):
 
     @dict_to_object
     def update_cor_data(self) -> None:
-        if self._iswhitefield:
-            cor_data = subtract_background(data=self.data, mask=self.mask,
-                                           whitefield=self.whitefield,
-                                           flatfields=self.flatfields,
-                                           num_threads=self.num_threads)
-            return {'cor_data': cor_data}
-
         return {'cor_data': None}
 
     @dict_to_object
@@ -462,14 +461,18 @@ class StreakDetector(DataContainer):
             ValueError : If an attribute specified in `attr_set` has not been
                 provided.
         """
-        init_funcs = {'lsd_obj': self.update_lsd.inplace_update}
-        super(StreakDetector, self).__init__(init_funcs=init_funcs, parent=parent,
-                                             lsd_obj=lsd_obj, **kwargs)
+        super(StreakDetector, self).__init__(parent=parent, lsd_obj=lsd_obj, **kwargs)
+
+        self._init_functions(lsd_obj=lambda: LSD(scale=0.9, sigma_scale=0.9, log_eps=0.0,
+                                                 ang_th=60.0, density_th=0.5, quant=2e-2,
+                                                 y_c=self.center[0], x_c=self.center[1]))
+
+        self._init_attributes()
 
     @dict_to_object
     def update_lsd(self, scale: float=0.9, sigma_scale: float=0.9,
                    log_eps: float=0., ang_th: float=60.0, density_th: float=0.5,
-                   quant: float=2.0e-2) -> StreakDetector:
+                   quant: float=2e-2) -> StreakDetector:
         return {'lsd_obj': LSD(scale=scale, sigma_scale=sigma_scale, log_eps=log_eps,
                                ang_th=ang_th, density_th=density_th, quant=quant,
                                y_c=self.center[0], x_c=self.center[1])}
