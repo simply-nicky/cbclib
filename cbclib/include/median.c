@@ -104,6 +104,13 @@ int compare_uint(const void *a, const void *b)
     else return 0;
 }
 
+int compare_ulong(const void *a, const void *b)
+{
+    if (*(unsigned long *)a > *(unsigned long *)b) return 1;
+    else if (*(unsigned long *)a < *(unsigned long *)b) return -1;
+    else return 0;
+}
+
 static void wirthselect(void *data, void *key, int k, int l, int m, size_t size,
     int (*compar)(const void*, const void*))
 {
@@ -156,8 +163,8 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
         #pragma omp for
         for (int i = 0; i < (int)repeats; i++)
         {
-            UPDATE_LINE(iline, iarr, i);
-            UPDATE_LINE(mline, marr, i);
+            UPDATE_LINE(iline, i);
+            UPDATE_LINE(mline, i);
 
             int len = 0;
             for (int n = 0; n < (int)iline->npts; n++)

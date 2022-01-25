@@ -1,48 +1,11 @@
 cimport numpy as np
 import numpy as np
 import cython
+from .image_proc cimport check_array, normalize_sequence
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
-
-cdef np.ndarray check_array(np.ndarray array, int type_num):
-    if not np.PyArray_IS_C_CONTIGUOUS(array):
-        array = np.PyArray_GETCONTIGUOUS(array)
-    cdef int tn = np.PyArray_TYPE(array)
-    if tn != type_num:
-        array = np.PyArray_Cast(array, type_num)
-    return array
-
-cdef np.ndarray number_to_array(object num, np.npy_intp rank, int type_num):
-    cdef np.npy_intp *dims = [rank,]
-    cdef np.ndarray arr = <np.ndarray>np.PyArray_SimpleNew(1, dims, type_num)
-    cdef int i
-    for i in range(rank):
-        arr[i] = num
-    return arr
-
-cdef np.ndarray normalize_sequence(object inp, np.npy_intp rank, int type_num):
-    # If input is a scalar, create a sequence of length equal to the
-    # rank by duplicating the input. If input is a sequence,
-    # check if its length is equal to the length of array.
-    cdef np.ndarray arr
-    cdef int tn
-    if np.PyArray_IsAnyScalar(inp):
-        arr = number_to_array(inp, rank, type_num)
-    elif np.PyArray_Check(inp):
-        arr = <np.ndarray>inp
-        tn = np.PyArray_TYPE(arr)
-        if tn != type_num:
-            arr = <np.ndarray>np.PyArray_Cast(arr, type_num)
-    elif isinstance(inp, (list, tuple)):
-        arr = <np.ndarray>np.PyArray_FROM_OTF(inp, type_num, np.NPY_ARRAY_C_CONTIGUOUS)
-    else:
-        raise ValueError("Wrong sequence argument type")
-    cdef np.npy_intp size = np.PyArray_SIZE(arr)
-    if size != rank:
-        raise ValueError("Sequence argument must have length equal to input rank")
-    return arr
 
 def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
     rot_mats = check_array(rot_mats, np.NPY_FLOAT64)

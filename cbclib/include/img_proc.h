@@ -5,6 +5,8 @@
 // Line draw
 int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, double *lines,
     size_t n_lines, unsigned int dilation);
+int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
+    double *lines, size_t n_lines, unsigned int dilation);
 
 // Collapse adjacent lines into one and filter out the bad ones
 int filter_lines(double *olines, double *data, size_t Y, size_t X, double *ilines, size_t n_lines,

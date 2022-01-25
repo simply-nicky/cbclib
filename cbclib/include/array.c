@@ -44,7 +44,7 @@ line new_line(size_t npts, size_t stride, size_t item_size, void *data)
     ln->stride = stride;
     ln->item_size = item_size;
     ln->line_size = ln->npts * ln->stride * ln->item_size;
-    ln->data = data;
+    ln->data = ln->first = data;
     return ln;
 }
 
@@ -60,7 +60,7 @@ line init_line(array arr, int axis)
     ln->stride = arr->strides[axis];
     ln->item_size = arr->item_size;
     ln->line_size = ln->npts * ln->stride * ln->item_size;
-    ln->data = arr->data;
+    ln->data = ln->first = arr->data;
     return ln;
 }
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 from multiprocessing import Pool
 import os
 from configparser import ConfigParser
+from types import TracebackType
 from typing import (Dict, ItemsView, Iterable, Iterator, KeysView,
                     List, Optional, Tuple, Union, ValuesView)
 import h5py
@@ -42,8 +43,10 @@ class CXIProtocol(INIParser):
             as `data`.
         load_paths : Dictionary with attributes' CXI default file paths.
     """
-    known_types = {'int': np.integer, 'bool': np.bool, 'float': np.floating, 'str': str,
+    known_types = {'int': np.integer, 'bool': bool, 'float': np.floating, 'str': str,
                    'uint': np.unsignedinteger}
+    default_types = {'int': np.int64, 'bool': bool, 'float': np.float64, 'str': str,
+                     'uint': np.uint64}
     known_ndims = {'stack': 3, 'frame': 2, 'sequence': 1, 'scalar': 0}
     attr_dict = {'datatypes': ('ALL', ), 'load_paths': ('ALL', ), 'kinds': ('ALL', )}
     fmt_dict = {'datatypes': 'str', 'load_paths': 'str', 'kinds': 'str'}
@@ -62,8 +65,6 @@ class CXIProtocol(INIParser):
             kinds : Dictionary with the flags if the attribute is of data type.
                 Data type is 2- or 3-dimensional and has the same data shape
                 as `data`.
-            float_precision : Choose between 32-bit floating point precision ('float32')
-                or 64-bit floating point precision ('float64').
         """
         load_paths = {attr: self.str_to_list(val)
                       for attr, val in load_paths.items() if attr in datatypes}
@@ -177,7 +178,7 @@ class CXIProtocol(INIParser):
         """
         return self.load_paths.get(attr, value)
 
-    def get_dtype(self, attr: str, dtype: Optional[str]='float') -> type:
+    def get_dtype(self, attr: str, dtype: Optional[np.dtype]=None) -> type:
         """Return the attribute's data type. Return `dtype` if the attribute's
         data type is not found.
 
@@ -189,7 +190,13 @@ class CXIProtocol(INIParser):
         Returns:
             Attribute's data type.
         """
-        return self.known_types.get(self.datatypes.get(attr, dtype))
+        if attr not in self:
+            raise ValueError(f'Invalid attribute: {attr:s}')
+
+        attr_type = self.known_types.get(self.datatypes.get(attr))
+        if dtype is not None and np.issubdtype(dtype, attr_type):
+            return dtype
+        return self.default_types.get(self.datatypes.get(attr))
 
     def get_kind(self, attr: str, value: str='scalar') -> str:
         """Return if the attribute is of data type. Data type is 2- or
@@ -207,11 +214,8 @@ class CXIProtocol(INIParser):
     def get_ndim(self, attr: str, value: int=0) -> int:
         return self.known_ndims.get((self.get_kind(attr)), value)
 
-    def cast(self, attr: str, array: np.ndarray):
-        dtype = self.get_dtype(attr)
-        if np.issubdtype(array.dtype, dtype):
-            return array
-        return np.asarray(array, dtype=dtype)
+    def cast(self, attr: str, array: np.ndarray) -> np.ndarray:
+        return np.asarray(array, dtype=self.get_dtype(attr, array.dtype))
 
     @staticmethod
     def read_dataset_shapes(cxi_path: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
@@ -270,23 +274,50 @@ class CXIProtocol(INIParser):
         return np.array([files, cxi_paths, fidxs], dtype=object).T
 
 class CXIStore():
+
+    out_file : h5py.File
+    inp_dict : Dict[str, h5py.File]
+
     def __init__(self, input_files: Union[str, List[str]], output_file: str,
                  protocol: CXIProtocol=CXIProtocol.import_default()) -> None:
         input_files = protocol.str_to_list(input_files)
 
-        self.output_file = h5py.File(output_file, mode='a', libver='latest')
+        self.out_fname, self.out_file = output_file, None
 
-        self.input_dict = {}
         for data_file in input_files:
             if not os.path.isfile(data_file):
                 raise ValueError(f'There is no file under the given path: {data_file}')
-            self.input_dict[data_file] = h5py.File(data_file, mode='r', swmr=True, libver='latest')
+        self.inp_dict = {data_file: None for data_file in input_files}
         self.protocol = protocol
-        self.update_indices()
 
-        if 'data' not in self._indices:
-            self.close()
-            raise ValueError("Input files don't contain 'data' attribute")
+        with self:
+            self.update_indices()
+
+    def __bool__(self) -> bool:
+        isopen = True
+        for cxi_file in self.input_files():
+            isopen &= bool(cxi_file)
+        return isopen & bool(self.out_file)
+
+    def __contains__(self, attr: str) -> bool:
+        return attr in self._indices
+
+    def __iter__(self) -> Iterable:
+        return self._indices.__iter__()
+
+    def __repr__(self) -> str:
+        return self._indices.__repr__()
+
+    def __str__(self) -> str:
+        return self._indices.__str__()
+
+    def __enter__(self) -> CXIStore:
+        self.open()
+        return self
+
+    def __exit__(self, exc_type: Optional[BaseException], exc: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> None:
+        self.close()
 
     def update_indices(self) -> None:
         indices = {}
@@ -299,31 +330,30 @@ class CXIStore():
                     idxs = self.protocol.read_attribute_indices(attr, self.input_files())[0]
                 if idxs.size:
                     indices[attr] = idxs
+
+        if 'data' not in indices:
+            raise ValueError("Input files don't contain 'data' attribute")
+
         self._indices = indices
 
-    def __bool__(self) -> bool:
-        isopen = True
-        for cxi_file in self.input_files():
-            isopen &= bool(cxi_file)
-        return isopen & bool(self.output_file)
+    def open(self) -> None:
+        if not self:
+            for data_file in self.inp_dict:
+                self.inp_dict[data_file] = h5py.File(data_file, mode='r',
+                                                     swmr=True, libver='latest')
 
-    def __repr__(self) -> str:
-        return self._indices.__repr__()
-
-    def __str__(self) -> str:
-        return self._indices.__str__()
+            self.out_file = h5py.File(self.out_fname, mode='a', libver='latest')
 
     def close(self) -> None:
         for cxi_file in self.input_files():
             cxi_file.close()
-        self.output_file.close()
-        self.update_indices()
+        self.out_file.close()
 
     def input_filenames(self) -> List[str]:
-        return list(self.input_dict.keys())
+        return list(self.inp_dict.keys())
 
     def input_files(self) -> List[h5py.File]:
-        return list(self.input_dict.values())
+        return list(self.inp_dict.values())
 
     def indices(self) -> np.ndarray:
         return np.arange(self._indices['data'].shape[0])
@@ -338,7 +368,7 @@ class CXIStore():
         return self._indices.items()
 
     def _read_chunk(self, index: np.ndarray) -> np.ndarray:
-        return self.input_dict[index[0]][index[1]][index[2]]
+        return self.inp_dict[index[0]][index[1]][index[2]]
 
     @staticmethod
     def _read_worker(index: np.ndarray) -> np.ndarray:
@@ -380,25 +410,28 @@ class CXIStore():
             if kind == 'stack':
                 return self._load_stack(attr=attr, indices=indices, processes=processes,
                                         verbose=verbose)
-            if kind in ['frame', 'scalar']:
+            elif kind in ['frame', 'scalar']:
                 return self._load_frame(attr=attr)
-            if kind == 'sequence':
+            elif kind == 'sequence':
                 return self._load_sequence(attr=attr, indices=indices)
+            else:
+                raise ValueError(f'Invalid kind: {kind:s}')
 
         return np.array([], dtype=self.protocol.get_dtype(attr))
 
     def find_dataset(self, attr: str, shape: Tuple[int, ...]) -> str:
-        cxi_path = self.protocol.find_path(attr, self.output_file)
+        cxi_path = self.protocol.find_path(attr, self.out_file)
 
         if cxi_path:
-            if self.output_file[cxi_path].shape != shape:
-                del self.output_file[cxi_path]
-                self.output_file.create_dataset(cxi_path, shape=shape,
-                                                dtype=self.protocol.get_dtype(attr))
+            if self.out_file[cxi_path].shape != shape:
+                dtype = self.out_file[cxi_path].dtype
+                del self.out_file[cxi_path]
+                self.out_file.create_dataset(cxi_path, shape=shape,
+                                             dtype=self.protocol.get_dtype(attr, dtype))
         else:
             cxi_path = self.protocol.get_load_paths(attr)[0]
-            self.output_file.create_dataset(cxi_path, shape=shape,
-                                            dtype=self.protocol.get_dtype(attr))
+            self.out_file.create_dataset(cxi_path, shape=shape,
+                                         dtype=self.protocol.get_dtype(attr))
 
         return cxi_path
 
@@ -406,29 +439,22 @@ class CXIStore():
         if indices is None:
             indices = self.indices()
         cxi_path = self.find_dataset(attr, (self.indices().size,) + data.shape[1:])
-        self.output_file[cxi_path][indices] = data
+        self.out_file[cxi_path][indices] = data
 
-    def _save_frame(self, attr: str, data: np.ndarray) -> None:
+    def _save_data(self, attr: str, data: np.ndarray) -> None:
         cxi_path = self.find_dataset(attr, data.shape)
-        self.output_file[cxi_path][()] = data
+        self.out_file[cxi_path][()] = data
 
-    def _save_sequence(self, attr: str, data: np.ndarray, indices: Optional[Iterable[int]]=None) -> None:
-        if indices is None:
-            indices = self.indices()
-        cxi_path = self.find_dataset(attr, (self.indices().size,))
-        self.output_file[cxi_path][indices] = data
-
-    def save_attribute(self, attr: str, data: np.ndarray, indices: Optional[Iterable[int]]=None) -> None:
+    def save_attribute(self, attr: str, data: np.ndarray,
+                       indices: Optional[Iterable[int]]=None) -> None:
         kind = self.protocol.get_kind(attr)
 
         if self:
-            if kind == 'stack':
+            if kind in ['stack', 'sequence']:
                 return self._save_stack(attr=attr, data=data, indices=indices)
-            if kind == 'frame':
-                return self._save_frame(attr=attr, data=data)
-            if kind == 'sequence':
-                return self._save_sequence(attr=attr, data=data, indices=indices)
-            if kind == 'scalar':
-                return self._save_frame(attr=attr, data=np.array(data))
+            elif kind in ['frame', 'scalar']:
+                return self._save_data(attr=attr, data=data)
+            else:
+                raise ValueError(f'Invalid kind: {kind:s}')
 
         raise ValueError('Invalid file objects: the output file is closed')

@@ -13,11 +13,94 @@ typedef struct rect_s
 } rect_s;
 typedef struct rect_s *rect;
 
-static void setPixelColor(array image, int x, int y, unsigned int val, unsigned int max_val)
+typedef struct ntuple_list_s
 {
+    int iter;
+    size_t size;
+    size_t max_size;
+    size_t dim;
+    unsigned int *values;
+} * ntuple_list;
+
+static void free_ntuple_list(ntuple_list n_tuple)
+{
+    if (n_tuple == NULL || n_tuple->values == NULL)
+        ERROR("free_ntuple_list: invalid n-tuple input.");
+    free((void *) n_tuple->values);
+    free((void *) n_tuple);
+}
+
+static ntuple_list new_ntuple_list(size_t dim, size_t max_size)
+{
+    ntuple_list n_tuple;
+
+    /* check parameters */
+    if (dim == 0) ERROR("new_ntuple_list: 'dim' must be positive.");
+
+    /* get memory for list structure */
+    n_tuple = (ntuple_list)malloc(sizeof(struct ntuple_list_s));
+    if (n_tuple == NULL) ERROR("not enough memory.");
+
+    /* initialize list */
+    n_tuple->size = 0;
+    n_tuple->max_size = max_size;
+    n_tuple->dim = dim;
+
+    /* get memory for tuples */
+    n_tuple->values = (unsigned int *)malloc(dim * max_size * sizeof(unsigned int));
+    if (n_tuple->values == NULL) ERROR("not enough memory.");
+
+    return n_tuple;
+}
+
+static void realloc_ntuple_list(ntuple_list n_tuple, size_t max_size)
+{
+    /* check parameters */
+    if (n_tuple == NULL || n_tuple->values == NULL || n_tuple->max_size == 0)
+        ERROR("realloc_ntuple_list: invalid n-tuple.");
+
+    /* duplicate number of tuples */
+    n_tuple->max_size = max_size;
+
+    /* realloc memory */
+    n_tuple->values = (unsigned int *)realloc((void *)n_tuple->values, n_tuple->dim * n_tuple->max_size * sizeof(unsigned int));
+    if (n_tuple->values == NULL) ERROR("not enough memory.");
+}
+
+static void add_4tuple(ntuple_list list, double v1, double v2, double v3, double v4)
+{
+    /* check parameters */
+    if (list == NULL) ERROR("add_4tuple: invalid n-tuple input.");
+    if (list->dim != 4) ERROR("add_4tuple: the n-tuple must be a 7-tuple.");
+
+    /* if needed, alloc more tuples to 'list' */
+    if (list->size == list->max_size) realloc_ntuple_list(list, list->max_size + 1);
+    if (list->values == NULL) ERROR("add_4tuple: invalid n-tuple input.");
+
+    /* add new 4-tuple */
+    list->values[list->size * list->dim + 0] = v1;
+    list->values[list->size * list->dim + 1] = v2;
+    list->values[list->size * list->dim + 2] = v3;
+    list->values[list->size * list->dim + 3] = v4;
+
+    /* update number of tuples counter */
+    list->size++;
+}
+
+typedef void (*set_pixel)(void *out, int x, int y, unsigned int val, unsigned int max_val);
+
+static void set_pixel_color(void *out, int x, int y, unsigned int val, unsigned int max_val)
+{
+    array image = (array)out;
     unsigned int *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
     unsigned int new = *ptr + val;
     *ptr = new > max_val ? max_val : new;
+}
+
+static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned int max_val)
+{
+    ntuple_list idxs = (ntuple_list)out;
+    add_4tuple(idxs, (unsigned int)idxs->iter, (unsigned int)x, (unsigned int)y, val > max_val ? max_val : val);
 }
 
 #define CLIP(_coord, _min, _max)                \
@@ -26,7 +109,7 @@ static void setPixelColor(array image, int x, int y, unsigned int val, unsigned 
     _coord = (_coord < _max) ? _coord : _max;   \
 }
 
-static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
+static void plot_line_width(void *out, size_t *dims, rect ln, double wd, unsigned int max_val, set_pixel setter)
 {
     /* plot an anti-aliased line of width wd */
     int dx = abs(ln->x1 - ln->x0), sx = ln->x0 < ln->x1 ? 1 : -1;
@@ -41,26 +124,26 @@ static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
 
     if (ln->x0 < ln->x1)
     {
-        bnd->x0 = ln->x0 - wi; CLIP(bnd->x0, 0, (int)image->dims[1] - 1);
-        bnd->x1 = ln->x1 + wi; CLIP(bnd->x1, 0, (int)image->dims[1] - 1);
+        bnd->x0 = ln->x0 - wi; CLIP(bnd->x0, 0, (int)dims[1] - 1);
+        bnd->x1 = ln->x1 + wi; CLIP(bnd->x1, 0, (int)dims[1] - 1);
         err += (ln->x0 - bnd->x0) * dy; ln->x0 = bnd->x0; ln->x1 = bnd->x1;
     }
     else
     {
-        bnd->x0 = ln->x1 - wi; CLIP(bnd->x0, 0, (int)image->dims[1] - 1);
-        bnd->x1 = ln->x0 + wi; CLIP(bnd->x1, 0, (int)image->dims[1] - 1);
+        bnd->x0 = ln->x1 - wi; CLIP(bnd->x0, 0, (int)dims[1] - 1);
+        bnd->x1 = ln->x0 + wi; CLIP(bnd->x1, 0, (int)dims[1] - 1);
         err += (bnd->x1 - ln->x0) * dy; ln->x0 = bnd->x1; ln->x1 = bnd->x0;
     }
     if (ln->y0 < ln->y1)
     {
-        bnd->y0 = ln->y0 - wi; CLIP(bnd->y0, 0, (int)image->dims[0] - 1);
-        bnd->y1 = ln->y1 + wi; CLIP(bnd->y1, 0, (int)image->dims[0] - 1);
+        bnd->y0 = ln->y0 - wi; CLIP(bnd->y0, 0, (int)dims[0] - 1);
+        bnd->y1 = ln->y1 + wi; CLIP(bnd->y1, 0, (int)dims[0] - 1);
         err -= (ln->y0 - bnd->y0) * dx; ln->y0 = bnd->y0; ln->y1 = bnd->y1;
     }
     else
     {
-        bnd->y0 = ln->y1 - wi; CLIP(bnd->y0, 0, (int)image->dims[0] - 1);
-        bnd->y1 = ln->y0 + wi; CLIP(bnd->y1, 0, (int)image->dims[0] - 1);
+        bnd->y0 = ln->y1 - wi; CLIP(bnd->y0, 0, (int)dims[0] - 1);
+        bnd->y1 = ln->y0 + wi; CLIP(bnd->y1, 0, (int)dims[0] - 1);
         err -= (bnd->y1 - ln->y0) * dx; ln->y0 = bnd->y1; ln->y1 = bnd->y0;
     }
 
@@ -70,7 +153,7 @@ static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
         err += derr; derr = 0;
         ln->x0 += dx0; dx0 = 0;
         val = max_val - fmax(max_val * (abs(err - dx + dy) / ed - wd + 1), 0.0);
-        setPixelColor(image, ln->x0, ln->y0, val, max_val);
+        setter(out, ln->x0, ln->y0, val, max_val);
 
         if (2 * err >= -dx)
         {
@@ -80,7 +163,7 @@ static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
                  e2 += dx, y2 += sy)
             {
                 val = max_val - fmax(max_val * (abs(e2) / ed - wd + 1), 0.0);
-                setPixelColor(image, ln->x0, y2, val, max_val);
+                setter(out, ln->x0, y2, val, max_val);
             }
             if (ln->x0 == ln->x1) break;
             derr -= dy; dx0 += sx;
@@ -93,7 +176,7 @@ static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
                  e2 -= dy, x2 += sx)
             {
                 val = max_val - fmax(max_val * (abs(e2) / ed - wd + 1), 0.0);
-                setPixelColor(image, x2, ln->y0, val, max_val);
+                setter(out, x2, ln->y0, val, max_val);
             }
             if (ln->y0 == ln->y1) break;
             derr += dx; ln->y0 += sy;
@@ -106,8 +189,8 @@ static void plotLineWidth(array image, rect ln, double wd, unsigned int max_val)
 int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation)
 {
     /* check parameters */
-    if (!out || !lines) {ERROR("line_draw: one of the arguments is NULL."); return -1;}
-    if (!X && !Y) {ERROR("line_draw: image size must be positive."); return -1;}
+    if (!out || !lines) {ERROR("draw_lines: one of the arguments is NULL."); return -1;}
+    if (!X && !Y) {ERROR("draw_lines: image size must be positive."); return -1;}
 
     if (n_lines == 0) return 0;
 
@@ -122,7 +205,7 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, doub
 
     for (int i = 0; i < (int)n_lines; i++)
     {
-        UPDATE_LINE(ln, larr, i);
+        UPDATE_LINE(ln, i);
         ln_ptr = ln->data;
 
         if (ln_ptr[0] > 0.0 && ln_ptr[0] < (double)X &&
@@ -133,12 +216,63 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, doub
             rt->x0 = round(ln_ptr[0]); rt->y0 = round(ln_ptr[1]);
             rt->x1 = round(ln_ptr[2]); rt->y1 = round(ln_ptr[3]);
 
-            plotLineWidth(oarr, rt, ln_ptr[4] + (double)dilation, max_val);
+            plot_line_width((void *)oarr, oarr->dims, rt, ln_ptr[4] + (double)dilation, max_val, set_pixel_color);
         }
     }
 
     free(ln); free(rt);
     free_array(larr); free_array(oarr);
+
+    return 0;
+}
+
+int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation)
+{
+    /* check parameters */
+    if (!lines) {ERROR("draw_line_indices: lines is NULL."); return -1;}
+    if (!X && !Y) {ERROR("draw_line_indices: image size must be positive."); return -1;}
+
+    if (n_lines == 0) return 0;
+
+    size_t ldims[2] = {n_lines, 7};
+    size_t odims[2] = {Y, X};
+    array larr = new_array(2, ldims, sizeof(double), lines);
+    ntuple_list idxs = new_ntuple_list(4, 1);
+
+    line ln = init_line(larr, 1);
+    rect rt = (rect)malloc(sizeof(struct rect_s));
+    double *ln_ptr;
+    double wd;
+    int ln_area;
+
+    for (idxs->iter = 0; idxs->iter < (int)n_lines; idxs->iter++)
+    {
+        UPDATE_LINE(ln, idxs->iter);
+        ln_ptr = ln->data;
+
+        if (ln_ptr[0] > 0.0 && ln_ptr[0] < (double)X &&
+            ln_ptr[1] > 0.0 && ln_ptr[1] < (double)Y &&
+            ln_ptr[2] > 0.0 && ln_ptr[2] < (double)X &&
+            ln_ptr[3] > 0.0 && ln_ptr[3] < (double)Y)
+        {
+            rt->x0 = round(ln_ptr[0]); rt->y0 = round(ln_ptr[1]);
+            rt->x1 = round(ln_ptr[2]); rt->y1 = round(ln_ptr[3]);
+            wd = ln_ptr[4] + (double)dilation;
+            ln_area = (2 * (int)wd + abs(rt->x1 - rt->x0)) * (2 * (int)wd + abs(rt->y1 - rt->y0));
+
+            if (idxs->max_size < idxs->size + (size_t)ln_area)
+                realloc_ntuple_list(idxs, idxs->size + (size_t)ln_area);
+
+            plot_line_width((void *)idxs, odims, rt, wd, max_val, set_pixel_index);
+        }
+    }
+
+    realloc_ntuple_list(idxs, idxs->size);
+    *out = idxs->values;
+    *n_idxs = idxs->size;
+
+    free(ln); free(rt);
+    free_array(larr); free(idxs);
 
     return 0;
 }
@@ -188,8 +322,8 @@ static void draw_pair(unsigned int **out, rect orect, size_t Y, size_t X,
     rt1->x0 -= orect->x0; rt1->y0 -= orect->y0; rt1->x1 -= orect->x0; rt1->y1 -= orect->y0;
 
     /* Plot the lines */
-    plotLineWidth(oarr, rt0, ln0[4] + (double)dilation, max_val);
-    plotLineWidth(oarr, rt1, ln1[4] + (double)dilation, max_val);
+    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + (double)dilation, max_val, set_pixel_color);
+    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + (double)dilation, max_val, set_pixel_color);
 
     free(rt0); free(rt1); free_array(oarr);
 }
@@ -313,8 +447,8 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
     /* Get the coordinates and copy ilines to olines */
     for (i = 0; i < (int)n_lines; i++)
     {
-        UPDATE_LINE(iln, ilarr, i);
-        UPDATE_LINE(oln, olarr, i);
+        UPDATE_LINE(iln, i);
+        UPDATE_LINE(oln, i);
 
         if (*olines != *ilines) memcpy(oln->data, iln->data, iln->line_size);
         oln_ptr = oln->data;
@@ -359,7 +493,7 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
     /* Find the closest line for each line and filter out the bad lines */
     for (i = 0; i < (int)n_lines; i++)
     {
-        UPDATE_LINE(oln, olarr, i);
+        UPDATE_LINE(oln, i);
 
         if (fabs(als[i]) < var_a + ls[i] / rs[i])
         {
@@ -446,8 +580,8 @@ int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats)
 
     for (int i = 0; i < (int)n_mats; i++)
     {
-        UPDATE_LINE(rm_ln, rm_arr, i);
-        UPDATE_LINE(e_ln, e_arr, i);
+        UPDATE_LINE(rm_ln, i);
+        UPDATE_LINE(e_ln, i);
 
         rotmat_to_euler(e_ln->data, rm_ln->data);
     }
@@ -490,8 +624,8 @@ int compute_rot_matrix(double *rot_mats, double *eulers, size_t n_mats)
 
     for (int i = 0; i < (int)n_mats; i++)
     {
-        UPDATE_LINE(rm_ln, rm_arr, i);
-        UPDATE_LINE(e_ln, e_arr, i);
+        UPDATE_LINE(rm_ln, i);
+        UPDATE_LINE(e_ln, i);
 
         euler_to_rotmat(rm_ln->data, e_ln->data);
     }
@@ -534,7 +668,7 @@ int generate_rot_matrix(double *rot_mats, double *angles, size_t n_mats, double 
 
     for (int i = 0; i < (int)n_mats; i++)
     {
-        UPDATE_LINE(rm_ln, rm_arr, i);
+        UPDATE_LINE(rm_ln, i);
 
         calc_rotmat(rm_ln->data, 0.5 * angles[i], bb, cc, dd);
     }

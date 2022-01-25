@@ -1,8 +1,7 @@
-cimport numpy as np
 import numpy as np
 from libc.stdlib cimport free, malloc, calloc
-from cpython.ref cimport Py_INCREF
 from cython.parallel import prange
+from .image_proc cimport check_array
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
@@ -14,7 +13,6 @@ DEF NOT_DEF = -1.0
 
 cdef class ArrayWrapper:
     """A wrapper class for a C data structure. """
-    cdef void* _data
 
     def __cinit__(self):
         self._data = NULL
@@ -23,22 +21,6 @@ cdef class ArrayWrapper:
         if not self._data is NULL:
             free(self._data)
             self._data = NULL
-
-    @staticmethod
-    cdef ArrayWrapper from_ptr(void *data):
-        """Factory function to create a new wrapper from a C pointer."""
-        cdef ArrayWrapper wrapper = ArrayWrapper.__new__(ArrayWrapper)
-        wrapper._data = data
-        return wrapper
-
-    cdef np.ndarray to_ndarray(self, int ndim, np.npy_intp *dims, int type_num):
-        """Get a NumPy array from a wrapper."""
-        cdef np.ndarray ndarray = np.PyArray_SimpleNewFromData(ndim, dims, type_num, self._data)
-
-        # without this, data would be cleaned up right away
-        Py_INCREF(self)
-        np.PyArray_SetBaseObject(ndarray, self)
-        return ndarray
 
 cdef class LSD:
     """LSD  is a class for performing the streak detection
@@ -51,14 +33,6 @@ cdef class LSD:
              Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
              http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
     """
-    cdef public double ang_th
-    cdef public double density_th
-    cdef public double log_eps
-    cdef public double scale
-    cdef public double sigma_scale
-    cdef public double quant
-    cdef public double x_c
-    cdef public double y_c
 
     def __cinit__(self, double scale=0.8, double sigma_scale=0.6, double log_eps=0.,
                   double ang_th=45.0, double density_th=0.7, double quant=2.0,
@@ -128,18 +102,8 @@ cdef class LSD:
             gives an error of 2.0. Default value is 2.0.
         """
 
-    @staticmethod
-    cdef np.ndarray _check_image(np.ndarray image):
-        if not np.PyArray_IS_C_CONTIGUOUS(image):
-            image = np.PyArray_GETCONTIGUOUS(image)
-        cdef int tn = np.PyArray_TYPE(image)
-        if tn != np.NPY_FLOAT64:
-            image = np.PyArray_Cast(image, np.NPY_FLOAT64)
-        return image
-
-    cpdef dict detect(self, np.ndarray image, double radius=1.0,
-                      bint filter_lines=False, bint return_labels=False,
-                      unsigned int num_threads=1):
+    def detect(self, np.ndarray image, double radius=1.0, bint filter_lines=False,
+               bint return_labels=False, unsigned int num_threads=1):
         """Perform the LSD streak detection on `image`.
 
         Parameters
@@ -169,7 +133,7 @@ cdef class LSD:
         """
         if image.ndim < 2:
             raise ValueError('Image must be a 2D array.')
-        image = LSD._check_image(image)
+        image = check_array(image, np.NPY_FLOAT64)
 
         cdef int ndim = image.ndim
         cdef double *_img = <double *>np.PyArray_DATA(image)
@@ -248,10 +212,9 @@ cdef class LSD:
 
         return out_dict
 
-    cpdef dict mask(self, np.ndarray image, unsigned int max_val=1,
-                    unsigned int dilation=0, double radius=1.0,
-                    bint filter_lines=False, bint return_lines=True,
-                    unsigned int num_threads=1):
+    def mask(self, np.ndarray image, unsigned int max_val=1, unsigned int dilation=0,
+             double radius=1.0, bint filter_lines=False, bint return_lines=True,
+             unsigned int num_threads=1):
         """Perform the streak detection on `image` and return rasterized lines
         drawn on a mask array.
 

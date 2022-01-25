@@ -259,7 +259,7 @@ class LogProtocol(INIParser):
         data_dict['indices'] = frame_indices
         return data_dict
 
-def converter_petra(dir_path, scan_num, out_path):
+def converter_petra(dir_path, scan_num, out_path, **kwargs):
     log_prt = LogProtocol.import_default()
 
     h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
@@ -293,4 +293,4 @@ def converter_petra(dir_path, scan_num, out_path):
             if log_key in data_key:
                 tilts = log_dset[:n_steps]
 
-    return CrystData(files=files, translations=translations, tilts=tilts)
+    return CrystData(files=files, translations=translations, tilts=tilts, **kwargs)
