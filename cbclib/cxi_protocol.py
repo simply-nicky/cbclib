@@ -47,7 +47,7 @@ class CXIProtocol(INIParser):
                    'uint': np.unsignedinteger}
     default_types = {'int': np.int64, 'bool': bool, 'float': np.float64, 'str': str,
                      'uint': np.uint64}
-    known_ndims = {'stack': 3, 'frame': 2, 'sequence': 1, 'scalar': 0}
+    known_ndims = {'stack': (3,), 'frame': (2,), 'sequence': (1, 2), 'scalar': (0, 1, 2)}
     attr_dict = {'datatypes': ('ALL', ), 'load_paths': ('ALL', ), 'kinds': ('ALL', )}
     fmt_dict = {'datatypes': 'str', 'load_paths': 'str', 'kinds': 'str'}
 
@@ -211,7 +211,7 @@ class CXIProtocol(INIParser):
         """
         return self.kinds.get(attr, value)
 
-    def get_ndim(self, attr: str, value: int=0) -> int:
+    def get_ndim(self, attr: str, value: int=0) -> Tuple[int, ...]:
         return self.known_ndims.get((self.get_kind(attr)), value)
 
     def cast(self, attr: str, array: np.ndarray) -> np.ndarray:
@@ -257,7 +257,7 @@ class CXIProtocol(INIParser):
         for cxi_file in cxi_files:
             shapes = self.read_attribute_shapes(attr, cxi_file)
             for cxi_path, shape in shapes.items():
-                if len(shape) != self.get_ndim(attr):
+                if len(shape) not in self.get_ndim(attr):
                     err_txt = f'Dataset at {cxi_file.filename}:'\
                               f' {cxi_path} has invalid shape: {str(shape)}'
                     raise ValueError(err_txt)
@@ -266,7 +266,7 @@ class CXIProtocol(INIParser):
                     files.extend(np.repeat(cxi_file.filename, shape[0]).tolist())
                     cxi_paths.extend(np.repeat(cxi_path, shape[0]).tolist())
                     fidxs.extend(np.arange(shape[0]).tolist())
-                if kind  == ['frame', 'scalar']:
+                if kind in ['frame', 'scalar']:
                     files.append(cxi_file.filename)
                     cxi_paths.append(cxi_path)
                     fidxs.append(tuple())
@@ -326,8 +326,8 @@ class CXIStore():
                 kind = self.protocol.get_kind(attr)
                 if kind in ['stack', 'sequence', 'scalar']:
                     idxs = self.protocol.read_attribute_indices(attr, self.input_files())
-                if kind == 'frames':
-                    idxs = self.protocol.read_attribute_indices(attr, self.input_files())[0]
+                if kind == 'frame':
+                    idxs = self.protocol.read_attribute_indices(attr, self.input_files())
                 if idxs.size:
                     indices[attr] = idxs
 
@@ -338,11 +338,14 @@ class CXIStore():
 
     def open(self) -> None:
         if not self:
-            for data_file in self.inp_dict:
-                self.inp_dict[data_file] = h5py.File(data_file, mode='r',
-                                                     swmr=True, libver='latest')
+            self.out_file = h5py.File(self.out_fname, mode='a')
 
-            self.out_file = h5py.File(self.out_fname, mode='a', libver='latest')
+            for data_file in self.inp_dict:
+                if data_file == self.out_fname:
+                    self.inp_dict[data_file] = self.out_file
+                else:
+                    self.inp_dict[data_file] = h5py.File(data_file, mode='r')
+
 
     def close(self) -> None:
         for cxi_file in self.input_files():
@@ -390,7 +393,7 @@ class CXIStore():
         return self.protocol.cast(attr, np.stack(stack, axis=0))
 
     def _load_frame(self, attr: str) -> np.ndarray:
-        return self.protocol.cast(attr, self._read_chunk(self._indices[attr]))
+        return self.protocol.cast(attr, self._read_chunk(self._indices[attr][0]))
 
     def _load_sequence(self, attr: str, indices: Optional[Iterable[int]]=None) -> np.ndarray:
         sequence = []
@@ -424,34 +427,38 @@ class CXIStore():
 
         if cxi_path:
             if self.out_file[cxi_path].shape != shape:
-                dtype = self.out_file[cxi_path].dtype
                 del self.out_file[cxi_path]
-                self.out_file.create_dataset(cxi_path, shape=shape,
-                                             dtype=self.protocol.get_dtype(attr, dtype))
+            return cxi_path
+
+        return self.protocol.get_load_paths(attr)[0]
+
+    def _save_stack(self, attr: str, data: np.ndarray) -> None:
+        cxi_path = self.find_dataset(attr, data.shape[1:])
+
+        if cxi_path in self.out_file:
+            self.out_file[cxi_path].resize(self.out_file[cxi_path].shape[0] + data.shape[0], axis=0)
+            self.out_file[cxi_path][-data.shape[0]:] = data
         else:
-            cxi_path = self.protocol.get_load_paths(attr)[0]
-            self.out_file.create_dataset(cxi_path, shape=shape,
-                                         dtype=self.protocol.get_dtype(attr))
-
-        return cxi_path
-
-    def _save_stack(self, attr: str, data: np.ndarray, indices: Optional[Iterable[int]]=None) -> None:
-        if indices is None:
-            indices = self.indices()
-        cxi_path = self.find_dataset(attr, (self.indices().size,) + data.shape[1:])
-        self.out_file[cxi_path][indices] = data
+            self.out_file.create_dataset(cxi_path, data=data, shape=data.shape,
+                                         chunks=(1,) + data.shape[1:],
+                                         maxshape=(None,) + data.shape[1:],
+                                         dtype=self.protocol.get_dtype(attr, data.dtype))
 
     def _save_data(self, attr: str, data: np.ndarray) -> None:
         cxi_path = self.find_dataset(attr, data.shape)
-        self.out_file[cxi_path][()] = data
 
-    def save_attribute(self, attr: str, data: np.ndarray,
-                       indices: Optional[Iterable[int]]=None) -> None:
+        if cxi_path in self.out_file:
+            self.out_file[cxi_path][()] = data
+        else:
+            self.out_file.create_dataset(cxi_path, data=data, shape=data.shape,
+                                         dtype=self.protocol.get_dtype(attr, data.dtype))
+
+    def save_attribute(self, attr: str, data: np.ndarray) -> None:
         kind = self.protocol.get_kind(attr)
 
         if self:
             if kind in ['stack', 'sequence']:
-                return self._save_stack(attr=attr, data=data, indices=indices)
+                return self._save_stack(attr=attr, data=data)
             elif kind in ['frame', 'scalar']:
                 return self._save_data(attr=attr, data=data)
             else:

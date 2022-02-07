@@ -50,23 +50,23 @@ class Crop(Transform):
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
         if self.check_shape(inp.shape[-2:]):
-            return inp[..., self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]]
+            return inp[..., self.roi[0, 0]:self.roi[1, 0], self.roi[0, 1]:self.roi[1, 1]]
         raise ValueError(f'input array has invalid shape: {str(inp.shape):s}')
 
     def forward_points(self, pts: np.ndarray) -> np.ndarray:
-        return pts - self.roi[::2]
+        return pts - self.roi[0]
 
     def backward(self, inp: np.ndarray, out: Optional[np.ndarray]=None) -> np.ndarray:
         if out is None:
             out = np.zeros(inp.shape[:-2] + self.shape, dtype=inp.dtype)
 
         if self.check_shape(out.shape[-2:]):
-            out[..., self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]] = inp
+            out[..., self.roi[0, 0]:self.roi[1, 0], self.roi[0, 1]:self.roi[1, 1]] = inp
             return out
         raise ValueError(f'output array has invalid shape: {str(out.shape):s}')
 
     def backward_points(self, pts: np.ndarray) -> np.ndarray:
-        return pts + self.roi[::2]
+        return pts + self.roi[0]
 
 class Downscale():
     def __init__(self, scale: int) -> None:
@@ -122,7 +122,7 @@ class ComposeTransforms:
 
 class CrystData(DataContainer):
     attr_set = {'files'}
-    init_set = {'cor_data', 'data', 'flatfields', 'good_frames', 'indices', 'mask',
+    init_set = {'cor_data', 'data', 'flatfields', 'good_frames', 'frames', 'mask',
                 'num_threads', 'pupil', 'streak_data', 'streaks', 'tilts', 'transform',
                 'translations', 'whitefield'}
     is_points = {'pupil', 'streaks'}
@@ -139,7 +139,7 @@ class CrystData(DataContainer):
     data:           Optional[np.ndarray]
     flatfields:     Optional[np.ndarray]
     good_frames:    Optional[np.ndarray]
-    indices:        Optional[np.ndarray]
+    frames:         Optional[np.ndarray]
     mask:           Optional[np.ndarray]
     pupil:          Optional[np.ndarray]
     streak_data:    Optional[np.ndarray]
@@ -154,15 +154,10 @@ class CrystData(DataContainer):
         self._init_functions(num_threads=lambda: np.clip(1, 64, cpu_count()))
         if self.get('data') is not None:
             self._init_functions(good_frames=lambda: np.where(self.data.sum(axis=(1, 2)) > 0)[0],
-                                 mask=self._mask, cor_data=self._cor_data)
+                                 mask=lambda: np.ones(self.data.shape, dtype=bool),
+                                 cor_data=self._cor_data)
 
         self._init_attributes()
-
-    def _mask(self) -> np.ndarray:
-        mask = np.ones(self.data.shape, dtype=bool)
-        if self.pupil is not None:
-            mask[:, self.pupil[0]:self.pupil[1], self.pupil[2]:self.pupil[3]] = False
-        return mask
 
     def _cor_data(self) -> np.ndarray:
         if self._iswhitefield:
@@ -178,7 +173,7 @@ class CrystData(DataContainer):
 
             if indices is None:
                 indices = self.files.indices()
-            data_dict = {'indices': indices}
+            data_dict = {'frames': indices}
 
             for attr in self.files.protocol.str_to_list(attributes):
                 if attr not in self.files.keys():
@@ -194,15 +189,14 @@ class CrystData(DataContainer):
                         data = self.transform.forward(data)
                     if attr in self.is_points:
                         if data.shape[-1] != 2:
-                            raise ValueError(f"'{attr}' data has invalid shape: {str(data.shape)}")
+                            raise ValueError(f"'{attr}' has invalid shape: {str(data.shape)}")
                         data = self.transform.forward_points(data)
 
                 data_dict[attr] = data
 
         return data_dict
 
-    def save(self, attributes: Union[str, List[str], None]=None,
-             indices: Optional[Iterable[int]]=None) -> None:
+    def save(self, attributes: Union[str, List[str], None]=None, apply_transform=True) -> None:
         if attributes is None:
             attributes = list(self.contents())
         with self.files:
@@ -211,14 +205,26 @@ class CrystData(DataContainer):
                 data = self.get(attr)
                 if attr in self.files.protocol and data is not None:
 
-                    if kind in ['stack', 'frame']:
-                        data = self.transform.backward(data)
-                    if attr in self.is_points:
-                        if data.shape[-1] != 2:
-                            raise ValueError(f"'{attr}' data has invalid shape: {str(data.shape)}")
-                        data = self.transform.backward_point(data)
+                    if kind in ['stack', 'sequence']:
+                        data = data[self.good_frames]
 
-                    self.files.save_attribute(attr, data, indices=indices)
+                    if apply_transform and self.transform:
+                        if kind in ['stack', 'frame']:
+                            data = self.transform.backward(data)
+                        if attr in self.is_points:
+                            if data.shape[-1] != 2:
+                                raise ValueError(f"'{attr}' has invalid shape: {str(data.shape)}")
+                            data = self.transform.backward_points(data)
+
+                    self.files.save_attribute(attr, data)
+
+    @dict_to_object
+    def clear(self):
+        data_dict = {}
+        for attr, data in self.items():
+            if attr in self.files.protocol and data is not None:
+                data_dict[attr] = None
+        return data_dict
 
     @property
     def _iswhitefield(self) -> bool:
@@ -274,19 +280,25 @@ class CrystData(DataContainer):
 
         Args:
             roi : Bad region of interest in the detector plane.
+                Must have a (2, 2) shape.
 
         Returns:
             New :class:`CrystData` object with the updated `mask`.
         """
         mask = self.mask.copy()
-        mask[:, roi[0]:roi[1], roi[2]:roi[3]] = False
+        mask[:, roi[0, 0]:roi[1, 0], roi[0, 1]:roi[1, 1]] = False
 
         if self._iswhitefield:
             cor_data = self.cor_data.copy()
-            cor_data[:, roi[0]:roi[1], roi[2]:roi[3]] = 0
+            cor_data[:, roi[0, 0]:roi[1, 0], roi[0, 1]:roi[1, 1]] = 0.0
             return {'cor_data': cor_data, 'mask': mask}
 
         return {'mask': mask}
+
+    def mask_pupil(self) -> CrystData:
+        if self.pupil is None:
+            raise ValueError('pupil is not defined')
+        return self.mask_region(self.pupil)
 
     @dict_to_object
     def import_mask(self, mask: np.ndarray, update: str='reset') -> CrystData:
@@ -307,9 +319,6 @@ class CrystData(DataContainer):
         if mask.shape != self.data.shape[1:]:
             raise ValueError('mask and data have incompatible shapes: '\
                              f'{mask.shape:s} != {self.data.shape[1:]:s}')
-
-        if self.pupil is not None:
-            mask[:, self.pupil[0]:self.pupil[1], self.pupil[2]:self.pupil[3]] = False
 
         if update == 'reset':
             return {'mask': mask, 'cor_data': None}
@@ -445,9 +454,6 @@ class CrystData(DataContainer):
         else:
             ValueError('invalid method argument')
 
-        if self.pupil is not None:
-            mask[:, self.pupil[0]:self.pupil[1], self.pupil[2]:self.pupil[3]] = False
-
         if update == 'reset':
             return {'mask': mask, 'cor_data': None}
         if update == 'multiply':
@@ -507,11 +513,11 @@ class CrystData(DataContainer):
 
         streak_data = np.divide(np.clip(data, vmin, vmax) - vmin, vmax - vmin)
         return StreakDetector(parent=ref(self), center=self.pupil.mean(axis=0),
-                              indices=self.indices[self.good_frames], data=data,
+                              frames=self.frames[self.good_frames], data=data,
                               streak_data=streak_data, num_threads=self.num_threads)
 
 class StreakDetector(DataContainer):
-    attr_set = {'parent', 'center', 'data', 'indices', 'num_threads', 'streak_data'}
+    attr_set = {'parent', 'center', 'data', 'frames', 'num_threads', 'streak_data'}
     init_set = {'lsd_obj', 'streak_mask', 'streaks'}
     footprint = np.array([[[False, False,  True, False, False],
                            [False,  True,  True,  True, False],
@@ -524,7 +530,7 @@ class StreakDetector(DataContainer):
 
     center: np.ndarray
     data: np.ndarray
-    indices: np.ndarray
+    frames: np.ndarray
     num_threads: int
     streak_data: np.ndarray
     streak_mask: np.ndarray
@@ -566,7 +572,7 @@ class StreakDetector(DataContainer):
                                      radius=radius, filter_lines=filter_lines,
                                      return_lines=True, num_threads=self.num_threads)
         return {'streak_mask': out_dict['mask'],
-                'streaks': {self.indices[idx]: lines
+                'streaks': {self.frames[idx]: lines
                             for idx, lines in out_dict['lines'].items()}}
 
     @dict_to_object

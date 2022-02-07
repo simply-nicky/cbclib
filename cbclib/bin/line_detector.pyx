@@ -237,7 +237,7 @@ cdef class LSD:
         """
         if image.ndim < 2:
             raise ValueError('Image must be >=2D array.')
-        image = LSD._check_image(image)
+        image = check_array(image, np.NPY_FLOAT64)
 
         cdef int ndim = image.ndim
         cdef double *_img = <double *>np.PyArray_DATA(image)

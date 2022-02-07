@@ -12,7 +12,7 @@ Generate the default built-in log protocol:
 from __future__ import annotations
 import os
 import re
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 from .ini_parser import ROOT_PATH, INIParser
 from .cxi_protocol import CXIStore
@@ -183,20 +183,21 @@ class LogProtocol(INIParser):
                                 attr_dict[part_name][attr] *= self._get_unit(raw_str)
         return attr_dict
 
-    def load_data(self, path: str, frame_indices: Optional[Iterable[int]]=None) -> Dict[str, np.ndarray]:
+    def load_data(self, path: str, indices: Optional[Iterable[int]]=None,
+                  return_indices=False) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
         """Retrieve the main data array from the log file.
 
         Args:
             path : Path to the log file.
-            frame_indices : Array of data indices to load. Loads info for all
+            indices : Array of data indices to load. Loads info for all
                 the frames by default.
 
         Returns:
             Dictionary with data fields and their names retrieved
             from the log file.
         """
-        if frame_indices is not None:
-            frame_indices.sort()
+        if indices is not None:
+            indices.sort()
 
         row_cnt = 0
         with open(path, 'r') as log_file:
@@ -209,21 +210,21 @@ class LogProtocol(INIParser):
 
                     if row_cnt == 0:
                         first_row = line_idx
-                    if frame_indices is not None and row_cnt == frame_indices[0]:
+                    if indices is not None and row_cnt == indices[0]:
                         skiprows = line_idx - first_row
-                    if frame_indices is not None and row_cnt == frame_indices[-1]:
+                    if indices is not None and row_cnt == indices[-1]:
                         max_rows = line_idx - skiprows
                         break
 
                     row_cnt += 1
             else:
-                if frame_indices is None:
-                    frame_indices = np.arange(row_cnt)
+                if indices is None:
+                    indices = np.arange(row_cnt)
                     skiprows = 0
                     max_rows = line_idx - skiprows
                 else:
-                    frame_indices = frame_indices[:np.searchsorted(frame_indices, row_cnt)]
-                    if not frame_indices.size:
+                    indices = indices[:np.searchsorted(indices, row_cnt)]
+                    if not indices.size:
                         skiprows = line_idx
                     max_rows = line_idx - skiprows
 
@@ -255,11 +256,13 @@ class LogProtocol(INIParser):
         data_tuple = np.loadtxt(path, delimiter=';', converters=converters,
                                 dtype=dtypes, unpack=True, skiprows=skiprows,
                                 max_rows=max_rows + 1)
-        data_dict = {key: data[frame_indices - skiprows] for key, data in zip(keys, data_tuple)}
-        data_dict['indices'] = frame_indices
+        data_dict = {key: data[indices - skiprows] for key, data in zip(keys, data_tuple)}
+
+        if return_indices:
+            return data_dict, indices
         return data_dict
 
-def converter_petra(dir_path, scan_num, out_path, **kwargs):
+def converter_petra(dir_path, scan_num, out_path, indices=None, **kwargs):
     log_prt = LogProtocol.import_default()
 
     h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
@@ -268,29 +271,30 @@ def converter_petra(dir_path, scan_num, out_path, **kwargs):
                        if path.endswith(('LambdaFar.nxs', '.h5'))])
 
     files = CXIStore(input_files=h5_files, output_file=out_path)
-    n_steps = files.indices().size
 
     log_attrs = log_prt.load_attributes(log_path)
-    log_data = log_prt.load_data(log_path)
+    log_data, indices = log_prt.load_data(log_path, indices=indices,
+                                          return_indices=True)
 
+    n_frames = indices.size
     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
     z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
     r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-    translations = np.tile([[x_sample, y_sample, z_sample]], (n_steps, 1))
-    tilts = r_sample * np.ones(n_steps)
+    translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
+    tilts = r_sample * np.ones(n_frames)
     for data_key, log_dset in log_data.items():
         for log_key in log_prt.log_keys['x_sample']:
             if log_key in data_key:
-                translations[:, 0] = log_dset[:n_steps]
+                translations[:log_dset.size, 0] = log_dset
         for log_key in log_prt.log_keys['y_sample']:
             if log_key in data_key:
-                translations[:, 1] = log_dset[:n_steps]
+                translations[:log_dset.size, 1] = log_dset
         for log_key in log_prt.log_keys['z_sample']:
             if log_key in data_key:
-                translations[:, 2] = log_dset[:n_steps]
+                translations[:log_dset.size, 2] = log_dset
         for log_key in log_prt.log_keys['r_sample']:
             if log_key in data_key:
-                tilts = log_dset[:n_steps]
+                tilts[:log_dset.size] = log_dset
 
     return CrystData(files=files, translations=translations, tilts=tilts, **kwargs)
