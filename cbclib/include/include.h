@@ -23,17 +23,17 @@
 
 /** pi **/
 #ifndef M_PI
-#define M_PI    3.14159265358979323846
+#define M_PI    3.14159265358979323846f
 #endif
 
 /** pi / 2 **/
 #ifndef M_PI_2
-#define M_PI_2  1.57079632679489661923
+#define M_PI_2  1.57079632679489661923f
 #endif
 
 /** ln(10) **/
 #ifndef M_LN10
-#define M_LN10 2.30258509299404568402
+#define M_LN10 2.30258509299404568402f
 #endif /* !M_LN10 */
 
 #define SQ(x)   ((x) * (x))

@@ -1,20 +1,32 @@
 from __future__ import annotations
 from multiprocessing import cpu_count
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from weakref import ref, ReferenceType
 import numpy as np
 from .cxi_protocol import CXIStore
 from .data_container import DataContainer, dict_to_object
-from .bin import subtract_background, median, median_filter, LSD, maximum_filter
+from .bin import subtract_background, median, median_filter, LSD, maximum_filter, normalize_streak_data
+
+Indices = Union[int, slice]
 
 class Transform():
-    def __init__(self):
-        self._shape = None
+    """Abstract transform class.
+
+    Attributes:
+        shape : Data frame shape.
+
+    Raises:
+        AttributeError : If shape isn't initialized.
+    """
+    def __init__(self, shape: Optional[Tuple[int, int]]=None) -> None:
+        """
+        Args:
+            shape : Data frame shape.
+        """
+        self._shape = shape
 
     @property
     def shape(self) -> Tuple[int, int]:
-        if self._shape is None:
-            raise AttributeError("shape hasn't been initialized")
         return self._shape
 
     @shape.setter
@@ -25,11 +37,18 @@ class Transform():
             raise ValueError("Shape is already defined.")
 
     def check_shape(self, shape: Tuple[int, int]) -> bool:
-        try:
-            return self.shape == shape
-        except AttributeError:
+        """Check if shape is equal to the saved shape.
+
+        Args:
+            shape : shape to check.
+
+        Returns:
+            True if the shapes are equal.
+        """
+        if self.shape is None:
             self.shape = shape
             return True
+        return self.shape == shape
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
         raise NotImplementedError
@@ -43,45 +62,186 @@ class Transform():
     def backward_points(self, pts: np.ndarray) -> np.ndarray:
         raise NotImplementedError
 
+    def integrate(self, axis: int) -> Transform:
+        """Return a transform version for the dataset integrated
+        along the axis.
+
+        Args:
+            axis : Axis of integration.
+
+        Returns:
+            A new transform version.
+        """
+        pdict = self.state_dict()
+        if pdict['shape']:
+            if axis == 0:
+                pdict['shape'] = (1, pdict['shape'][1])
+            elif axis == 1:
+                pdict['shape'] = (pdict['shape'][0], 1)
+            else:
+                raise ValueError('Axis must be equal to 0 or 1')
+
+        return type(self)(**pdict)
+
+    def state_dict(self) -> Dict[str, Any]:
+        raise NotImplementedError
+
 class Crop(Transform):
-    def __init__(self, roi: Iterable[int]) -> None:
-        super().__init__()
+    """Crop transform. Crops a frame according to a region of interest.
+
+    Attributes:
+        roi : Region of interest. Comprised of four elements `[[y_min, x_min],
+            [y_max, x_max]]`.
+        shape : Data frame shape.
+    """
+    def __init__(self, roi: Iterable[int], shape: Optional[Tuple[int, int]]=None) -> None:
+        """
+        Args:
+            roi : Region of interest. Comprised of four elements `[[y_min, x_min],
+                [y_max, x_max]]`.
+            shape : Data frame shape.
+        """
+        super().__init__(shape=shape)
         self.roi = roi
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
+        """Apply the transform to the input.
+
+        Args:
+            inp : Input data array.
+
+        Returns:
+            Output data array.
+        """
         if self.check_shape(inp.shape[-2:]):
-            return inp[..., self.roi[0, 0]:self.roi[1, 0], self.roi[0, 1]:self.roi[1, 1]]
+            return inp[..., self.roi[0][0]:self.roi[1][0], self.roi[0][1]:self.roi[1][1]]
+
         raise ValueError(f'input array has invalid shape: {str(inp.shape):s}')
 
     def forward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Apply the transform to a set of points.
+
+        Args:
+            pts : Input array of points.
+
+        Returns:
+            Output array of points.
+        """
         return pts - self.roi[0]
 
     def backward(self, inp: np.ndarray, out: Optional[np.ndarray]=None) -> np.ndarray:
+        """Tranform back a data array.
+
+        Args:
+            inp : Input tranformed data array.
+            out : Output data array. A new one created if not prodived.
+
+        Returns:
+            Output data array.
+        """
         if out is None:
             out = np.zeros(inp.shape[:-2] + self.shape, dtype=inp.dtype)
 
         if self.check_shape(out.shape[-2:]):
-            out[..., self.roi[0, 0]:self.roi[1, 0], self.roi[0, 1]:self.roi[1, 1]] = inp
+            out[..., self.roi[0][0]:self.roi[1][0], self.roi[0][1]:self.roi[1][1]] = inp
             return out
+
         raise ValueError(f'output array has invalid shape: {str(out.shape):s}')
 
     def backward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Tranform back an array of points.
+
+        Args:
+            pts : Input tranformed array of points.
+
+        Returns:
+            Output array of points.
+        """
         return pts + self.roi[0]
 
-class Downscale():
-    def __init__(self, scale: int) -> None:
-        super().__init__()
+    def integrate(self, axis: int) -> Crop:
+        """Return a transform version for the dataset integrated
+        along the axis.
+
+        Args:
+            axis : Axis of integration.
+
+        Returns:
+            A new transform version.
+        """
+        pdict = self.state_dict()
+        pdict['roi'][0][axis] = 0
+        pdict['roi'][1][axis] = 1
+
+        if pdict['shape']:
+            if axis == 0:
+                pdict['shape'] = (1, pdict['shape'][1])
+            elif axis == 1:
+                pdict['shape'] = (pdict['shape'][0], 1)
+            else:
+                raise ValueError('Axis must be equal to 0 or 1')
+
+        return Crop(**pdict)
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Returns the state of the transform as a dict.
+
+        Returns:
+            A dictionary with all the attributes.
+        """
+        return {'roi': self.roi[:], 'shape': self.shape}
+
+class Downscale(Transform):
+    """Downscale the image by a integer ratio.
+
+    Attributes:
+        scale : Downscaling integer ratio.
+        shape : Data frame shape.
+    """
+    def __init__(self, scale: int, shape: Optional[Tuple[int, int]]=None) -> None:
+        """
+        Args:
+            scale : Downscaling integer ratio.
+            shape : Data frame shape.
+        """
+        super().__init__(shape=shape)
         self.scale = scale
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
+        """Apply the transform to the input.
+
+        Args:
+            inp : Input data array.
+
+        Returns:
+            Output data array.
+        """
         if self.check_shape(inp.shape[-2:]):
             return inp[..., ::self.scale, ::self.scale]
+
         raise ValueError(f'input array has invalid shape: {str(inp.shape):s}')
 
     def forward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Apply the transform to a set of points.
+
+        Args:
+            pts : Input array of points.
+
+        Returns:
+            Output array of points.
+        """
         return pts / self.scale
 
     def backward(self, inp: np.ndarray, out: Optional[np.ndarray]=None) -> np.ndarray:
+        """Tranform back a data array.
+
+        Args:
+            inp : Input tranformed data array.
+            out : Output data array. A new one created if not prodived.
+
+        Returns:
+            Output data array.
+        """
         if out is None:
             out = np.empty(inp.shape[:-2] + self.shape, dtype=inp.dtype)
 
@@ -89,36 +249,226 @@ class Downscale():
             out[...] = np.repeat(np.repeat(inp, self.scale, axis=-2),
                                  self.scale, axis=-1)[..., :self.shape[0], :self.shape[1]]
             return out
+
         raise ValueError(f'output array has invalid shape: {str(out.shape):s}')
 
     def backward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Tranform back an array of points.
+
+        Args:
+            pts : Input tranformed array of points.
+
+        Returns:
+            Output array of points.
+        """
         return pts * self.scale
 
-class ComposeTransforms:
-    def __init__(self, transforms: List[Transform]) -> None:
-        if len(transforms) < 2:
-            raise ValueError('Two or more transforms are needed to compose')
-        self.transforms = transforms
+    def state_dict(self) -> Dict[str, Any]:
+        """Returns the state of the transform as a dict.
+
+        Returns:
+            A dictionary with all the attributes.
+        """
+        return {'scale': self.scale, 'shape': self.shape}
+
+class Mirror(Transform):
+    """Mirror the data around an axis.
+
+    Attributes:
+        axis : Axis of reflection.
+        shape : Data frame shape.
+    """
+    def __init__(self, axis: int, shape: Optional[Tuple[int, int]]=None) -> None:
+        """
+        Args:
+            axis : Axis of reflection.
+            shape : Data frame shape.
+        """
+        if axis not in [0, 1]:
+            raise ValueError('Axis must equal to 0 or 1')
+
+        super().__init__(shape=shape)
+        self.axis = axis
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
-        for transform in self.transforms:
+        """Apply the transform to the input.
+
+        Args:
+            inp : Input data array.
+
+        Returns:
+            Output data array.
+        """
+        if self.check_shape(inp.shape[-2:]):
+            return np.flip(inp, axis=self.axis - 2)
+
+        raise ValueError(f'input array has invalid shape: {str(inp.shape):s}')
+
+    def forward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Apply the transform to a set of points.
+
+        Args:
+            pts : Input array of points.
+
+        Returns:
+            Output array of points.
+        """
+        pts[:, self.axis] = self.shape[self.axis] - pts[:, self.axis]
+        return pts
+
+    def backward(self, inp: np.ndarray, out: Optional[np.ndarray]=None) -> np.ndarray:
+        """Tranform back a data array.
+
+        Args:
+            inp : Input tranformed data array.
+            out : Output data array. A new one created if not prodived.
+
+        Returns:
+            Output data array.
+        """
+        if out is None:
+            out = np.empty(inp.shape[:-2] + self.shape, dtype=inp.dtype)
+
+        if self.check_shape(out.shape[-2:]):
+            out[...] = self.forward(inp)
+            return out
+
+        raise ValueError(f'output array has invalid shape: {str(out.shape):s}')
+
+    def backward_points(self, pts: np.ndarray) -> np.ndarray:
+        """Tranform back an array of points.
+
+        Args:
+            pts : Input tranformed array of points.
+
+        Returns:
+            Output array of points.
+        """
+        return self.forward_points(pts)
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Returns the state of the transform as a dict.
+
+        Returns:
+            A dictionary with all the attributes.
+        """
+        return {'axis': self.axis, 'shape': self.shape}
+
+class ComposeTransforms(Transform):
+    """Composes several transforms together.
+
+    Attributes:
+        transforms: List of transforms.
+        shape : Data frame shape.
+    """
+    def __init__(self, transforms: List[Transform], shape: Optional[Tuple[int, int]]=None) -> None:
+        """
+        Args:
+            transforms: List of transforms.
+            shape : Data frame shape.
+        """
+        super().__init__(shape=shape)
+        if len(transforms) < 2:
+            raise ValueError('Two or more transforms are needed to compose')
+
+        pdict = transforms[0].state_dict()
+        pdict['shape'] = self.shape
+        self.transforms = [type(transforms[0])(**pdict),]
+
+        for transform in transforms[1:]:
+            pdict = transform.state_dict()
+            pdict['shape'] = None
+            self.transforms.append(type(transform)(**pdict))
+
+    def __iter__(self) -> Iterable:
+        return self.transforms.__iter__()
+
+    def __getitem__(self, idx: Indices) -> Transform:
+        return self.transforms[idx]
+
+    def forward(self, inp: np.ndarray) -> np.ndarray:
+        """Apply the transform to the input.
+
+        Args:
+            inp : Input data array.
+
+        Returns:
+            Output data array.
+        """
+        for transform in self:
             inp = transform.forward(inp)
         return inp
 
     def forward_points(self, pts: np.ndarray) -> np.ndarray:
-        for transform in self.transforms:
+        """Apply the transform to a set of points.
+
+        Args:
+            pts : Input array of points.
+
+        Returns:
+            Output array of points.
+        """
+        for transform in self:
             pts = transform.forward_points(pts)
         return pts
 
     def backward(self, inp: np.ndarray, out: Optional[np.ndarray]=None) -> np.ndarray:
-        for transform in self.transforms[1::-1]:
+        """Tranform back a data array.
+
+        Args:
+            inp : Input tranformed data array.
+            out : Output data array. A new one created if not prodived.
+
+        Returns:
+            Output data array.
+        """
+        for transform in self[1::-1]:
             inp = transform.backward(inp)
-        return self.transforms[0].backward(inp, out)
+        return self[0].backward(inp, out)
 
     def backward_points(self, pts: np.ndarray) -> np.ndarray:
-        for transform in self.transforms[::-1]:
+        """Tranform back an array of points.
+
+        Args:
+            pts : Input tranformed array of points.
+
+        Returns:
+            Output array of points.
+        """
+        for transform in self[::-1]:
             pts = transform.backward_points(pts)
         return pts
+
+    def integrate(self, axis: int) -> ComposeTransforms:
+        """Return a transform version for the dataset integrated
+        along the axis.
+
+        Args:
+            axis : Axis of integration.
+
+        Returns:
+            A new transform version.
+        """
+        pdict = self.state_dict()
+        pdict['transforms'] = [transform.integrate(axis) for transform in pdict['transforms']]
+
+        if pdict['shape']:
+            if axis == 0:
+                pdict['shape'] = (1, pdict['shape'][1])
+            elif axis == 1:
+                pdict['shape'] = (pdict['shape'][0], 1)
+            else:
+                raise ValueError('Axis must be equal to 0 or 1')
+
+        return ComposeTransforms(**pdict)
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Returns the state of the transform as a dict.
+
+        Returns:
+            A dictionary with all the attributes.
+        """
+        return {'transforms': self.transforms, 'shape': self.shape}
 
 class CrystData(DataContainer):
     attr_set = {'files'}
@@ -132,15 +482,15 @@ class CrystData(DataContainer):
     transform:      Transform
 
     # Automatically generated attributes
+    good_frames:    Optional[np.ndarray]
     num_threads:    int
+    mask:           Optional[np.ndarray]
+    cor_data:       Optional[np.ndarray]
 
     # Optional attributes
-    cor_data:       Optional[np.ndarray]
     data:           Optional[np.ndarray]
     flatfields:     Optional[np.ndarray]
-    good_frames:    Optional[np.ndarray]
     frames:         Optional[np.ndarray]
-    mask:           Optional[np.ndarray]
     pupil:          Optional[np.ndarray]
     streak_data:    Optional[np.ndarray]
     streaks:        Optional[np.ndarray]
@@ -152,12 +502,16 @@ class CrystData(DataContainer):
         super(CrystData, self).__init__(files=files, transform=transform, **kwargs)
 
         self._init_functions(num_threads=lambda: np.clip(1, 64, cpu_count()))
-        if self.get('data') is not None:
+        if self._isdata:
             self._init_functions(good_frames=lambda: np.where(self.data.sum(axis=(1, 2)) > 0)[0],
                                  mask=lambda: np.ones(self.data.shape, dtype=bool),
                                  cor_data=self._cor_data)
 
         self._init_attributes()
+
+    @property
+    def _isdata(self) -> bool:
+        return self.data is not None
 
     def _cor_data(self) -> np.ndarray:
         if self._iswhitefield:
@@ -165,63 +519,120 @@ class CrystData(DataContainer):
                                        flatfields=self.flatfields, num_threads=self.num_threads)
         return None
 
+    def _transform_attribute(self, attr: str, data: np.ndarray, transform: Transform,
+                             mode: str='forward') -> np.ndarray:
+        kind = self.files.protocol.get_kind(attr)
+        if kind in ['stack', 'frame']:
+            if mode == 'forward':
+                data = transform.forward(data)
+            elif mode == 'backward':
+                data = transform.backward(data)
+            else:
+                raise ValueError(f'Invalid mode keyword: {mode}')
+        if attr in self.is_points:
+            if data.shape[-1] != 2:
+                raise ValueError(f"'{attr}' has invalid shape: {str(data.shape)}")
+
+            data = self.transform.forward_points(data)
+
+        return data
+
     @dict_to_object
-    def load(self, attributes: Union[str, List[str]], indices: Iterable[int]=None,
+    def load(self, attributes: Union[str, List[str], None]=None, indices: Iterable[int]=None,
              processes: int=1, verbose: bool=True) -> CrystData:
+        """Load data attributes from the input files in `files` file handler object.
+
+        Args:
+            attributes : List of attributes to load. Loads all the data attributes
+                contained in the file(s) by default.
+            indices : List of frame indices to load.
+            processes : Number of parallel workers used during the loading.
+            verbose : Set the verbosity of the loading process.
+
+        Raises:
+            ValueError : If attribute is not existing in the input file(s).
+            ValueError : If attribute is invalid.
+
+        Returns:
+            New :class:`CrystData` object with the attributes loaded.
+        """
         with self.files:
             self.files.update_indices()
+
+            if attributes is None:
+                attributes = [attr for attr in self.files.keys()
+                              if attr in self.init_set]
+            else:
+                attributes = self.files.protocol.str_to_list(attributes)
 
             if indices is None:
                 indices = self.files.indices()
             data_dict = {'frames': indices}
 
-            for attr in self.files.protocol.str_to_list(attributes):
+            for attr in attributes:
                 if attr not in self.files.keys():
                     raise ValueError(f"No '{attr}' attribute in the input files")
                 if attr not in self.init_set:
                     raise ValueError(f"Invalid attribute: '{attr}'")
 
-                kind = self.files.protocol.get_kind(attr)
                 data = self.files.load_attribute(attr, indices, processes, verbose)
 
-                if self.transform:
-                    if kind in ['stack', 'frame']:
-                        data = self.transform.forward(data)
-                    if attr in self.is_points:
-                        if data.shape[-1] != 2:
-                            raise ValueError(f"'{attr}' has invalid shape: {str(data.shape)}")
-                        data = self.transform.forward_points(data)
+                if self.transform and data is not None:
+                    data = self._transform_attribute(attr, data, self.transform)
 
                 data_dict[attr] = data
 
         return data_dict
 
-    def save(self, attributes: Union[str, List[str], None]=None, apply_transform=True) -> None:
+    def save(self, attributes: Union[str, List[str], None]=None, apply_transform=False,
+             mode: str='append', idxs: Optional[Iterable[int]]=None) -> None:
+        """Save data arrays of the data attributes contained in the container to
+        an output file.
+
+        Args:
+            attributes : List of attributes to save. Saves all the data attributes
+                contained in the container by default.
+            apply_transform : Apply `transform` to the data arrays if True.
+            mode : Writing mode:
+
+                * `append` : Append the data array to already existing dataset.
+                * `insert` : Insert the data under the given indices `idxs`.
+                * `overwrite` : Overwrite the existing dataset.
+
+            verbose : Set the verbosity of the loading process.
+        """
         if attributes is None:
             attributes = list(self.contents())
         with self.files:
             for attr in self.files.protocol.str_to_list(attributes):
-                kind = self.files.protocol.get_kind(attr)
                 data = self.get(attr)
                 if attr in self.files.protocol and data is not None:
+                    kind = self.files.protocol.get_kind(attr)
 
                     if kind in ['stack', 'sequence']:
                         data = data[self.good_frames]
 
                     if apply_transform and self.transform:
-                        if kind in ['stack', 'frame']:
-                            data = self.transform.backward(data)
-                        if attr in self.is_points:
-                            if data.shape[-1] != 2:
-                                raise ValueError(f"'{attr}' has invalid shape: {str(data.shape)}")
-                            data = self.transform.backward_points(data)
+                        data = self._transform_attribute(attr, data, self.transform,
+                                                         mode='backward')
 
-                    self.files.save_attribute(attr, data)
+                    self.files.save_attribute(attr, np.asarray(data), mode=mode, idxs=idxs)
 
     @dict_to_object
-    def clear(self):
+    def clear(self, attributes: Union[str, List[str], None]=None) -> CrystData:
+        """Clear the container.
+
+        Args:
+            attributes : List of attributes to clear in the container.
+
+        Returns:
+            New :class:`CrystData` object with the attributes cleared.
+        """
+        if attributes is None:
+            attributes = self.keys()
         data_dict = {}
-        for attr, data in self.items():
+        for attr in attributes:
+            data = self.get(attr)
             if attr in self.files.protocol and data is not None:
                 data_dict[attr] = None
         return data_dict
@@ -462,18 +873,19 @@ class CrystData(DataContainer):
 
     @dict_to_object
     def update_transform(self, transform: Transform) -> CrystData:
+        """Return a new :class:`CrystData` object with the updated transform
+        object.
+
+        Args:
+            transform : New :class:`Transform` object.
+
+        Returns:
+            New :class:`CrystData` object with the updated transform object.
+        """
         data_dict = {'transform': transform}
         for attr, data in self.items():
             if attr in self.files.protocol and data is not None:
-                kind = self.file.protocol.get_kind(attr)
-
-                if kind in ['frame', 'stack']:
-                    data_dict[attr] = None
-                if attr in self.is_points:
-                    if self.transform:
-                        data = self.transform.backward_points(data)
-                    data_dict[attr] = transform.forward_points(data)
-
+                data_dict[attr] = self._transform_attribute(attr, data, transform)
         return data_dict
 
     @dict_to_object
@@ -518,7 +930,8 @@ class CrystData(DataContainer):
 
 class StreakDetector(DataContainer):
     attr_set = {'parent', 'center', 'data', 'frames', 'num_threads', 'streak_data'}
-    init_set = {'lsd_obj', 'streak_mask', 'streaks'}
+    init_set = {'bgd_dilation', 'bgd_mask', 'lsd_obj', 'streak_dilation', 'streak_mask',
+                'streaks'}
     footprint = np.array([[[False, False,  True, False, False],
                            [False,  True,  True,  True, False],
                            [ True,  True,  True,  True,  True],
@@ -528,10 +941,13 @@ class StreakDetector(DataContainer):
     parent: ReferenceType
     lsd_obj: LSD
 
+    bgd_dilation : int
+    bgd_mask : np.ndarray
     center: np.ndarray
     data: np.ndarray
     frames: np.ndarray
     num_threads: int
+    streak_dilation : int
     streak_data: np.ndarray
     streak_mask: np.ndarray
     streaks: Dict[int, np.ndarray]
@@ -566,25 +982,44 @@ class StreakDetector(DataContainer):
                                y_c=self.center[0], x_c=self.center[1])}
 
     @dict_to_object
-    def update_mask(self, dilation: int=15, radius: float=1.0,
-                    filter_lines: bool=True) -> StreakDetector:
-        out_dict = self.lsd_obj.mask(self.streak_data, max_val=1, dilation=dilation,
-                                     radius=radius, filter_lines=filter_lines,
-                                     return_lines=True, num_threads=self.num_threads)
-        return {'streak_mask': out_dict['mask'],
-                'streaks': {self.frames[idx]: lines
+    def detect(self, radii: Tuple[float, float, float]=(1.0, 1.0, 1.0),
+               threshold: float=1.0, filter_lines: bool=True, n_filter: int=3) -> StreakDetector:
+        out_dict = self.lsd_obj.detect(self.streak_data, radii=radii, threshold=threshold,
+                                       filter_lines=filter_lines, n_filter=n_filter,
+                                       num_threads=self.num_threads)
+        return {'streaks': {self.frames[idx]: lines
                             for idx, lines in out_dict['lines'].items()}}
 
     @dict_to_object
-    def update_streak_data(self, iterations: int=10) -> StreakDetector:
+    def update_streak_mask(self, streak_dilation: int=6, bgd_dilation: int=14) -> StreakDetector:
+        if self.streaks is None:
+            raise AttributeError("'streaks' must be generated before.")
+        streak_mask = np.zeros(self.data.shape, dtype=np.uint32)
+        streak_mask = self.lsd_obj.draw_lines(streak_mask, self.streaks, self.frames,
+                                              dilation=streak_dilation,
+                                              num_threads=self.num_threads)
+        bgd_mask = np.zeros(self.data.shape, dtype=np.uint32)
+        bgd_mask = self.lsd_obj.draw_lines(bgd_mask, self.streaks, self.frames,
+                                           dilation=bgd_dilation,
+                                           num_threads=self.num_threads)
+        return {'bgd_dilation': bgd_dilation, 'bgd_mask': bgd_mask,
+                'streak_dilation': streak_dilation, 'streak_mask': streak_mask}
+
+    @dict_to_object
+    def update_streak_data(self) -> StreakDetector:
         if self.streak_mask is None:
             raise AttributeError("'streak_mask' must be generated before.")
 
         divisor = self.data
-        for _ in range(iterations):
-            divisor = maximum_filter(divisor, mask=self.streak_mask,
-                                     footprint=self.footprint,
+        for _ in range(self.streak_dilation // 2):
+            divisor = maximum_filter(divisor, mask=self.streak_mask, footprint=self.footprint,
                                      num_threads=self.num_threads)
-        streak_data = np.where(divisor, np.divide(self.data, divisor,
-                                                  dtype=np.float64), 0.0)
+
+        bgd = self.data * (self.bgd_mask - self.streak_mask)
+        for _ in range(self.bgd_dilation // 2):
+            bgd = median_filter(bgd, mask=self.bgd_mask, good_data=bgd.astype(bool),
+                                footprint=self.footprint, num_threads=self.num_threads)
+
+        streak_data = normalize_streak_data(data=self.data, bgd=bgd, divisor=divisor,
+                                            num_threads=self.num_threads)
         return {'streak_data': streak_data}

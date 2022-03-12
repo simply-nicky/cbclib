@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 from configparser import ConfigParser
 import re
-from typing import Any, Dict, List, TypeVar, Type, Union
+from typing import Any, Dict, ItemsView, KeysView, List, TypeVar, Type, Union, ValuesView
 import numpy as np
 
 T = TypeVar('T')            # Object type
@@ -36,9 +36,7 @@ class hybridmethod:
         Args:
             fclass : Class bound method.
 
-        Returns
-        -------
-        hybridmethod
+        Returns:
             A new instance with the class bound method added
             to the object.
         """
@@ -98,6 +96,21 @@ class INIParser:
             self.__setattr__(section, value)
         self._lookup = self._lookup_dict()
 
+    def _get_value(self, section: str, option: str, kwargs: Dict) -> Any:
+        if not option in kwargs[section]:
+            raise AttributeError("The '{:s}' option has not been provided".format(option))
+        fmt = self.get_format(section, option)
+
+        if isinstance(kwargs[section][option], (list, tuple)):
+            return [fmt(part) for part in kwargs[section][option]]
+
+        if isinstance(kwargs[section][option], np.ndarray):
+            if kwargs[section][option].ndim > 1:
+                raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
+            return [fmt(part) for part in kwargs[section][option]]
+
+        return fmt(kwargs[section][option])
+
     @staticmethod
     def str_to_list(strings: Union[str, List[str]]) -> List[str]:
         """Convert `strings` to a list of strings.
@@ -140,7 +153,7 @@ class INIParser:
             ValueError : If the file doesn't exist.
         """
         if not os.path.isfile(protocol_file):
-            raise ValueError("File {:s} doesn't exist".format(protocol_file))
+            raise ValueError(f"File {protocol_file} doesn't exist")
         ini_parser = ConfigParser()
         ini_parser.read(protocol_file)
         return ini_parser
@@ -153,8 +166,7 @@ class INIParser:
             section : Attribute's section.
             option : Attribute's name.
 
-        Returns
-        -------
+        Returns:
             Type of the attribute.
         """
         fmt = cls.fmt_dict.get(os.path.join(section, option))
@@ -180,8 +192,8 @@ class INIParser:
         if is_list:
             return [fmt(part.strip('\'\"'))
                     for part in re.split(cls.LIST_SPLITTER, is_list.group(1))]
-        else:
-            return fmt(string.strip())
+
+        return fmt(string.strip())
 
     @classmethod
     def _import_ini(cls, protocol_file: str) -> Dict[str, Dict]:
@@ -213,28 +225,15 @@ class INIParser:
             crop_obj['...'] = '...'
         return crop_obj
 
-    def _get_value(self, section: str, option: str, kwargs: Dict) -> Any:
-        if not option in kwargs[section]:
-            raise AttributeError("The '{:s}' option has not been provided".format(option))
-        fmt = self.get_format(section, option)
-
-        if isinstance(kwargs[section][option], (list, tuple)):
-            return [fmt(part) for part in kwargs[section][option]]
-
-        if isinstance(kwargs[section][option], np.ndarray):
-            if kwargs[section][option].ndim > 1:
-                raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
-            return [fmt(part) for part in kwargs[section][option]]
-
-        return fmt(kwargs[section][option])
-
     def __getattr__(self, attr: str) -> Any:
         if attr in self.__dict__.get('_lookup', {}):
             return self.ini_dict[self.__dict__['_lookup'][attr]][attr]
-        elif attr in self.__dict__.get('ini_dict', {}):
+        if attr in self.__dict__.get('ini_dict', {}):
             return self.__dict__['ini_dict'][attr]
-        else:
-            raise AttributeError(attr + " doesn't exist")
+        raise AttributeError(attr + " doesn't exist")
+
+    def __getitem__(self, attr: str) -> Any:
+        return self.__getattr__(attr)
 
     def __setattr__(self, attr: str, value: Any) -> None:
         if attr in self._lookup:
@@ -252,13 +251,32 @@ class INIParser:
         crop_dict = {key: self._format(val) for key, val in self.export_dict().items()}
         return crop_dict.__str__()
 
+    def keys(self) -> KeysView:
+        return self.attr_dict.keys()
+
+    def items(self) -> ItemsView:
+        """Return (key, value) pairs of the datasets stored in the container.
+
+        Returns:
+            (key, value) pairs of the datasets stored in the container.
+        """
+        return dict(self).items()
+
+    def values(self) -> ValuesView:
+        """Return the attributes' data stored in the container.
+
+        Returns:
+            List of data stored in the container.
+        """
+        return dict(self).values()
+
     def export_dict(self) -> Dict[str, Any]:
         """Return a :class:`dict` object with all the attributes.
 
         Returns:
             Dictionary with all the attributes conntained in the object.
         """
-        return {section: self.__getattr__(section) for section in self.attr_dict}
+        return dict(self)
 
     @hybridmethod
     def export_ini(self, **kwargs: Dict) -> ConfigParser:

@@ -55,8 +55,8 @@ cdef extern from "median.h":
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
-    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, int ndim,
-                        unsigned long *dims, unsigned long item_size, unsigned long *fsize,
+    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, unsigned char *gdata,
+                        int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                         unsigned threads) nogil
 
@@ -67,10 +67,10 @@ cdef extern from "median.h":
 
 cdef extern from "img_proc.h":
     int draw_lines(unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
-                   double *lines, unsigned long lines, unsigned int dilation) nogil
+                   float *lines, unsigned long lines, unsigned int dilation) nogil
 
     int draw_line_indices(unsigned int **out, unsigned long *n_idxs, unsigned long Y, unsigned long X,
-                          unsigned int max_val, double *lines, unsigned long n_lines,
+                          unsigned int max_val, float *lines, unsigned long n_lines,
                           unsigned int dilation) nogil
 
 cdef extern from "fftw3.h":

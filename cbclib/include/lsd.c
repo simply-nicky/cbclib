@@ -87,7 +87,7 @@
 	- version 1.2 - dec 2009: First full Ansi C Language version.
 	- version 1.1 - sep 2009: Systematic subsampling to scale 0.8 and
 														correction to partially handle "angle problem".
-	- version 1.0 - jan 2009: First complete Megawave2 and Ansi C Language
+	- version 1.0f - jan 2009: First complete Megawave2 and Ansi C Language
 														version.
 
 	@author rafael grompone von gioi <grompone@gmail.com>
@@ -107,16 +107,16 @@
 #endif /* !TRUE */
 
 /** Label for pixels with undefined gradient. */
-#define NOTDEF -1024.0
+#define NOTDEF      -1024.0f
 
 /** 3/2 pi */
-#define M_3_2_PI 4.71238898038
+#define M_3_2_PI    4.71238898038f
 
 /** 2 pi */
-#define M_2__PI    6.28318530718
+#define M_2__PI     6.28318530718f
 
 /** Label for pixels not used in yet. */
-#define NOTUSED 0
+#define NOTUSED     0
 
 /** Label for pixels already used in detection. */
 #define USED        1
@@ -126,14 +126,14 @@
  */
 struct coorlist
 {
-    int x,y;
+    int x, y;
     struct coorlist * next;
 };
 
 /*----------------------------------------------------------------------------*/
 /** A point (or pixel).
  */
-struct point {int x,y;};
+struct point {int x, y;};
 
 
 /*----------------------------------------------------------------------------*/
@@ -143,10 +143,10 @@ struct point {int x,y;};
 /*----------------------------------------------------------------------------*/
 /** Doubles relative error factor
  */
-#define RELATIVE_ERROR_FACTOR 100.0
+#define RELATIVE_ERROR_FACTOR 100.0f
 
 /*----------------------------------------------------------------------------*/
-/** Compare doubles by relative error.
+/** Compare floats by relative error.
 
         The resulting rounding error after floating point computations
         depend on the specific operations done. The same number computed by
@@ -156,35 +156,35 @@ struct point {int x,y;};
         should be related to the cumulated rounding error in the chain of
         computation. Here, as a simplification, a fixed factor is used.
  */
-static int double_equal(double a, double b)
+static int float_equal(float a, float b)
 {
-    double abs_diff,aa,bb,abs_max;
+    float abs_diff, aa, bb, abs_max;
 
     /* trivial case */
     if (a == b) return TRUE;
 
-    abs_diff = fabs(a-b);
-    aa = fabs(a);
-    bb = fabs(b);
+    abs_diff = fabsf(a - b);
+    aa = fabsf(a);
+    bb = fabsf(b);
     abs_max = aa > bb ? aa : bb;
 
-    /* DBL_MIN is the smallest normalized number, thus, the smallest
-         number whose relative error is bounded by DBL_EPSILON. For
-         smaller numbers, the same quantization steps as for DBL_MIN
+    /* FLT_MIN is the smallest normalized number, thus, the smallest
+         number whose relative error is bounded by FLT_EPSILON. For
+         smaller numbers, the same quantization steps as for FLT_MIN
          are used. Then, for smaller numbers, a meaningful "relative"
-         error should be computed by dividing the difference by DBL_MIN. */
-    if (abs_max < DBL_MIN) abs_max = DBL_MIN;
+         error should be computed by dividing the difference by FLT_MIN. */
+    if (abs_max < FLT_MIN) abs_max = FLT_MIN;
 
     /* equal if relative error <= factor x eps */
-    return (abs_diff / abs_max) <= (RELATIVE_ERROR_FACTOR * DBL_EPSILON);
+    return (abs_diff / abs_max) <= (RELATIVE_ERROR_FACTOR * FLT_EPSILON);
 }
 
 /*----------------------------------------------------------------------------*/
 /** Computes Euclidean distance between point (x1,y1) and point (x2,y2).
  */
-static double dist(double x1, double y1, double x2, double y2)
+static float dist(float x1, float y1, float x2, float y2)
 {
-    return sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    return sqrtf((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
 }
 
 
@@ -218,7 +218,7 @@ typedef struct ntuple_list_s
     unsigned int size;
     unsigned int max_size;
     unsigned int dim;
-    double * values;
+    float * values;
 } * ntuple_list;
 
 /*----------------------------------------------------------------------------*/
@@ -253,7 +253,7 @@ static ntuple_list new_ntuple_list(unsigned int dim)
     n_tuple->dim = dim;
 
     /* get memory for tuples */
-    n_tuple->values = (double *) malloc(dim*n_tuple->max_size * sizeof(double));
+    n_tuple->values = (float *) malloc(dim*n_tuple->max_size * sizeof(float));
     if (n_tuple->values == NULL) LSD_ERROR("not enough memory.");
 
     return n_tuple;
@@ -272,16 +272,16 @@ static void enlarge_ntuple_list(ntuple_list n_tuple)
     n_tuple->max_size *= 2;
 
     /* realloc memory */
-    n_tuple->values = (double *) realloc((void *) n_tuple->values,
-                                            n_tuple->dim * n_tuple->max_size * sizeof(double));
+    n_tuple->values = (float *) realloc((void *) n_tuple->values,
+                                        n_tuple->dim * n_tuple->max_size * sizeof(float));
     if (n_tuple->values == NULL) LSD_ERROR("not enough memory.");
 }
 
 /*----------------------------------------------------------------------------*/
 /** Add a 7-tuple to an n-tuple list.
  */
-static void add_7tuple(ntuple_list out, double v1, double v2, double v3,
-                       double v4, double v5, double v6, double v7)
+static void add_7tuple(ntuple_list out, float v1, float v2, float v3,
+                       float v4, float v5, float v6, float v7)
 {
     /* check parameters */
     if (out == NULL) LSD_ERROR("add_7tuple: invalid n-tuple input.");
@@ -322,7 +322,7 @@ static void add_7tuple(ntuple_list out, double v1, double v2, double v3,
 typedef struct image_char_s
 {
     unsigned char * data;
-    unsigned int xsize,ysize;
+    unsigned int xsize, ysize;
 } * image_char;
 
 /*----------------------------------------------------------------------------*/
@@ -368,7 +368,7 @@ static image_char new_image_char(unsigned int xsize, unsigned int ysize)
 static image_char new_image_char_ini(unsigned int xsize, unsigned int ysize, unsigned char fill_value)
 {
     image_char image = new_image_char(xsize, ysize); /* create image */
-    unsigned int N = xsize*ysize;
+    unsigned int N = xsize * ysize;
     unsigned int i;
 
     /* check parameters */
@@ -393,7 +393,7 @@ static image_char new_image_char_ini(unsigned int xsize, unsigned int ysize, uns
 typedef struct image_int_s
 {
     int * data;
-    unsigned int xsize,ysize;
+    unsigned int xsize, ysize;
 } * image_int;
 
 /*----------------------------------------------------------------------------*/
@@ -425,18 +425,18 @@ static image_int new_image_int(unsigned int xsize, unsigned int ysize)
 */
 static image_int new_image_int_ini(unsigned int xsize, unsigned int ysize, int fill_value)
 {
-    image_int image = new_image_int(xsize,ysize); /* create image */
-    unsigned int N = xsize*ysize;
+    image_int image = new_image_int(xsize, ysize); /* create image */
+    unsigned int N = xsize * ysize;
     unsigned int i;
 
     /* initialize */
-    for (i=0; i<N; i++) image->data[i] = fill_value;
+    for (i = 0; i < N; i++) image->data[i] = fill_value;
 
     return image;
 }
 
 /*----------------------------------------------------------------------------*/
-/** double image data type
+/** float image data type
 
         The pixel value at (x,y) is accessed by:
 
@@ -444,37 +444,37 @@ static image_int new_image_int_ini(unsigned int xsize, unsigned int ysize, int f
 
         with x and y integer.
  */
-typedef struct image_double_s
+typedef struct image_float_s
 {
-    double * data;
-    unsigned int xsize,ysize;
-} * image_double;
+    float * data;
+    unsigned int xsize, ysize;
+} * image_float;
 
 /*----------------------------------------------------------------------------*/
-/** Free memory used in image_double 'i'.
+/** Free memory used in image_float 'i'.
  */
-static void free_image_double(image_double i)
+static void free_image_float(image_float i)
 {
     if (i == NULL || i->data == NULL)
-        LSD_ERROR("free_image_double: invalid input image.");
+        LSD_ERROR("free_image_float: invalid input image.");
     free((void *) i->data);
     free((void *) i);
 }
 
 /*----------------------------------------------------------------------------*/
-/** Create a new image_double of size 'xsize' times 'ysize'.
+/** Create a new image_float of size 'xsize' times 'ysize'.
  */
-static image_double new_image_double(unsigned int xsize, unsigned int ysize)
+static image_float new_image_float(unsigned int xsize, unsigned int ysize)
 {
-    image_double image;
+    image_float image;
 
     /* check parameters */
-    if (xsize == 0 || ysize == 0) LSD_ERROR("new_image_double: invalid image size.");
+    if (xsize == 0 || ysize == 0) LSD_ERROR("new_image_float: invalid image size.");
 
     /* get memory */
-    image = (image_double) malloc(sizeof(struct image_double_s));
+    image = (image_float) malloc(sizeof(struct image_float_s));
     if (image == NULL) LSD_ERROR("not enough memory.");
-    image->data = (double *) calloc((size_t) (xsize*ysize), sizeof(double));
+    image->data = (float *) calloc((size_t) (xsize*ysize), sizeof(float));
     if (image->data == NULL) LSD_ERROR("not enough memory.");
 
     /* set image size */
@@ -485,20 +485,20 @@ static image_double new_image_double(unsigned int xsize, unsigned int ysize)
 }
 
 /*----------------------------------------------------------------------------*/
-/** Create a new image_double of size 'xsize' times 'ysize'
+/** Create a new image_float of size 'xsize' times 'ysize'
         with the data pointed by 'data'.
  */
-static image_double new_image_double_ptr(unsigned int xsize, unsigned int ysize, double * data)
+static image_float new_image_float_ptr(unsigned int xsize, unsigned int ysize, float * data)
 {
-    image_double image;
+    image_float image;
 
     /* check parameters */
     if (xsize == 0 || ysize == 0)
-        LSD_ERROR("new_image_double_ptr: invalid image size.");
-    if (data == NULL) LSD_ERROR("new_image_double_ptr: NULL data pointer.");
+        LSD_ERROR("new_image_float_ptr: invalid image size.");
+    if (data == NULL) LSD_ERROR("new_image_float_ptr: NULL data pointer.");
 
     /* get memory */
-    image = (image_double) malloc(sizeof(struct image_double_s));
+    image = (image_float) malloc(sizeof(struct image_float_s));
     if (image == NULL) LSD_ERROR("not enough memory.");
 
     /* set image */
@@ -522,29 +522,29 @@ static image_double new_image_double_ptr(unsigned int xsize, unsigned int ysize,
         in the middle point between values 'kernel->values[0]'
         and 'kernel->values[1]'.
  */
-static void gaussian_kernel(ntuple_list kernel, double sigma, double mean)
+static void gaussian_kernel(ntuple_list kernel, float sigma, float mean)
 {
-    double sum = 0.0;
-    double val;
+    float sum = 0.0f;
+    float val;
     unsigned int i;
 
     /* check parameters */
     if (kernel == NULL || kernel->values == NULL)
         LSD_ERROR("gaussian_kernel: invalid n-tuple 'kernel'.");
-    if (sigma <= 0.0) LSD_ERROR("gaussian_kernel: 'sigma' must be positive.");
+    if (sigma <= 0.0f) LSD_ERROR("gaussian_kernel: 'sigma' must be positive.");
 
     /* compute Gaussian kernel */
     if (kernel->max_size < 1) enlarge_ntuple_list(kernel);
     kernel->size = 1;
     for (i=0;i<kernel->dim;i++)
         {
-            val = ((double) i - mean) / sigma;
-            kernel->values[i] = exp(-0.5 * val * val);
+            val = ((float) i - mean) / sigma;
+            kernel->values[i] = expf(-0.5f * val * val);
             sum += kernel->values[i];
         }
 
     /* normalization */
-    if (sum >= 0.0) for (i = 0; i < kernel->dim; i++) kernel->values[i] /= sum;
+    if (sum >= 0.0f) for (i = 0; i < kernel->dim; i++) kernel->values[i] /= sum;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -559,8 +559,8 @@ static void gaussian_kernel(ntuple_list kernel, double sigma, double mean)
     before the sub-sampling to prevent aliasing.
 
     The standard deviation sigma given by:
-    - sigma = sigma_scale / scale,     if scale <  1.0
-    - sigma = sigma_scale,             if scale >= 1.0
+    - sigma = sigma_scale / scale,     if scale <  1.0f
+    - sigma = sigma_scale,             if scale >= 1.0f
 
     To be able to sub-sample at non-integer steps, some interpolation
     is needed. In this implementation, the interpolation is done by
@@ -579,54 +579,54 @@ static void gaussian_kernel(ntuple_list kernel, double sigma, double mean)
     @f]
     where
     @f[
-        G(x) = \frac{1}{\sqrt{2\pi}\sigma} e^{-\frac{x^2}{2\sigma^2}}.
+        G(x) = \frac{1}{\sqrtf{2\pi}\sigma} e^{-\frac{x^2}{2\sigma^2}}.
     @f]
     The algorithm first applies a combined Gaussian kernel and sampling
     in the x axis, and then the combined Gaussian kernel and sampling
     in the y axis.
  */
-static image_double gaussian_sampler(image_double in, double scale, double sigma_scale)
+static image_float gaussian_sampler(image_float in, float scale, float sigma_scale)
 {
-    image_double aux, out;
+    image_float aux, out;
     ntuple_list kernel;
     unsigned int N, M, h, n, x, y, i;
-    int xc,yc,j,double_x_size, double_y_size;
-    double sigma, xx, yy, sum, prec;
+    int xc, yc, j, float_x_size, float_y_size;
+    float sigma, xx, yy, sum, prec;
 
     /* check parameters */
     if (in == NULL || in->data == NULL || in->xsize == 0 || in->ysize == 0)
         LSD_ERROR("gaussian_sampler: invalid image.");
-    if (scale <= 0.0) LSD_ERROR("gaussian_sampler: 'scale' must be positive.");
-    if (sigma_scale <= 0.0)
+    if (scale <= 0.0f) LSD_ERROR("gaussian_sampler: 'scale' must be positive.");
+    if (sigma_scale <= 0.0f)
         LSD_ERROR("gaussian_sampler: 'sigma_scale' must be positive.");
 
     /* compute new image size and get memory for images */
-    if (in->xsize * scale > (double) UINT_MAX ||
-            in->ysize * scale > (double) UINT_MAX)
+    if (in->xsize * scale > (float) UINT_MAX ||
+            in->ysize * scale > (float) UINT_MAX)
         LSD_ERROR("gaussian_sampler: the output image size exceeds the handled size.");
-    N = (unsigned int) ceil(in->xsize * scale);
-    M = (unsigned int) ceil(in->ysize * scale);
-    aux = new_image_double(N,in->ysize);
-    out = new_image_double(N,M);
+    N = (unsigned int) ceilf(in->xsize * scale);
+    M = (unsigned int) ceilf(in->ysize * scale);
+    aux = new_image_float(N,in->ysize);
+    out = new_image_float(N,M);
 
     /* sigma, kernel size and memory for the kernel */
-    sigma = scale < 1.0 ? sigma_scale / scale : sigma_scale;
+    sigma = scale < 1.0f ? sigma_scale / scale : sigma_scale;
     /*
         The size of the kernel is selected to guarantee that the
         the first discarded term is at least 10^prec times smaller
         than the central value. For that, h should be larger than x, with
             e^(-x^2/2sigma^2) = 1/10^prec.
         Then,
-            x = sigma * sqrt(2 * prec * ln(10)).
+            x = sigma * sqrtf(2 * prec * ln(10)).
      */
-    prec = 3.0;
-    h = (unsigned int) ceil(sigma * sqrt(2.0 * prec * log(10.0)));
+    prec = 3.0f;
+    h = (unsigned int) ceilf(sigma * sqrtf(2.0f * prec * logf(10.0f)));
     n = 1 + 2 * h; /* kernel size */
     kernel = new_ntuple_list(n);
 
-    /* auxiliary double image size variables */
-    double_x_size = (int) (2 * in->xsize);
-    double_y_size = (int) (2 * in->ysize);
+    /* auxiliary float image size variables */
+    float_x_size = (int) (2 * in->xsize);
+    float_y_size = (int) (2 * in->ysize);
 
     /* First subsampling: x axis */
     for (x = 0; x < aux->xsize; x++)
@@ -636,25 +636,25 @@ static image_double gaussian_sampler(image_double in, double scale, double sigma
 			xx    is the corresponding x-value in the original size image.
 			xc    is the integer value, the pixel coordinate of xx.
 		*/
-		xx = (double) x / scale;
-		/* coordinate (0.0,0.0) is in the center of pixel (0,0),
+		xx = (float) x / scale;
+		/* coordinate (0.0f,0.0f) is in the center of pixel (0,0),
 				so the pixel with xc=0 get the values of xx from -0.5 to 0.5 */
-		xc = (int) floor(xx + 0.5);
-		gaussian_kernel(kernel, sigma, (double) h + xx - (double) xc);
+		xc = (int) floorf(xx + 0.5f);
+		gaussian_kernel(kernel, sigma, (float) h + xx - (float) xc);
 		/* the kernel must be computed for each x because the fine
 				offset xx-xc is different in each case */
 
 		for (y = 0; y < aux->ysize; y++)
 		{
-			sum = 0.0;
+			sum = 0.0f;
 			for (i = 0; i < kernel->dim; i++)
 				{
 					j = xc - h + i;
 
 					/* symmetry boundary condition */
-					while(j < 0) j += double_x_size;
-					while(j >= double_x_size) j -= double_x_size;
-					if (j >= (int) in->xsize) j = double_x_size - 1 - j;
+					while(j < 0) j += float_x_size;
+					while(j >= float_x_size) j -= float_x_size;
+					if (j >= (int) in->xsize) j = float_x_size - 1 - j;
 
 					sum += in->data[j + y * in->xsize] * kernel->values[i];
 				}
@@ -670,25 +670,25 @@ static image_double gaussian_sampler(image_double in, double scale, double sigma
 			yy    is the corresponding x-value in the original size image.
 			yc    is the integer value, the pixel coordinate of xx.
 		*/
-		yy = (double) y / scale;
-		/* coordinate (0.0,0.0) is in the center of pixel (0,0),
+		yy = (float) y / scale;
+		/* coordinate (0.0f,0.0f) is in the center of pixel (0,0),
 				so the pixel with yc=0 get the values of yy from -0.5 to 0.5 */
-		yc = (int) floor(yy + 0.5);
-		gaussian_kernel(kernel, sigma, (double) h + yy - (double) yc);
+		yc = (int) floorf(yy + 0.5f);
+		gaussian_kernel(kernel, sigma, (float) h + yy - (float) yc);
 		/* the kernel must be computed for each y because the fine
 				offset yy-yc is different in each case */
 
 		for (x = 0; x < out->xsize; x++)
 		{
-			sum = 0.0;
+			sum = 0.0f;
 			for (i = 0; i < kernel->dim; i++)
 				{
 					j = yc - h + i;
 
 					/* symmetry boundary condition */
-					while(j < 0) j += double_y_size;
-					while(j >= double_y_size) j -= double_y_size;
-					if (j >= (int) in->ysize) j = double_y_size-1-j;
+					while(j < 0) j += float_y_size;
+					while(j >= float_y_size) j -= float_y_size;
+					if (j >= (int) in->ysize) j = float_y_size-1-j;
 
 					sum += aux->data[x + j * aux->xsize] * kernel->values[i];
 				}
@@ -698,7 +698,7 @@ static image_double gaussian_sampler(image_double in, double scale, double sigma
 
     /* free memory */
     free_ntuple_list(kernel);
-    free_image_double(aux);
+    free_image_float(aux);
 
     return out;
 }
@@ -712,8 +712,8 @@ static image_double gaussian_sampler(image_double in, double scale, double sigma
 /** Computes the direction of the level line of 'in' at each point.
 
         The result is:
-        - an image_double with the angle at each pixel, or NOTDEF if not defined.
-        - the image_double 'modgrad' (a pointer is passed as argument)
+        - an image_float with the angle at each pixel, or NOTDEF if not defined.
+        - the image_float 'modgrad' (a pointer is passed as argument)
             with the gradient magnitude at each point.
         - a list of pixels 'list_p' roughly ordered by decreasing
             gradient magnitude. (The order is made by classifying points
@@ -725,12 +725,12 @@ static image_double gaussian_sampler(image_double in, double scale, double sigma
         - a pointer 'mem_p' to the memory used by 'list_p' to be able to
             free the memory when it is not used anymore.
  */
-static image_double ll_angle(image_double in, double threshold, struct coorlist ** list_p,
-	void ** mem_p, image_double * modgrad, unsigned int n_bins)
+static image_float ll_angle(image_float in, float threshold, struct coorlist ** list_p,
+	void ** mem_p, image_float * modgrad, unsigned int n_bins)
 {
-    image_double g;
+    image_float g;
     unsigned int n, p, x, y, adr, i;
-    double com1, com2, gx, gy, norm, norm2;
+    float com1, com2, gx, gy, norm, norm2;
     /* the rest of the variables are used for pseudo-ordering
          the gradient magnitude values */
     int list_count = 0;
@@ -739,12 +739,12 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
     struct coorlist ** range_l_e; /* array of pointers to end of bin list */
     struct coorlist * start;
     struct coorlist * end;
-    double max_grad = 0.0;
+    float max_grad = 0.0f;
 
     /* check parameters */
     if (in == NULL || in->data == NULL || in->xsize == 0 || in->ysize == 0)
         LSD_ERROR("ll_angle: invalid image.");
-    if (threshold < 0.0) LSD_ERROR("ll_angle: 'threshold' must be positive.");
+    if (threshold < 0.0f) LSD_ERROR("ll_angle: 'threshold' must be positive.");
     if (list_p == NULL) LSD_ERROR("ll_angle: NULL pointer 'list_p'.");
     if (mem_p == NULL) LSD_ERROR("ll_angle: NULL pointer 'mem_p'.");
     if (modgrad == NULL) LSD_ERROR("ll_angle: NULL pointer 'modgrad'.");
@@ -755,10 +755,10 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
     p = in->xsize;
 
     /* allocate output image */
-    g = new_image_double(in->xsize,in->ysize);
+    g = new_image_float(in->xsize,in->ysize);
 
     /* get memory for the image of gradient modulus */
-    *modgrad = new_image_double(in->xsize,in->ysize);
+    *modgrad = new_image_float(in->xsize,in->ysize);
 
     /* get memory for "ordered" list of pixels */
     list = (struct coorlist *) calloc((size_t) (n*p), sizeof(struct coorlist));
@@ -797,7 +797,7 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
 			gx = com1 + com2; /* gradient x component */
 			gy = com1 - com2; /* gradient y component */
 			norm2 = gx * gx + gy * gy;
-			norm = sqrt(norm2 / 4.0); /* gradient norm */
+			norm = sqrtf(norm2 / 4.0f); /* gradient norm */
 
 			(*modgrad)->data[adr] = norm; /* store gradient norm */
 
@@ -806,7 +806,7 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
 			else
 			{
 				/* gradient angle computation */
-				g->data[adr] = atan2(gx,-gy);
+				g->data[adr] = atan2f(gx, -gy);
 
 				/* look for the maximum of the gradient */
 				if (norm > max_grad) max_grad = norm;
@@ -821,7 +821,7 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
 			norm = (*modgrad)->data[y * p + x];
 
 			/* store the point in the right bin according to its norm */
-			i = (unsigned int) (norm * (double) n_bins / max_grad);
+			i = (unsigned int) (norm * (float) n_bins / max_grad);
 			if (i >= n_bins) i = n_bins-1;
 			if (range_l_e[i] == NULL)
 				range_l_s[i] = range_l_e[i] = list + list_count++;
@@ -868,17 +868,17 @@ static image_double ll_angle(image_double in, double threshold, struct coorlist 
 /*----------------------------------------------------------------------------*/
 /** Is point (x,y) aligned to angle theta, up to precision 'prec'?
  */
-static int isaligned(int x, int y, image_double angles, double theta,
-                                            double prec)
+static int isaligned(int x, int y, image_float angles, float theta,
+                                            float prec)
 {
-    double a;
+    float a;
 
     /* check parameters */
     if (angles == NULL || angles->data == NULL)
         LSD_ERROR("isaligned: invalid image 'angles'.");
     if (x < 0 || y < 0 || x >= (int) angles->xsize || y >= (int) angles->ysize)
         LSD_ERROR("isaligned: (x,y) out of the image.");
-    if (prec < 0.0) LSD_ERROR("isaligned: 'prec' must be positive.");
+    if (prec < 0.0f) LSD_ERROR("isaligned: 'prec' must be positive.");
 
     /* angle at pixel (x,y) */
     a = angles->data[x + y * angles->xsize];
@@ -886,18 +886,18 @@ static int isaligned(int x, int y, image_double angles, double theta,
     /* pixels whose level-line angle is not defined
          are considered as NON-aligned */
     if (a == NOTDEF) return FALSE;    /* there is no need to call the function
-                                                                            'double_equal' here because there is
+                                                                            'float_equal' here because there is
                                                                             no risk of problems related to the
-                                                                            comparison doubles, we are only
+                                                                            comparison floats, we are only
                                                                             interested in the exact NOTDEF value */
 
     /* it is assumed that 'theta' and 'a' are in the range [-pi,pi] */
     theta -= a;
-    if (theta < 0.0) theta = -theta;
+    if (theta < 0.0f) theta = -theta;
     if (theta > M_3_2_PI)
 	{
 		theta -= M_2__PI;
-		if (theta < 0.0) theta = -theta;
+		if (theta < 0.0f) theta = -theta;
 	}
 
     return theta <= prec;
@@ -906,19 +906,19 @@ static int isaligned(int x, int y, image_double angles, double theta,
 /*----------------------------------------------------------------------------*/
 /** Absolute value angle difference.
  */
-static double angle_diff(double a, double b)
+static float angle_diff(float a, float b)
 {
     a -= b;
     while(a <= -M_PI) a += M_2__PI;
     while(a > M_PI) a -= M_2__PI;
-    if (a < 0.0) a = -a;
+    if (a < 0.0f) a = -a;
     return a;
 }
 
 /*----------------------------------------------------------------------------*/
 /** Signed angle difference.
  */
-static double angle_diff_signed(double a, double b)
+static float angle_diff_signed(float a, float b)
 {
     a -= b;
     while(a <= -M_PI) a += M_2__PI;
@@ -955,20 +955,20 @@ static double angle_diff_signed(double a, double b)
         q5 = 83.8676043424,
         q6 = 2.50662827511.
  */
-static double log_gamma_lanczos(double x)
+static float log_gamma_lanczos(float x)
 {
-    static double q[7] = { 75122.6331530, 80916.6278952, 36308.2951477,
-        8687.24529705, 1168.92649479, 83.8676043424, 2.50662827511 };
-    double a = (x + 0.5) * log(x + 5.5) - (x + 5.5);
-    double b = 0.0;
+    static float q[7] = { 75122.6331530f, 80916.6278952f, 36308.2951477f,
+        8687.24529705f, 1168.92649479f, 83.8676043424f, 2.50662827511f };
+    float a = (x + 0.5f) * logf(x + 5.5f) - (x + 5.5f);
+    float b = 0.0f;
     int n;
 
     for (n = 0; n < 7; n++)
 	{
-		a -= log(x + (double) n);
-		b += q[n] * pow(x, (double) n);
+		a -= logf(x + (float) n);
+		b += q[n] * powf(x, (float) n);
 	}
-    return a + log(b);
+    return a + logf(b);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -978,8 +978,8 @@ static double log_gamma_lanczos(double x)
 
     The formula used is
     @f[
-            \Gamma(x) = \sqrt{\frac{2\pi}{x}} \left(\frac{x}{e}
-                                    \sqrt{ x\sinh(1/x) + \frac{1}{810x^6} } \right)^x
+            \Gamma(x) = \sqrtf{\frac{2\pi}{x}} \left(\frac{x}{e}
+                                    \sqrtf{ x\sinh(1/x) + \frac{1}{810x^6} } \right)^x
     @f]
     so
     @f[
@@ -988,10 +988,10 @@ static double log_gamma_lanczos(double x)
     @f]
     This formula is a good approximation when x > 15.
  */
-static double log_gamma_windschitl(double x)
+static float log_gamma_windschitl(float x)
 {
-    return 0.918938533204673 + (x - 0.5) * log(x) - x
-        + 0.5 * x * log(x * sinh(1 / x) + 1 / (810.0 * pow(x, 6.0)));
+    return 0.918938533204673f + (x - 0.5f) * logf(x) - x
+        + 0.5f * x * logf(x * sinhf(1.0f / x) + 1.0f / (810.0f * powf(x, 6.0f)));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -999,7 +999,7 @@ static double log_gamma_windschitl(double x)
     the gamma function of x. When x>15 use log_gamma_windschitl(),
     otherwise use log_gamma_lanczos().
  */
-#define log_gamma(x) ((x) > 15.0 ? log_gamma_windschitl(x) : log_gamma_lanczos(x))
+#define log_gamma(x) ((x) > 15.0f ? log_gamma_windschitl(x) : log_gamma_lanczos(x))
 
 /*----------------------------------------------------------------------------*/
 /** Size of the table to store already computed inverse values.
@@ -1026,7 +1026,7 @@ static double log_gamma_windschitl(double x)
     - -1 corresponds to 10 mean false alarms
     -    0 corresponds to 1 mean false alarm
     -    1 corresponds to 0.1 mean false alarms
-    -    2 corresponds to 0.01 mean false alarms
+    -    2 corresponds to 0.0f1 mean false alarms
     -    ...
 
     Used this way, the bigger the value, better the detection,
@@ -1048,23 +1048,23 @@ static double log_gamma_windschitl(double x)
     of the terms are neglected based on a bound to the error obtained
     (an error of 10% in the result is accepted).
  */
-static double nfa(int n, int k, double p, double logNT)
+static float nfa(int n, int k, float p, float logNT)
 {
-    static double inv[TABSIZE];     /* table to keep computed inverse values */
-    double tolerance = 0.1;             /* an error of 10% in the result is accepted */
-    double log1term, term, bin_term, mult_term, bin_tail, err, p_term;
+    static float inv[TABSIZE];     /* table to keep computed inverse values */
+    float tolerance = 0.1f;             /* an error of 10% in the result is accepted */
+    float log1term, term, bin_term, mult_term, bin_tail, err, p_term;
     int i;
 
     /* check parameters */
-    if (n<0 || k<0 || k>n || p<=0.0 || p>=1.0)
+    if (n < 0 || k < 0 || k > n || p <= 0.0f || p >= 1.0f)
         LSD_ERROR("nfa: wrong n, k or p values.");
 
     /* trivial cases */
     if (n==0 || k==0) return -logNT;
-    if (n==k) return -logNT - (double) n * log10(p);
+    if (n==k) return -logNT - (float) n * log10(p);
 
     /* probability term */
-    p_term = p / (1.0-p);
+    p_term = p / (1.0f-p);
 
     /* compute the first term of the series */
     /*
@@ -1074,15 +1074,15 @@ static double nfa(int n, int k, double p, double logNT)
 			bincoef(n,k) = gamma(n+1) / (gamma(k+1) * gamma(n-k+1)).
 		We use this to compute the first term. Actually the log of it.
     */
-    log1term = log_gamma((double) n + 1.0) - log_gamma((double) k + 1.0)
-             - log_gamma((double) (n - k) + 1.0)
-             + (double) k * log(p) + (double) (n - k) * log(1.0 - p);
-    term = exp(log1term);
+    log1term = log_gamma((float) n + 1.0f) - log_gamma((float) k + 1.0f)
+             - log_gamma((float) (n - k) + 1.0f)
+             + (float) k * logf(p) + (float) (n - k) * logf(1.0f - p);
+    term = expf(log1term);
 
     /* in some cases no more computations are needed */
-    if (double_equal(term, 0.0))                  	/* the first term is almost zero */
+    if (float_equal(term, 0.0f))                  	/* the first term is almost zero */
 	{
-		if ((double) k > (double) n * p)         	/* at begin or end of the tail?    */
+		if ((float) k > (float) n * p)         	/* at begin or end of the tail?    */
 		{return -log1term / M_LN10 - logNT; }  	  	/* end: use just the first term    */
 		else return -logNT;                       	/* begin: the tail is roughly 1    */
 	}
@@ -1101,22 +1101,22 @@ static double nfa(int n, int k, double p, double logNT)
 			and
 				term_i = term_i-1 * (n-i+1)/i * p/(1-p).
 			1/i is stored in a table as they are computed,
-			because divisions are expensive.
+			because divisions are expfensive.
 			p/(1-p) is computed only once and stored in 'p_term'.
 		*/
-		bin_term = (double) (n - i + 1) * (i < TABSIZE ?
-			(inv[i] != 0.0 ? inv[i] : (inv[i] = 1.0 / (double) i)) : 1.0 / (double) i);
+		bin_term = (float) (n - i + 1) * (i < TABSIZE ?
+			(inv[i] != 0.0f ? inv[i] : (inv[i] = 1.0f / (float) i)) : 1.0f / (float) i);
 
 		mult_term = bin_term * p_term;
 		term *= mult_term;
 		bin_tail += term;
-		if (bin_term < 1.0)
+		if (bin_term < 1.0f)
 		{
 			/* When bin_term<1 then mult_term_j<mult_term_i for j>i.
                Then, the error on the binomial tail when truncated at
                the i term can be bounded by a geometric series of form
                term_i * sum mult_term_i^j. */
-			err = term * ((1.0 - pow(mult_term, (double) (n - i + 1))) / (1.0 - mult_term) - 1.0);
+			err = term * ((1.0f - powf(mult_term, (float) (n - i + 1))) / (1.0f - mult_term) - 1.0f);
 
 			/* One wants an error at most of tolerance*final_result, or:
 			   tolerance * abs(-log10(bin_tail)-logNT).
@@ -1126,10 +1126,10 @@ static double nfa(int n, int k, double p, double logNT)
 			   tolerance * abs(-log10(bin_tail)-logNT) / (1/bin_tail)
 			   Finally, we truncate the tail if the error is less than:
 			   tolerance * abs(-log10(bin_tail)-logNT) * bin_tail */
-			if (err < tolerance * fabs(-log10(bin_tail) - logNT) * bin_tail) break;
+			if (err < tolerance * fabsf(-log10f(bin_tail) - logNT) * bin_tail) break;
 		}
 	}
-    return -log10(bin_tail) - logNT;
+    return -log10f(bin_tail) - logNT;
 }
 
 
@@ -1142,13 +1142,13 @@ static double nfa(int n, int k, double p, double logNT)
  */
 struct rect
 {
-    double x1, y1, x2, y2;			/* first and second point of the line segment */
-    double width;                	/* rectangle width */
-    double x, y;                    /* center of the rectangle */
-    double theta;                	/* angle */
-    double dx,dy;                	/* (dx,dy) is vector oriented as the line segment */
-    double prec;                 	/* tolerance angle */
-    double p;                       /* probability of a point with angle within 'prec' */
+    float x1, y1, x2, y2;			/* first and second point of the line segment */
+    float width;                	/* rectangle width */
+    float x, y;                    /* center of the rectangle */
+    float theta;                	/* angle */
+    float dx,dy;                	/* (dx,dy) is vector oriented as the line segment */
+    float prec;                 	/* tolerance angle */
+    float p;                       /* probability of a point with angle within 'prec' */
 };
 
 /*----------------------------------------------------------------------------*/
@@ -1178,7 +1178,7 @@ static void rect_copy(struct rect * in, struct rect * out)
 /** Rectangle points iterator.
 
 	The integer coordinates of pixels inside a rectangle are
-	iteratively explored. This structure keep track of the process and
+	iteratively expflored. This structure keep track of the process and
 	functions ri_ini(), ri_inc(), ri_end(), and ri_del() are used in
 	the process. An example of how to use the iterator is as follows:
 	\code
@@ -1192,11 +1192,11 @@ static void rect_copy(struct rect * in, struct rect * out)
 		ri_del(i); // delete iterator
 
 	\endcode
-	The pixels are explored 'column' by 'column', where we call
+	The pixels are expflored 'column' by 'column', where we call
 	'column' a set of pixels with the same x value that are inside the
 	rectangle. The following is an schematic representation of a
-	rectangle, the 'column' being explored is marked by colons, and
-	the current pixel being explored is 'x,y'.
+	rectangle, the 'column' being expflored is marked by colons, and
+	the current pixel being expflored is 'x,y'.
 	\verbatim
 
 						vx[1],vy[1]
@@ -1218,24 +1218,24 @@ static void rect_copy(struct rect * in, struct rect * out)
 			+---> x                                            vx[3],vy[3]
 
 	\endverbatim
-	The first 'column' to be explored is the one with the smaller x
-	value. Each 'column' is explored starting from the pixel of the
+	The first 'column' to be expflored is the one with the smaller x
+	value. Each 'column' is expflored starting from the pixel of the
 	'column' (inside the rectangle) with the smallest y value.
 
 	The four corners of the rectangle are stored in order that rotates
 	around the corners at the arrays 'vx[]' and 'vy[]'. The first
 	point is always the one with smaller x value.
 
-	'x' and 'y' are the coordinates of the pixel being explored. 'ys'
+	'x' and 'y' are the coordinates of the pixel being expflored. 'ys'
 	and 'ye' are the start and end values of the current column being
-	explored. So, 'ys' < 'ye'.
+	expflored. So, 'ys' < 'ye'.
  */
 typedef struct
 {
-    double vx[4];    		/* rectangle's corner X coordinates in circular order */
-    double vy[4];    		/* rectangle's corner Y coordinates in circular order */
-    double ys, ye;    		/* start and end Y values of current 'column' */
-    int x, y;             	/* coordinates of currently explored pixel */
+    float vx[4];    		/* rectangle's corner X coordinates in circular order */
+    float vy[4];    		/* rectangle's corner Y coordinates in circular order */
+    float ys, ye;    		/* start and end Y values of current 'column' */
+    int x, y;             	/* coordinates of currently expflored pixel */
 } rect_iter;
 
 /*----------------------------------------------------------------------------*/
@@ -1248,15 +1248,15 @@ typedef struct
         - x1 <= x
         - x  <= x2
  */
-static double inter_low(double x, double x1, double y1, double x2, double y2)
+static float inter_low(float x, float x1, float y1, float x2, float y2)
 {
     /* check parameters */
     if (x1 > x2 || x < x1 || x > x2)
         LSD_ERROR("inter_low: unsuitable input, 'x1>x2' or 'x<x1' or 'x>x2'.");
 
     /* interpolation */
-    if (double_equal(x1, x2) && y1 < y2) return y1;
-    if (double_equal(x1, x2) && y1 > y2) return y2;
+    if (float_equal(x1, x2) && y1 < y2) return y1;
+    if (float_equal(x1, x2) && y1 > y2) return y2;
     return y1 + (x - x1) * (y2 - y1) / (x2 - x1);
 }
 
@@ -1270,15 +1270,15 @@ static double inter_low(double x, double x1, double y1, double x2, double y2)
         - x1 <= x
         - x  <= x2
  */
-static double inter_hi(double x, double x1, double y1, double x2, double y2)
+static float inter_hi(float x, float x1, float y1, float x2, float y2)
 {
     /* check parameters */
     if (x1 > x2 || x < x1 || x > x2)
         LSD_ERROR("inter_hi: unsuitable input, 'x1>x2' or 'x<x1' or 'x>x2'.");
 
     /* interpolation */
-    if (double_equal(x1, x2) && y1 < y2) return y2;
-    if (double_equal(x1, x2) && y1 > y2) return y1;
+    if (float_equal(x1, x2) && y1 < y2) return y2;
+    if (float_equal(x1, x2) && y1 > y2) return y1;
     return y1 + (x - x1) * (y2 - y1) / (x2 - x1);
 }
 
@@ -1303,8 +1303,8 @@ static int ri_end(rect_iter * i)
 
     /* if the current x value is larger than the largest
          x value in the rectangle (vx[2]), we know the full
-         exploration of the rectangle is finished. */
-    return (double)(i->x) > i->vx[2];
+         expfloration of the rectangle is finished. */
+    return (float)(i->x) > i->vx[2];
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1317,19 +1317,19 @@ static void ri_inc(rect_iter * i)
     /* check input */
     if (i == NULL) LSD_ERROR("ri_inc: NULL iterator.");
 
-    /* if not at end of exploration,
+    /* if not at end of expfloration,
        increase y value for next pixel in the 'column' */
     if (!ri_end(i)) i->y++;
 
     /* if the end of the current 'column' is reached,
-       and it is not the end of exploration,
+       and it is not the end of expfloration,
        advance to the next 'column' */
-    while((double) (i->y) > i->ye && !ri_end(i))
+    while((float) (i->y) > i->ye && !ri_end(i))
         {
             /* increase x, next 'column' */
             i->x++;
 
-            /* if end of exploration, return */
+            /* if end of expfloration, return */
             if (ri_end(i)) return;
 
             /* update lower y limit (start) for the new 'column'.
@@ -1347,10 +1347,10 @@ static void ri_inc(rect_iter * i)
                 or last 'columns') then we pick the lower value of the side
                 by using 'inter_low'.
              */
-            if ((double) i->x < i->vx[3])
-                i->ys = inter_low((double)i->x,i->vx[0],i->vy[0],i->vx[3],i->vy[3]);
+            if ((float) i->x < i->vx[3])
+                i->ys = inter_low((float)i->x, i->vx[0], i->vy[0], i->vx[3], i->vy[3]);
             else
-                i->ys = inter_low((double)i->x,i->vx[3],i->vy[3],i->vx[2],i->vy[2]);
+                i->ys = inter_low((float)i->x, i->vx[3], i->vy[3], i->vx[2], i->vy[2]);
 
             /* update upper y limit (end) for the new 'column'.
 
@@ -1367,13 +1367,13 @@ static void ri_inc(rect_iter * i)
                 or last 'columns') then we pick the lower value of the side
                 by using 'inter_low'.
              */
-            if ((double)i->x < i->vx[1])
-                i->ye = inter_hi((double)i->x,i->vx[0],i->vy[0],i->vx[1],i->vy[1]);
+            if ((float)i->x < i->vx[1])
+                i->ye = inter_hi((float)i->x, i->vx[0], i->vy[0], i->vx[1], i->vy[1]);
             else
-                i->ye = inter_hi((double)i->x,i->vx[1],i->vy[1],i->vx[2],i->vy[2]);
+                i->ye = inter_hi((float)i->x, i->vx[1], i->vy[1], i->vx[2], i->vy[2]);
 
             /* new y */
-            i->y = (int) ceil(i->ys);
+            i->y = (int) ceilf(i->ys);
         }
 }
 
@@ -1384,8 +1384,8 @@ static void ri_inc(rect_iter * i)
  */
 static rect_iter * ri_ini(struct rect * r)
 {
-    double vx[4],vy[4];
-    int n,offset;
+    float vx[4], vy[4];
+    int n, offset;
     rect_iter * i;
 
     /* check parameters */
@@ -1397,14 +1397,14 @@ static rect_iter * ri_ini(struct rect * r)
 
     /* build list of rectangle corners ordered
        in a circular way around the rectangle */
-    vx[0] = r->x1 - r->dy * r->width / 2.0;
-    vy[0] = r->y1 + r->dx * r->width / 2.0;
-    vx[1] = r->x2 - r->dy * r->width / 2.0;
-    vy[1] = r->y2 + r->dx * r->width / 2.0;
-    vx[2] = r->x2 + r->dy * r->width / 2.0;
-    vy[2] = r->y2 - r->dx * r->width / 2.0;
-    vx[3] = r->x1 + r->dy * r->width / 2.0;
-    vy[3] = r->y1 - r->dx * r->width / 2.0;
+    vx[0] = r->x1 - r->dy * r->width / 2.0f;
+    vy[0] = r->y1 + r->dx * r->width / 2.0f;
+    vx[1] = r->x2 - r->dy * r->width / 2.0f;
+    vy[1] = r->y2 + r->dx * r->width / 2.0f;
+    vx[2] = r->x2 + r->dy * r->width / 2.0f;
+    vy[2] = r->y2 - r->dx * r->width / 2.0f;
+    vx[3] = r->x1 + r->dy * r->width / 2.0f;
+    vy[3] = r->y1 - r->dx * r->width / 2.0f;
 
     /*  compute rotation of index of corners needed so that the first
         point has the smaller x.
@@ -1418,10 +1418,10 @@ static rect_iter * ri_ini(struct rect * r)
     else offset = 3;
 
     /* apply rotation of index. */
-    for (n=0; n<4; n++)
+    for (n = 0; n < 4; n++)
 	{
-		i->vx[n] = vx[(offset+n)%4];
-		i->vy[n] = vy[(offset+n)%4];
+		i->vx[n] = vx[(offset + n) % 4];
+		i->vy[n] = vy[(offset + n) % 4];
 	}
 
     /* Set an initial condition.
@@ -1436,13 +1436,13 @@ static rect_iter * ri_ini(struct rect * r)
         notice that it needs to start a new 'column'.
 
         The smallest integer coordinate inside of the rectangle is
-        'ceil(vx[0])'. The current 'x' value is set to that value minus
+        'ceilf(vx[0])'. The current 'x' value is set to that value minus
         one, so 'ri_inc' (that will increase x by one) will advance to
         the first 'column'.
      */
-    i->x = (int) ceil(i->vx[0]) - 1;
-    i->y = (int) ceil(i->vy[0]);
-    i->ys = i->ye = -DBL_MAX;
+    i->x = (int) ceilf(i->vx[0]) - 1;
+    i->y = (int) ceilf(i->vy[0]);
+    i->ys = i->ye = -FLT_MAX;
 
     /* advance to the first pixel */
     ri_inc(i);
@@ -1453,7 +1453,7 @@ static rect_iter * ri_ini(struct rect * r)
 /*----------------------------------------------------------------------------*/
 /** Compute a rectangle's NFA value.
  */
-static double rect_nfa(struct rect * rec, image_double angles, double logNT)
+static float rect_nfa(struct rect * rec, image_float angles, float logNT)
 {
     rect_iter * i;
     int pts = 0;
@@ -1516,9 +1516,9 @@ static double rect_nfa(struct rect * rec, image_double angles, double logNT)
 
 	that gives:
 
-		lambda1 = (Ixx + Iyy + sqrt((Ixx - Iyy)^2 + 4.0 * Ixy * Ixy)) / 2
+		lambda1 = (Ixx + Iyy + sqrtf((Ixx - Iyy)^2 + 4.0f * Ixy * Ixy)) / 2
 
-		lambda2 = (Ixx + Iyy - sqrt((Ixx - Iyy)^2 + 4.0 * Ixy * Ixy)) / 2
+		lambda2 = (Ixx + Iyy - sqrtf((Ixx - Iyy)^2 + 4.0f * Ixy * Ixy)) / 2
 
 	To get the line segment direction we want to get the angle the
 	eigenvector associated to the smallest eigenvalue. We have
@@ -1528,25 +1528,25 @@ static double rect_nfa(struct rect * rec, image_double angles, double logNT)
 
 		a.Ixy + b.Iyy = b.lambda2
 
-	We want the angle theta = atan(b / a). It can be computed with
+	We want the angle theta = atanf(b / a). It can be computed with
 	any of the two equations:
 
-		theta = atan((lambda2 - Ixx) / Ixy)
+		theta = atanf((lambda2 - Ixx) / Ixy)
 
 	or
 
-		theta = atan(Ixy / (lambda2 - Iyy))
+		theta = atanf(Ixy / (lambda2 - Iyy))
 
 	When |Ixx| > |Iyy| we use the first, otherwise the second (just to
 	get better numeric precision).
  */
-static double get_theta(struct point * reg, int reg_size, double x, double y,
-                                                 image_double modgrad, double reg_angle, double prec)
+static float get_theta(struct point * reg, int reg_size, float x, float y,
+                                                 image_float modgrad, float reg_angle, float prec)
 {
-    double lambda,theta,weight;
-    double Ixx = 0.0;
-    double Iyy = 0.0;
-    double Ixy = 0.0;
+    float lambda,theta,weight;
+    float Ixx = 0.0f;
+    float Iyy = 0.0f;
+    float Ixy = 0.0f;
     int i;
 
     /* check parameters */
@@ -1554,28 +1554,28 @@ static double get_theta(struct point * reg, int reg_size, double x, double y,
     if (reg_size <= 1) LSD_ERROR("get_theta: region size <= 1.");
     if (modgrad == NULL || modgrad->data == NULL)
         LSD_ERROR("get_theta: invalid 'modgrad'.");
-    if (prec < 0.0) LSD_ERROR("get_theta: 'prec' must be positive.");
+    if (prec < 0.0f) LSD_ERROR("get_theta: 'prec' must be positive.");
 
     /* compute inertia matrix */
-    for (i=0; i<reg_size; i++)
+    for (i = 0; i < reg_size; i++)
 	{
 		weight = modgrad->data[reg[i].x + reg[i].y * modgrad->xsize];
-		Ixx += ((double) reg[i].y - y) * ((double) reg[i].y - y) * weight;
-		Iyy += ((double) reg[i].x - x) * ((double) reg[i].x - x) * weight;
-		Ixy -= ((double) reg[i].x - x) * ((double) reg[i].y - y) * weight;
+		Ixx += ((float) reg[i].y - y) * ((float) reg[i].y - y) * weight;
+		Iyy += ((float) reg[i].x - x) * ((float) reg[i].x - x) * weight;
+		Ixy -= ((float) reg[i].x - x) * ((float) reg[i].y - y) * weight;
 	}
-    if (double_equal(Ixx, 0.0) && double_equal(Iyy, 0.0) && double_equal(Ixy, 0.0))
+    if (float_equal(Ixx, 0.0f) && float_equal(Iyy, 0.0f) && float_equal(Ixy, 0.0f))
         LSD_ERROR("get_theta: null inertia matrix.");
 
     /* compute smallest eigenvalue */
-    lambda = 0.5 * (Ixx + Iyy - sqrt((Ixx - Iyy) * (Ixx - Iyy) + 4.0 * Ixy * Ixy));
+    lambda = 0.5f * (Ixx + Iyy - sqrtf((Ixx - Iyy) * (Ixx - Iyy) + 4.0f * Ixy * Ixy));
 
     /* compute angle */
-    theta = fabs(Ixx) > fabs(Iyy) ? atan2(lambda-Ixx, Ixy) : atan2(Ixy, lambda-Iyy);
+    theta = fabsf(Ixx) > fabsf(Iyy) ? atan2f(lambda - Ixx, Ixy) : atan2f(Ixy, lambda - Iyy);
 
     /* The previous procedure doesn't cares about orientation,
          so it could be wrong by 180 degrees. Here is corrected if necessary. */
-    if (angle_diff(theta,reg_angle) > prec) theta += M_PI;
+    if (angle_diff(theta, reg_angle) > prec) theta += M_PI;
 
     return theta;
 }
@@ -1584,10 +1584,10 @@ static double get_theta(struct point * reg, int reg_size, double x, double y,
 /** Computes a rectangle that covers a region of points.
  */
 static void region2rect(struct point * reg, int reg_size,
-                        image_double modgrad, double reg_angle,
-                        double prec, double p, struct rect * rec)
+                        image_float modgrad, float reg_angle,
+                        float prec, float p, struct rect * rec)
 {
-    double x, y, dx, dy, l, w, theta, weight, sum, l_min, l_max, w_min, w_max;
+    float x, y, dx, dy, l, w, theta, weight, sum, l_min, l_max, w_min, w_max;
     int i;
 
     /* check parameters */
@@ -1607,15 +1607,15 @@ static void region2rect(struct point * reg, int reg_size,
 		where G(i) is the norm of the gradient of pixel i
 		and x_i,y_i are its coordinates.
 	*/
-    x = y = sum = 0.0;
+    x = y = sum = 0.0f;
     for (i = 0; i < reg_size; i++)
 	{
 		weight = modgrad->data[reg[i].x + reg[i].y * modgrad->xsize];
-		x += (double)reg[i].x * weight;
-		y += (double)reg[i].y * weight;
+		x += (float)reg[i].x * weight;
+		y += (float)reg[i].y * weight;
 		sum += weight;
 	}
-    if (sum <= 0.0) LSD_ERROR("region2rect: weights sum equal to zero.");
+    if (sum <= 0.0f) LSD_ERROR("region2rect: weights sum equal to zero.");
     x /= sum;
     y /= sum;
 
@@ -1634,13 +1634,13 @@ static void region2rect(struct point * reg, int reg_size,
 		w_min and w_max are the minimum and maximum of w for the pixels
 		in the region.
 	*/
-    dx = cos(theta);
-    dy = sin(theta);
-    l_min = l_max = w_min = w_max = 0.0;
+    dx = cosf(theta);
+    dy = sinf(theta);
+    l_min = l_max = w_min = w_max = 0.0f;
     for (i = 0; i < reg_size; i++)
 	{
-		l =  ((double)reg[i].x - x) * dx + ((double)reg[i].y - y) * dy;
-		w = -((double)reg[i].x - x) * dy + ((double)reg[i].y - y) * dx;
+		l =  ((float)reg[i].x - x) * dx + ((float)reg[i].y - y) * dy;
+		w = -((float)reg[i].x - x) * dy + ((float)reg[i].y - y) * dx;
 
 		if (l > l_max) l_max = l;
 		if (l < l_min) l_min = l;
@@ -1669,18 +1669,18 @@ static void region2rect(struct point * reg, int reg_size,
         zero. But that corresponds to a one pixels width transition in
         the image.
      */
-    if (rec->width < 1.0) rec->width = 1.0;
+    if (rec->width < 1.0f) rec->width = 1.0f;
 }
 
 /*----------------------------------------------------------------------------*/
 /** Build a region of pixels that share the same angle, up to a
     tolerance 'prec', starting at point (x,y).
  */
-static void region_grow(int x, int y, image_double angles, struct point * reg,
-                        int * reg_size, double * reg_angle, image_char used,
-                        double prec)
+static void region_grow(int x, int y, image_float angles, struct point * reg,
+                        int * reg_size, float * reg_angle, image_char used,
+                        float prec)
 {
-    double sumdx, sumdy;
+    float sumdx, sumdy;
     int xx, yy, i;
 
     /* check parameters */
@@ -1699,8 +1699,8 @@ static void region_grow(int x, int y, image_double angles, struct point * reg,
     reg[0].x = x;
     reg[0].y = y;
     *reg_angle = angles->data[x+y*angles->xsize];    /* region's angle */
-    sumdx = cos(*reg_angle);
-    sumdy = sin(*reg_angle);
+    sumdx = cosf(*reg_angle);
+    sumdy = sinf(*reg_angle);
     used->data[x+y*used->xsize] = USED;
 
     /* try neighbors as new region points */
@@ -1721,9 +1721,9 @@ static void region_grow(int x, int y, image_double angles, struct point * reg,
 					++(*reg_size);
 
 					/* update region's angle */
-					sumdx += cos(angles->data[xx + yy * angles->xsize]);
-					sumdy += sin(angles->data[xx + yy * angles->xsize]);
-					*reg_angle = atan2(sumdy, sumdx);
+					sumdx += cosf(angles->data[xx + yy * angles->xsize]);
+					sumdy += sinf(angles->data[xx + yy * angles->xsize]);
+					*reg_angle = atan2f(sumdy, sumdx);
 				}
 			}
 		}
@@ -1734,12 +1734,12 @@ static void region_grow(int x, int y, image_double angles, struct point * reg,
 /** Try some rectangles variations to improve NFA value. Only if the
     rectangle is not meaningful (i.e., log_nfa <= log_eps).
  */
-static double rect_improve(struct rect *rec, image_double angles, double logNT, double log_eps)
+static float rect_improve(struct rect *rec, image_float angles, float logNT, float log_eps)
 {
     struct rect r;
-    double log_nfa, log_nfa_new;
-    double delta = 0.5;
-    double delta_2 = delta / 2.0;
+    float log_nfa, log_nfa_new;
+    float delta = 0.5f;
+    float delta_2 = delta / 2.0f;
     int n;
 
     log_nfa = rect_nfa(rec, angles, logNT);
@@ -1747,10 +1747,10 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     if (log_nfa > log_eps) return log_nfa;
 
     /* try finer precisions */
-    rect_copy(rec,&r);
+    rect_copy(rec, &r);
     for (n = 0; n < 5; n++)
 	{
-		r.p /= 2.0;
+		r.p /= 2.0f;
 		r.prec = r.p * M_PI;
 		log_nfa_new = rect_nfa(&r, angles, logNT);
 		if (log_nfa_new > log_nfa)
@@ -1766,7 +1766,7 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     rect_copy(rec, &r);
     for (n = 0; n < 5; n++)
 	{
-		if ((r.width - delta) >= 0.5)
+		if ((r.width - delta) >= 0.5f)
 		{
 			r.width -= delta;
 			log_nfa_new = rect_nfa(&r, angles, logNT);
@@ -1784,7 +1784,7 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     rect_copy(rec,&r);
     for (n=0; n<5; n++)
 	{
-		if ((r.width - delta) >= 0.5)
+		if ((r.width - delta) >= 0.5f)
 		{
 			r.x1 += -r.dy * delta_2;
 			r.y1 +=  r.dx * delta_2;
@@ -1803,10 +1803,10 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     if (log_nfa > log_eps) return log_nfa;
 
     /* try to reduce the other side of the rectangle */
-    rect_copy(rec,&r);
-    for (n=0; n<5; n++)
+    rect_copy(rec, &r);
+    for (n = 0; n < 5; n++)
 	{
-		if ((r.width - delta) >= 0.5)
+		if ((r.width - delta) >= 0.5f)
 		{
 			r.x1 -= -r.dy * delta_2;
 			r.y1 -=  r.dx * delta_2;
@@ -1825,10 +1825,10 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     if (log_nfa > log_eps) return log_nfa;
 
     /* try even finer precisions */
-    rect_copy(rec,&r);
+    rect_copy(rec, &r);
     for (n = 0; n < 5; n++)
 	{
-		r.p /= 2.0;
+		r.p /= 2.0f;
 		r.prec = r.p * M_PI;
 		log_nfa_new = rect_nfa(&r, angles, logNT);
 		if (log_nfa_new > log_nfa)
@@ -1847,19 +1847,19 @@ static double rect_improve(struct rect *rec, image_double angles, double logNT, 
     density of region points or to discard the region if too small.
  */
 static int reduce_region_radius(struct point * reg, int * reg_size,
-                                image_double modgrad, double reg_angle,
-                                double prec, double p, struct rect * rec,
-                                image_char used, image_double angles,
-                                double density_th)
+                                image_float modgrad, float reg_angle,
+                                float prec, float p, struct rect * rec,
+                                image_char used, image_float angles,
+                                float density_th)
 {
-    double density, rad1, rad2, rad, xc, yc;
+    float density, rad1, rad2, rad, xc, yc;
     int i;
 
     /* check parameters */
     if (reg == NULL) LSD_ERROR("reduce_region_radius: invalid pointer 'reg'.");
     if (reg_size == NULL)
         LSD_ERROR("reduce_region_radius: invalid pointer 'reg_size'.");
-    if (prec < 0.0) LSD_ERROR("reduce_region_radius: 'prec' must be positive.");
+    if (prec < 0.0f) LSD_ERROR("reduce_region_radius: 'prec' must be positive.");
     if (rec == NULL) LSD_ERROR("reduce_region_radius: invalid pointer 'rec'.");
     if (used == NULL || used->data == NULL)
         LSD_ERROR("reduce_region_radius: invalid image 'used'.");
@@ -1867,14 +1867,14 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
         LSD_ERROR("reduce_region_radius: invalid image 'angles'.");
 
     /* compute region points density */
-    density = (double) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
+    density = (float) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
 
     /* if the density criterion is satisfied there is nothing to do */
     if (density >= density_th) return TRUE;
 
     /* compute region's radius */
-    xc = (double) reg[0].x;
-    yc = (double) reg[0].y;
+    xc = (float) reg[0].x;
+    yc = (float) reg[0].y;
     rad1 = dist(xc, yc, rec->x1, rec->y1);
     rad2 = dist(xc, yc, rec->x2, rec->y2);
     rad = rad1 > rad2 ? rad1 : rad2;
@@ -1882,12 +1882,12 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
     /* while the density criterion is not satisfied, remove farther pixels */
     while(density < density_th)
 	{
-		rad *= 0.75; /* reduce region's radius to 75% of its value */
+		rad *= 0.75f; /* reduce region's radius to 75% of its value */
 
 		/* remove points from the region and update 'used' map */
-		for (i=0; i<*reg_size; i++)
+		for (i = 0; i < *reg_size; i++)
 		{
-			if (dist(xc, yc, (double)reg[i].x, (double)reg[i].y) > rad)
+			if (dist(xc, yc, (float)reg[i].x, (float)reg[i].y) > rad)
 			{
 				/* point not kept, mark it as NOTUSED */
 				used->data[reg[i].x + reg[i].y * used->xsize] = NOTUSED;
@@ -1907,7 +1907,7 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
 		region2rect(reg, *reg_size, modgrad, reg_angle, prec, p, rec);
 
 		/* re-compute region points density */
-		density = (double)*reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
+		density = (float)*reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
 	}
 
     /* if this point is reached, the density criterion is satisfied */
@@ -1924,17 +1924,17 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
     produce a rectangle with the right density of region points,
     'reduce_region_radius' is called to try to satisfy this condition.
  */
-static int refine(struct point * reg, int * reg_size, image_double modgrad,
-                  double reg_angle, double prec, double p, struct rect * rec,
-                  image_char used, image_double angles, double density_th)
+static int refine(struct point * reg, int * reg_size, image_float modgrad,
+                  float reg_angle, float prec, float p, struct rect * rec,
+                  image_char used, image_float angles, float density_th)
 {
-    double angle, ang_d, mean_angle, tau, density, xc, yc, ang_c, sum, s_sum;
+    float angle, ang_d, mean_angle, tau, density, xc, yc, ang_c, sum, s_sum;
     int i, n;
 
     /* check parameters */
     if (reg == NULL) LSD_ERROR("refine: invalid pointer 'reg'.");
     if (reg_size == NULL) LSD_ERROR("refine: invalid pointer 'reg_size'.");
-    if (prec < 0.0) LSD_ERROR("refine: 'prec' must be positive.");
+    if (prec < 0.0f) LSD_ERROR("refine: 'prec' must be positive.");
     if (rec == NULL) LSD_ERROR("refine: invalid pointer 'rec'.");
     if (used == NULL || used->data == NULL)
         LSD_ERROR("refine: invalid image 'used'.");
@@ -1942,7 +1942,7 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
         LSD_ERROR("refine: invalid image 'angles'.");
 
     /* compute region points density */
-    density = (double) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
+    density = (float) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
 
     /* if the density criterion is satisfied there is nothing to do */
     if (density >= density_th) return TRUE;
@@ -1950,15 +1950,15 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
     /*------ First try: reduce angle tolerance ------*/
 
     /* compute the new mean angle and tolerance */
-    xc = (double) reg[0].x;
-    yc = (double) reg[0].y;
+    xc = (float) reg[0].x;
+    yc = (float) reg[0].y;
     ang_c = angles->data[reg[0].x + reg[0].y * angles->xsize];
-    sum = s_sum = 0.0;
+    sum = s_sum = 0.0f;
     n = 0;
     for (i = 0; i < *reg_size; i++)
 	{
 		used->data[reg[i].x + reg[i].y * used->xsize] = NOTUSED;
-		if (dist(xc, yc, (double)reg[i].x, (double)reg[i].y) < rec->width)
+		if (dist(xc, yc, (float)reg[i].x, (float)reg[i].y) < rec->width)
 		{
 			angle = angles->data[reg[i].x + reg[i].y * angles->xsize];
 			ang_d = angle_diff_signed(angle, ang_c);
@@ -1967,9 +1967,9 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
 			++n;
 		}
 	}
-    mean_angle = sum / (double)n;
-    tau = 2.0 * sqrt((s_sum - 2.0 * mean_angle * sum) / (double)n
-        + mean_angle*mean_angle); /* 2 * standard deviation */
+    mean_angle = sum / (float)n;
+    tau = 2.0f * sqrtf((s_sum - 2.0f * mean_angle * sum) / (float)n
+        + mean_angle * mean_angle); /* 2 * standard deviation */
 
     /* find a new region from the same starting point and new angle tolerance */
     region_grow(reg[0].x, reg[0].y, angles, reg, reg_size, &reg_angle, used, tau);
@@ -1981,7 +1981,7 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
     region2rect(reg, *reg_size, modgrad, reg_angle, prec, p, rec);
 
     /* re-compute region points density */
-    density = (double) *reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
+    density = (float) *reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
 
     /*------ Second try: reduce region radius ------*/
     if (density < density_th)
@@ -2000,14 +2000,14 @@ static int refine(struct point * reg, int * reg_size, image_double modgrad,
 /*----------------------------------------------------------------------------*/
 /** LSD full interface.
  */
-int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
-                         double scale, double sigma_scale, double quant,
-                         double ang_th, double log_eps, double density_th,
+int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
+                         float scale, float sigma_scale, float quant,
+                         float ang_th, float log_eps, float density_th,
                          int n_bins, int ** reg_img, int * reg_y, int * reg_x)
 {
-    image_double image;
+    image_float image;
     ntuple_list out_buf = new_ntuple_list(7);
-    image_double scaled_image,angles,modgrad;
+    image_float scaled_image,angles,modgrad;
     image_char used;
     image_int region = NULL;
     struct coorlist * list_p;
@@ -2016,35 +2016,35 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
     struct point * reg;
     int reg_size, min_reg_size, i;
     unsigned int xsize, ysize;
-    double rho, reg_angle, prec, p, log_nfa, logNT;
+    float rho, reg_angle, prec, p, log_nfa, logNT;
     int ls_count = 0; 			/* line segments are numbered 1,2,3,... */
 
 
     /* check parameters */
     if (img == NULL || X <= 0 || Y <= 0) {LSD_ERROR("invalid image input."); return -1;}
-    if (scale <= 0.0) {LSD_ERROR("'scale' value must be positive."); return -1;}
-    if (sigma_scale <= 0.0) {LSD_ERROR("'sigma_scale' value must be positive."); return -1;}
-    if (quant < 0.0) {LSD_ERROR("'quant' value must be positive."); return -1;}
-    if (ang_th <= 0.0 || ang_th >= 180.0)
+    if (scale <= 0.0f) {LSD_ERROR("'scale' value must be positive."); return -1;}
+    if (sigma_scale <= 0.0f) {LSD_ERROR("'sigma_scale' value must be positive."); return -1;}
+    if (quant < 0.0f) {LSD_ERROR("'quant' value must be positive."); return -1;}
+    if (ang_th <= 0.0f || ang_th >= 180.0f)
         {LSD_ERROR("'ang_th' value must be in the range (0,180)."); return -1;}
-    if (density_th < 0.0 || density_th > 1.0)
+    if (density_th < 0.0f || density_th > 1.0f)
         {LSD_ERROR("'density_th' value must be in the range [0,1]."); return -1;}
     if (n_bins <= 0) {LSD_ERROR("'n_bins' value must be positive."); return -1;}
 
 
     /* angle tolerance */
-    prec = M_PI * ang_th / 180.0;
-    p = ang_th / 180.0;
-    rho = quant / sin(prec); /* gradient magnitude threshold */
+    prec = M_PI * ang_th / 180.0f;
+    p = ang_th / 180.0f;
+    rho = quant / sinf(prec); /* gradient magnitude threshold */
 
 
     /* load and scale image (if necessary) and compute angle at each pixel */
-    image = new_image_double_ptr((unsigned int) X, (unsigned int) Y, img);
-    if (scale != 1.0)
+    image = new_image_float_ptr((unsigned int) X, (unsigned int) Y, img);
+    if (scale != 1.0f)
 	{
 		scaled_image = gaussian_sampler(image, scale, sigma_scale);
 		angles = ll_angle(scaled_image, rho, &list_p, &mem_p, &modgrad, (unsigned int) n_bins);
-		free_image_double(scaled_image);
+		free_image_float(scaled_image);
 	}
     else angles = ll_angle(image, rho, &list_p, &mem_p, &modgrad, (unsigned int) n_bins);
     xsize = angles->xsize;
@@ -2063,7 +2063,7 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
         whose logarithm value is
             log10(11) + 5/2 * (log10(X) + log10(Y)).
     */
-    logNT = 5.0 * (log10((double)xsize) + log10((double)ysize)) / 2.0 + log10(11.0);
+    logNT = 5.0f * (log10((float)xsize) + log10((float)ysize)) / 2.0f + log10(11.0f);
     min_reg_size = (int) (-logNT / log10(p)); /* minimal number of points in region
                                                  that can give a meaningful event */
 
@@ -2081,7 +2081,7 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
 	{
         if (used->data[list_p->x + list_p->y * used->xsize] == NOTUSED &&
             angles->data[list_p->x + list_p->y * angles->xsize] != NOTDEF)
-             /* there is no risk of double comparison problems here
+             /* there is no risk of float comparison problems here
                 because we are only interested in the exact NOTDEF value */
 		{
 			/* find the region of connected point and ~equal angle */
@@ -2101,7 +2101,7 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
                 This is an addition to the original LSD algorithm published in
                 "LSD: A Fast Line Segment Detector with a False Detection Control"
                 by R. Grompone von Gioi, J. Jakubowicz, J.M. Morel, and G. Randall.
-                The original algorithm is obtained with density_th = 0.0.
+                The original algorithm is obtained with density_th = 0.0f.
             */
 			if (!refine(reg, &reg_size, modgrad, reg_angle,
 				prec, p, &rec, used, angles, density_th)) continue;
@@ -2118,11 +2118,11 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
                 points with an offset of (0.5,0.5), that should be added to output.
                 The coordinates origin is at the center of pixel (0,0).
             */
-			rec.x1 += 0.5; rec.y1 += 0.5;
-			rec.x2 += 0.5; rec.y2 += 0.5;
+			rec.x1 += 0.5f; rec.y1 += 0.5f;
+			rec.x2 += 0.5f; rec.y2 += 0.5f;
 
 			/* scale the result values if a subsampling was performed */
-			if (scale != 1.0)
+			if (scale != 1.0f)
 			{
 				rec.x1 /= scale; rec.y1 /= scale;
 				rec.x2 /= scale; rec.y2 /= scale;
@@ -2141,11 +2141,11 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
 	}
 
     /* free memory */
-    free((void *) image);     /* only the double_image structure should be freed,
+    free((void *) image);     /* only the float_image structure should be freed,
                                  the data pointer was provided to this functions
                                  and should not be destroyed. */
-    free_image_double(angles);
-    free_image_double(modgrad);
+    free_image_float(angles);
+    free_image_float(modgrad);
     free_image_char(used);
     free((void *) reg);
     free((void *) mem_p);
@@ -2187,15 +2187,15 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
  */
-int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
-                     double scale, int ** reg_img, int * reg_y, int * reg_x)
+int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
+                     float scale, int ** reg_img, int * reg_y, int * reg_x)
 {
     /* LSD parameters */
-    double sigma_scale = 0.6; 	/* Sigma for Gaussian filter is computed as sigma = sigma_scale/scale. */
-    double quant = 2.0; 		/* Bound to the quantization error on the gradient norm. */
-    double ang_th = 22.5;      	/* Gradient angle tolerance in degrees. */
-    double log_eps = 0.0;       /* Detection threshold: -log10(NFA) > log_eps */
-    double density_th = 0.7;    /* Minimal density of region points in rectangle. */
+    float sigma_scale = 0.6f; 	/* Sigma for Gaussian filter is computed as sigma = sigma_scale/scale. */
+    float quant = 2.0f; 		/* Bound to the quantization error on the gradient norm. */
+    float ang_th = 22.5f;      	/* Gradient angle tolerance in degrees. */
+    float log_eps = 0.0f;       /* Detection threshold: -log10(NFA) > log_eps */
+    float density_th = 0.7f;    /* Minimal density of region points in rectangle. */
     int n_bins = 1024;          /* Number of bins in pseudo-ordering of gradient modulus. */
 
     return LineSegmentDetection(out, n_out, img, Y, X, scale, sigma_scale, quant,
@@ -2206,7 +2206,7 @@ int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale.
  */
-int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double scale)
+int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale)
 {
     return lsd_scale_region(out, n_out, img, Y, X, scale, NULL, NULL, NULL);
 }
@@ -2214,10 +2214,10 @@ int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double sca
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface.
  */
-int lsd(double ** out, int * n_out, double * img, int Y, int X)
+int lsd(float ** out, int * n_out, float * img, int Y, int X)
 {
     /* LSD parameters */
-    double scale = 0.8;             /* Scale the image by Gaussian filter to 'scale'. */
+    float scale = 0.8f;             /* Scale the image by Gaussian filter to 'scale'. */
 
     return lsd_scale(out, n_out, img, Y, X, scale);
 }

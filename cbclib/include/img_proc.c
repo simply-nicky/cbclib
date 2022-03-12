@@ -1,10 +1,6 @@
 #include "img_proc.h"
 #include "array.h"
 
-/** pi / 9 **/
-#define VAR_ANG_MIN 0.3490658503988658956
-/** pi / 3 **/
-#define VAR_ANG_MAX 1.047197551196597853
 #define TOL 3.1425926535897937e-05
 
 typedef struct rect_s
@@ -67,7 +63,7 @@ static void realloc_ntuple_list(ntuple_list n_tuple, size_t max_size)
     if (n_tuple->values == NULL) ERROR("not enough memory.");
 }
 
-static void add_4tuple(ntuple_list list, double v1, double v2, double v3, double v4)
+static void add_4tuple(ntuple_list list, float v1, float v2, float v3, float v4)
 {
     /* check parameters */
     if (list == NULL) ERROR("add_4tuple: invalid n-tuple input.");
@@ -109,14 +105,14 @@ static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned 
     _coord = (_coord < _max) ? _coord : _max;   \
 }
 
-static void plot_line_width(void *out, size_t *dims, rect ln, double wd, unsigned int max_val, set_pixel setter)
+static void plot_line_width(void *out, size_t *dims, rect ln, float wd, unsigned int max_val, set_pixel setter)
 {
     /* plot an anti-aliased line of width wd */
     int dx = abs(ln->x1 - ln->x0), sx = ln->x0 < ln->x1 ? 1 : -1;
     int dy = abs(ln->y1 - ln->y0), sy = ln->y0 < ln->y1 ? 1 : -1;
     int err = dx - dy, derr = 0, dx0 = 0, e2, x2, y2, val;    /* error value e_xy */
-    double ed = dx + dy == 0 ? 1 : sqrt((double)dx * dx + (double)dy * dy);
-    wd = (wd + 1) / 2;
+    float ed = dx + dy == 0 ? 1.0f : sqrtf((float)dx * dx + (float)dy * dy);
+    wd = 0.5f * (wd + 1.0f);
 
     /* define line bounds */
     int wi = wd;
@@ -152,7 +148,7 @@ static void plot_line_width(void *out, size_t *dims, rect ln, double wd, unsigne
         /* pixel loop */
         err += derr; derr = 0;
         ln->x0 += dx0; dx0 = 0;
-        val = max_val - fmax(max_val * (abs(err - dx + dy) / ed - wd + 1), 0.0);
+        val = max_val - fmaxf(max_val * (abs(err - dx + dy) / ed - wd + 1.0f), 0.0f);
         setter(out, ln->x0, ln->y0, val, max_val);
 
         if (2 * err >= -dx)
@@ -162,20 +158,20 @@ static void plot_line_width(void *out, size_t *dims, rect ln, double wd, unsigne
                  abs(e2) < ed * wd && y2 >= bnd->y0 && y2 <= bnd->y1;
                  e2 += dx, y2 += sy)
             {
-                val = max_val - fmax(max_val * (abs(e2) / ed - wd + 1), 0.0);
+                val = max_val - fmaxf(max_val * (abs(e2) / ed - wd + 1.0f), 0.0f);
                 setter(out, ln->x0, y2, val, max_val);
             }
             if (ln->x0 == ln->x1) break;
             derr -= dy; dx0 += sx;
         }
-        if (2 * err <= dy)
+        if (2.0f * err <= dy)
         {
             /* y step */
             for (e2 = err - dx, x2 = ln->x0 + sx;
                  abs(e2) < ed * wd && x2 >= bnd->x0 && x2 <= bnd->x1;
                  e2 -= dy, x2 += sx)
             {
-                val = max_val - fmax(max_val * (abs(e2) / ed - wd + 1), 0.0);
+                val = max_val - fmaxf(max_val * (abs(e2) / ed - wd + 1.0f), 0.0f);
                 setter(out, x2, ln->y0, val, max_val);
             }
             if (ln->y0 == ln->y1) break;
@@ -186,7 +182,7 @@ static void plot_line_width(void *out, size_t *dims, rect ln, double wd, unsigne
     free(bnd);
 }
 
-int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation)
+int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t n_lines, unsigned int dilation)
 {
     /* check parameters */
     if (!out || !lines) {ERROR("draw_lines: one of the arguments is NULL."); return -1;}
@@ -196,27 +192,27 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, doub
 
     size_t ldims[2] = {n_lines, 7};
     size_t odims[2] = {Y, X};
-    array larr = new_array(2, ldims, sizeof(double), lines);
+    array larr = new_array(2, ldims, sizeof(float), lines);
     array oarr = new_array(2, odims, sizeof(unsigned int), out);
 
     line ln = init_line(larr, 1);
     rect rt = (rect)malloc(sizeof(struct rect_s));
-    double *ln_ptr;
+    float *ln_ptr;
 
     for (int i = 0; i < (int)n_lines; i++)
     {
         UPDATE_LINE(ln, i);
         ln_ptr = ln->data;
 
-        if (ln_ptr[0] > 0.0 && ln_ptr[0] < (double)X &&
-            ln_ptr[1] > 0.0 && ln_ptr[1] < (double)Y &&
-            ln_ptr[2] > 0.0 && ln_ptr[2] < (double)X &&
-            ln_ptr[3] > 0.0 && ln_ptr[3] < (double)Y)
+        if (ln_ptr[0] > 0.0f && ln_ptr[0] < (float)X &&
+            ln_ptr[1] > 0.0f && ln_ptr[1] < (float)Y &&
+            ln_ptr[2] > 0.0f && ln_ptr[2] < (float)X &&
+            ln_ptr[3] > 0.0f && ln_ptr[3] < (float)Y)
         {
-            rt->x0 = round(ln_ptr[0]); rt->y0 = round(ln_ptr[1]);
-            rt->x1 = round(ln_ptr[2]); rt->y1 = round(ln_ptr[3]);
+            rt->x0 = roundf(ln_ptr[0]); rt->y0 = roundf(ln_ptr[1]);
+            rt->x1 = roundf(ln_ptr[2]); rt->y1 = roundf(ln_ptr[3]);
 
-            plot_line_width((void *)oarr, oarr->dims, rt, ln_ptr[4] + (double)dilation, max_val, set_pixel_color);
+            plot_line_width((void *)oarr, oarr->dims, rt, ln_ptr[4] + (float)dilation, max_val, set_pixel_color);
         }
     }
 
@@ -226,7 +222,7 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, doub
     return 0;
 }
 
-int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val, double *lines, size_t n_lines, unsigned int dilation)
+int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val, float *lines, size_t n_lines, unsigned int dilation)
 {
     /* check parameters */
     if (!lines) {ERROR("draw_line_indices: lines is NULL."); return -1;}
@@ -236,13 +232,13 @@ int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, un
 
     size_t ldims[2] = {n_lines, 7};
     size_t odims[2] = {Y, X};
-    array larr = new_array(2, ldims, sizeof(double), lines);
+    array larr = new_array(2, ldims, sizeof(float), lines);
     ntuple_list idxs = new_ntuple_list(4, 1);
 
     line ln = init_line(larr, 1);
     rect rt = (rect)malloc(sizeof(struct rect_s));
-    double *ln_ptr;
-    double wd;
+    float *ln_ptr;
+    float wd;
     int ln_area;
 
     for (idxs->iter = 0; idxs->iter < (int)n_lines; idxs->iter++)
@@ -250,14 +246,14 @@ int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, un
         UPDATE_LINE(ln, idxs->iter);
         ln_ptr = ln->data;
 
-        if (ln_ptr[0] > 0.0 && ln_ptr[0] < (double)X &&
-            ln_ptr[1] > 0.0 && ln_ptr[1] < (double)Y &&
-            ln_ptr[2] > 0.0 && ln_ptr[2] < (double)X &&
-            ln_ptr[3] > 0.0 && ln_ptr[3] < (double)Y)
+        if (ln_ptr[0] > 0.0f && ln_ptr[0] < (float)X &&
+            ln_ptr[1] > 0.0f && ln_ptr[1] < (float)Y &&
+            ln_ptr[2] > 0.0f && ln_ptr[2] < (float)X &&
+            ln_ptr[3] > 0.0f && ln_ptr[3] < (float)Y)
         {
-            rt->x0 = round(ln_ptr[0]); rt->y0 = round(ln_ptr[1]);
-            rt->x1 = round(ln_ptr[2]); rt->y1 = round(ln_ptr[3]);
-            wd = ln_ptr[4] + (double)dilation;
+            rt->x0 = roundf(ln_ptr[0]); rt->y0 = roundf(ln_ptr[1]);
+            rt->x1 = roundf(ln_ptr[2]); rt->y1 = roundf(ln_ptr[3]);
+            wd = ln_ptr[4] + (float)dilation;
             ln_area = (2 * (int)wd + abs(rt->x1 - rt->x0)) * (2 * (int)wd + abs(rt->y1 - rt->y0));
 
             if (idxs->max_size < idxs->size + (size_t)ln_area)
@@ -278,17 +274,17 @@ int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, un
 }
 
 static void draw_pair(unsigned int **out, rect orect, size_t Y, size_t X,
-    unsigned int max_val, double *ln0, double *ln1, unsigned int dilation)
+    unsigned int max_val, float *ln0, float *ln1, unsigned int dilation)
 {
     /* Define the bounds 'rt0' of the former line 'ln0' */
     rect rt0 = (rect)malloc(sizeof(struct rect_s));
-    rt0->x0 = round(ln0[0]); rt0->y0 = round(ln0[1]);
-    rt0->x1 = round(ln0[2]); rt0->y1 = round(ln0[3]);
+    rt0->x0 = roundf(ln0[0]); rt0->y0 = roundf(ln0[1]);
+    rt0->x1 = roundf(ln0[2]); rt0->y1 = roundf(ln0[3]);
 
     /* Define the bounds 'rt1' of the latter line 'ln1' */
     rect rt1 = (rect)malloc(sizeof(struct rect_s));
-    rt1->x0 = round(ln1[0]); rt1->y0 = round(ln1[1]);
-    rt1->x1 = round(ln1[2]); rt1->y1 = round(ln1[3]);
+    rt1->x0 = roundf(ln1[0]); rt1->y0 = roundf(ln1[1]);
+    rt1->x1 = roundf(ln1[2]); rt1->y1 = roundf(ln1[3]);
 
     int wi = (ln0[4] > ln1[4]) ? ln0[4] : ln1[4];
 
@@ -322,29 +318,29 @@ static void draw_pair(unsigned int **out, rect orect, size_t Y, size_t X,
     rt1->x0 -= orect->x0; rt1->y0 -= orect->y0; rt1->x1 -= orect->x0; rt1->y1 -= orect->y0;
 
     /* Plot the lines */
-    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + (double)dilation, max_val, set_pixel_color);
-    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + (double)dilation, max_val, set_pixel_color);
+    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + (float)dilation, max_val, set_pixel_color);
+    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + (float)dilation, max_val, set_pixel_color);
 
     free(rt0); free(rt1); free_array(oarr);
 }
 
-static void collapse_pair(unsigned int *img, rect img_rt, double *data, size_t Y, size_t X,
-    double *ln0, double *ln1, size_t lsize)
+static void collapse_pair(unsigned int *img, rect img_rt, float *data, size_t Y, size_t X,
+    float *ln0, float *ln1, size_t lsize)
 {
     int j, k;
     unsigned int *img_j, *img_jk;
-    double MX, MY, MXY, MXX, MYY, M0;
-    double mu_x, mu_y, mu_xy, mu_xx, mu_yy, th, w, val, t0, t1;
-    double *data_j, *data_jk;
+    float MX, MY, MXY, MXX, MYY, M0;
+    float mu_x, mu_y, mu_xy, mu_xx, mu_yy, th, w, val, t0, t1;
+    float *data_j, *data_jk;
 
     /* Image moments */
-    M0 = MX = MY = MXY = MXX = MYY = 0.0;
+    M0 = MX = MY = MXY = MXX = MYY = 0.0f;
     for (j = img_rt->y0, img_j = img, data_j = data + X * img_rt->y0 + img_rt->x0;
          j < img_rt->y1; j++, img_j += img_rt->x1 - img_rt->x0, data_j += X)
         for (k = img_rt->x0, img_jk = img_j, data_jk = data_j;
              k < img_rt->x1; k++, img_jk++, data_jk++)
         {
-            val = (*data_jk) * (double)(*img_jk);
+            val = (*data_jk) * (float)(*img_jk);
             M0 += val; MX += k * val; MY += j * val;
             MXY += k * j * val; MYY += j * j * val; MXX += k * k * val;
         }
@@ -353,54 +349,54 @@ static void collapse_pair(unsigned int *img, rect img_rt, double *data, size_t Y
     {
         /* Central moments */
         mu_x = MX / M0; mu_y = MY / M0;
-        mu_xy = 2.0 * (MXY / M0 - mu_x * mu_y);
+        mu_xy = 2.0f * (MXY / M0 - mu_x * mu_y);
         mu_xx = MXX / M0 - mu_x * mu_x; mu_yy = MYY / M0 - mu_y * mu_y;
 
         /* Orientation and major axis length */ 
-        th = 0.5 * atan(mu_xy / (mu_xx - mu_yy));
+        th = 0.5f * atanf(mu_xy / (mu_xx - mu_yy));
         if (mu_xx < mu_yy) th += M_PI_2;
-        w = 0.5 * sqrt(8.0 * (mu_xx + mu_yy - sqrt(SQ(mu_xy) + SQ(mu_xx - mu_yy))));
+        w = 0.5f * sqrtf(8.0f * (mu_xx + mu_yy - sqrtf(SQ(mu_xy) + SQ(mu_xx - mu_yy))));
+        if (!isnanf(w)) ln0[4] = w;             // width
 
         /* Collapse the lines */
-        t0 = (ln0[0] - mu_x) * cos(th) + (ln0[1] - mu_y) * sin(th);
-        t1 = (ln1[0] - mu_x) * cos(th) + (ln1[1] - mu_y) * sin(th);
+        t0 = (ln0[0] - mu_x) * cosf(th) + (ln0[1] - mu_y) * sinf(th);
+        t1 = (ln1[0] - mu_x) * cosf(th) + (ln1[1] - mu_y) * sinf(th);
 
-        if (fabs(t0) > fabs(t1))
+        if (fabsf(t0) > fabsf(t1))
         {
-            ln0[0] = mu_x + t0 * cos(th);       // x0
-            ln0[1] = mu_y + t0 * sin(th);       // y0
+            ln0[0] = mu_x + t0 * cosf(th);       // x0
+            ln0[1] = mu_y + t0 * sinf(th);       // y0
         }
         else
         {
-            ln0[0] = mu_x + t1 * cos(th);       // x0
-            ln0[1] = mu_y + t1 * sin(th);       // y0
+            ln0[0] = mu_x + t1 * cosf(th);       // x0
+            ln0[1] = mu_y + t1 * sinf(th);       // y0
         }
 
-        t0 = (ln0[2] - mu_x) * cos(th) + (ln0[3] - mu_y) * sin(th);
-        t1 = (ln1[2] - mu_x) * cos(th) + (ln1[3] - mu_y) * sin(th);
+        t0 = (ln0[2] - mu_x) * cosf(th) + (ln0[3] - mu_y) * sinf(th);
+        t1 = (ln1[2] - mu_x) * cosf(th) + (ln1[3] - mu_y) * sinf(th);
 
-        if (fabs(t0) > fabs(t1))
+        if (fabsf(t0) > fabsf(t1))
         {
-            ln0[2] = mu_x + t0 * cos(th);       // x1
-            ln0[3] = mu_y + t0 * sin(th);       // y1
+            ln0[2] = mu_x + t0 * cosf(th);       // x1
+            ln0[3] = mu_y + t0 * sinf(th);       // y1
         }
         else
         {
-            ln0[2] = mu_x + t1 * cos(th);       // x1
-            ln0[3] = mu_y + t1 * sin(th);       // y1
+            ln0[2] = mu_x + t1 * cosf(th);       // x1
+            ln0[3] = mu_y + t1 * sinf(th);       // y1
         }
-        ln0[4] = w;                             // width
 
-        CLIP(ln0[0], 0.0, (double)X); CLIP(ln0[2], 0.0, (double)X);
-        CLIP(ln0[1], 0.0, (double)Y); CLIP(ln0[3], 0.0, (double)Y);
+        CLIP(ln0[0], 0.0f, (float)X); CLIP(ln0[2], 0.0f, (float)X);
+        CLIP(ln0[1], 0.0f, (float)Y); CLIP(ln0[3], 0.0f, (float)Y);
 
-        memset(ln1, 0, lsize * sizeof(double));
+        memset(ln1, 0.0f, lsize * sizeof(float));
     }
 }
 
 #define WRAP_DIST(_dist, _dx, _hb, _fb, _div)   \
 {                                               \
-    double _dx1;                                \
+    float _dx1;                                \
     if (_dx < -_hb) _dx1 = _dx + _fb;           \
     else if (_dx > _hb) _dx1 = _dx - _fb;       \
     else _dx1 = _dx;                            \
@@ -409,39 +405,41 @@ static void collapse_pair(unsigned int *img, rect img_rt, double *data, size_t Y
 
 static int indirect_cmp(const void *a, const void *b, void *data)
 {
-    double *dptr = data;
+    float *dptr = data;
     if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
     else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
     else return 0;
 }
 
-int filter_lines(double *olines, double *data, size_t Y, size_t X, double *ilines, size_t n_lines,
-    double x_c, double y_c, double radius)
+int filter_lines(float *olines, float *data, size_t Y, size_t X, float *ilines, size_t n_lines,
+    float x_c, float y_c, float* radii, float thr)
 {
     /* Check parameters */
     if (!olines|| !data || !ilines) {ERROR("filter_lines: one of the arguments is NULL."); return -1;}
     if (!X && !Y) {ERROR("filter_lines: data array must have a positive size."); return -1;}
     if (x_c <= 0 || x_c > X || y_c <= 0 || y_c > Y)
     {ERROR("filter_lines: center coordinates are out of bounds."); return -1;}
-    if (radius <= 0.0) {ERROR("filter_lines: radius must be positive."); return -1;}
+    for (int i = 0; i < 3; i++)
+        if (radii[i] <= 0.0) {ERROR("filter_lines: radius must be positive."); return -1;}
     
     if (n_lines == 0) return 0;
 
     size_t ldims[2] = {n_lines, 7};
-    array ilarr = new_array(2, ldims, sizeof(double), ilines);
-    array olarr = new_array(2, ldims, sizeof(double), olines);
+    array ilarr = new_array(2, ldims, sizeof(float), ilines);
+    array olarr = new_array(2, ldims, sizeof(float), olines);
 
     line iln = init_line(ilarr, 1);
     line oln = init_line(olarr, 1);
 
-    double max_wd = 0.0, max_l = 0.0, mean_r = 0.0, var_a = 0.0;
-    double mean_a = 0.0, mean_a2 = 0.0, min_d, d, dth, *oln_ptr;
+    float mean_wd = 0.0f, mean_l = 0.0f, mean_th;
+    float mean_a = 0.0f, mean_a2 = 0.0f, var_a = 0.0f;
+    float min_d, d, dth, *oln_ptr;
 
     /* Central coordinates */
-    double *als = (double *)malloc(n_lines * sizeof(double));   // angle between the line and the central tangent
-    double *ls = (double *)malloc(n_lines * sizeof(double));    // line's length
-    double *rs = (double *)malloc(n_lines * sizeof(double));    // line's radius
-    double *ths = (double *)malloc(n_lines * sizeof(double));   // line's polar angle
+    float *als = (float *)malloc(n_lines * sizeof(float));   // angle between the line and the central tangent
+    float *ls = (float *)malloc(n_lines * sizeof(float));    // line's length
+    float *rs = (float *)malloc(n_lines * sizeof(float));    // line's radius
+    float *ths = (float *)malloc(n_lines * sizeof(float));   // line's polar angle
     int i, j, min_idx, n_pairs = 0;
 
     /* Get the coordinates and copy ilines to olines */
@@ -454,59 +452,59 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
         oln_ptr = oln->data;
 
         /* Swap the line ends, so all the lines are clockwise aligned */
-        dth = atan2(oln_ptr[1] - y_c, oln_ptr[0] - x_c) - atan2(oln_ptr[3] - y_c, oln_ptr[2] - x_c);
-        if (dth < - M_PI) dth += 2 * M_PI;
-        if (dth > M_PI) dth -= 2 * M_PI;
+        dth = atan2f(oln_ptr[1] - y_c, oln_ptr[0] - x_c) - atan2f(oln_ptr[3] - y_c, oln_ptr[2] - x_c);
+        if (dth < - M_PI) dth += 2.0f * M_PI;
+        if (dth > M_PI) dth -= 2.0f * M_PI;
 
-        if (dth > 0)
+        if (dth > 0.0f)
         {
-            SWAP(oln_ptr[0], oln_ptr[2], double);
-            SWAP(oln_ptr[1], oln_ptr[3], double);
+            SWAP(oln_ptr[0], oln_ptr[2], float);
+            SWAP(oln_ptr[1], oln_ptr[3], float);
         }
-        if (oln_ptr[4] > max_wd) max_wd = oln_ptr[4];
 
         /* Central coordinates */
-        rs[i] = sqrt(SQ((oln_ptr[0] + oln_ptr[2]) / 2 - x_c) + SQ((oln_ptr[1] + oln_ptr[3]) / 2 - y_c));
-        ths[i] = atan2((oln_ptr[1] + oln_ptr[3]) / 2 - y_c, (oln_ptr[0] + oln_ptr[2]) / 2 - x_c);
-        als[i] = fabs(atan2(oln_ptr[3] - oln_ptr[1], oln_ptr[2] - oln_ptr[0]) - ths[i] + M_PI_2) - M_PI;
-        ls[i] = sqrt(SQ(oln_ptr[3] - oln_ptr[1]) + SQ(oln_ptr[2] - oln_ptr[0]));
+        rs[i] = sqrtf(SQ(0.5f * (oln_ptr[0] + oln_ptr[2]) - x_c) + SQ(0.5f * (oln_ptr[1] + oln_ptr[3]) - y_c));
+        ths[i] = atan2f(0.5f * (oln_ptr[1] + oln_ptr[3]) - y_c, 0.5f * (oln_ptr[0] + oln_ptr[2]) - x_c);
+        als[i] = fabsf(atan2f(oln_ptr[3] - oln_ptr[1], oln_ptr[2] - oln_ptr[0]) - ths[i] + M_PI_2) - M_PI;
+        ls[i] = sqrtf(SQ(oln_ptr[3] - oln_ptr[1]) + SQ(oln_ptr[2] - oln_ptr[0]));
 
-        /* Calculate als variance */
+        /* Calculate variance of alpha */
         mean_a2 += (als[i] - mean_a2) / (i + 1);
         var_a += (als[i] - mean_a) * (als[i] - mean_a2);
         mean_a = mean_a2;
 
-        /* Calculate rs mean and ls max */
-        mean_r += (rs[i] - mean_r) / (i + 1);
-        if(ls[i] > max_l) max_l = ls[i];
+        /* Calculate mean values of ls and 2 * w */
+        mean_l += (ls[i] - mean_l) / (i + 1);
+        mean_wd += (2.0f * oln_ptr[4] - mean_wd) / (i + 1);
     }
 
     free(iln); free_array(ilarr);
 
-    var_a = sqrt(var_a / n_lines);
-    CLIP(var_a, VAR_ANG_MIN, VAR_ANG_MAX);
-    max_l = max_l / mean_r;
+    var_a = sqrtf(var_a / n_lines) * radii[2];
 
     unsigned int *pairs = (unsigned int *)malloc(2 * n_lines * sizeof(unsigned int));
-    double *ds = (double *)malloc(n_lines * sizeof(double));
+    float *ds = (float *)malloc(n_lines * sizeof(float));
 
     /* Find the closest line for each line and filter out the bad lines */
+    /* The line coordinates are {alpha, theta, w} */
+    /* The coordinates are normalized by {var_alpha, mean_l / r, 2.0 * mean_w}, respectively */
     for (i = 0; i < (int)n_lines; i++)
     {
         UPDATE_LINE(oln, i);
 
-        if (fabs(als[i]) < var_a + ls[i] / rs[i])
+        if (fabsf(als[i]) < thr * (var_a + ls[i] / rs[i]))
         {
-            min_d = DBL_MAX; min_idx = -1;
+            min_d = FLT_MAX; min_idx = -1;
             for (j = 0; j < (int)n_lines; j++)
             {
-                if (fabs(als[j]) < var_a + ls[j] / rs[j] && j != i)
+                if (fabsf(als[j]) < thr * (var_a + ls[j] / rs[j]) && j != i)
                 {
-                    d = SQ(0.5 * (rs[j] - rs[i]) / max_wd);
-                    WRAP_DIST(d, ths[j] - ths[i], M_PI, 2 * M_PI, max_l);
+                    mean_th = 2.0f * atanf(mean_l / (rs[j] + rs[i])) * radii[1];
+                    d = SQ((rs[j] - rs[i]) / mean_wd / radii[0]);
+                    WRAP_DIST(d, ths[j] - ths[i], M_PI, 2.0f * M_PI, mean_th);
                     WRAP_DIST(d, als[j] - als[i], M_PI_2, M_PI, var_a);
 
-                    if (d < SQ(radius) && d < min_d) {min_d = d; min_idx = j;}
+                    if (d < 1.0f && d < min_d) {min_d = d; min_idx = j;}
                 }
             }
             if (min_idx >= 0)
@@ -530,7 +528,7 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
 
     unsigned int *img;
     rect orect = (rect)malloc(sizeof(struct rect_s));
-    double *ln0, *ln1;
+    float *ln0, *ln1;
 
     /* Collapse the pairs */
     for (i = 0; i < n_pairs; i++)
@@ -550,7 +548,8 @@ int filter_lines(double *olines, double *data, size_t Y, size_t X, double *iline
         }
     }
 
-    free(inds); free(pairs); free(orect); free_array(olarr);
+    free(inds); free(orect); 
+    free(pairs); free_array(olarr);
 
     return 0;
 }

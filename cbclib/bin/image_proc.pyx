@@ -59,18 +59,18 @@ def fft_convolve(np.ndarray array not None, np.ndarray kernel not None, int axis
             when the filter overlaps a border. Default value is 'constant'. The
             valid values and their behavior is as follows:
 
-            * 'constant', (k k k k | a b c d | k k k k) : The input is extended by
+            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by
               filling all values beyond the edge with the same constant value, defined
               by the `cval` parameter.
-            * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by
+            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by
               replicating the last pixel.
-            * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by
+            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by
               reflecting about the center of the last pixel. This mode is also sometimes
               referred to as whole-sample symmetric.
-            * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by
+            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by
               reflecting about the edge of the last pixel. This mode is also sometimes
               referred to as half-sample symmetric.
-            * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping
+            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping
               around to the opposite edge.
 
         cval (float) :  Value to fill past edges of input if mode is 'constant'. Default
@@ -183,18 +183,18 @@ def gaussian_filter(np.ndarray inp not None, object sigma not None, object order
             filter overlaps a border. Default value is 'reflect'. The valid values and their
             behavior is as follows:
 
-            * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
+            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
               values beyond the edge with the same constant value, defined by the `cval`
               parameter.
-            * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
+            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
               the last pixel.
-            * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
+            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
               about the center of the last pixel. This mode is also sometimes referred to as
               whole-sample symmetric.
-            * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
+            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
               about the edge of the last pixel. This mode is also sometimes referred to as
               half-sample symmetric.
-            * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
+            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
               to the opposite edge.
 
         cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
@@ -282,18 +282,18 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
             filter overlaps a border. Default value is 'reflect'. The valid values and their
             behavior is as follows:
 
-            * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
+            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
               values beyond the edge with the same constant value, defined by the `cval`
               parameter.
-            * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
+            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
               the last pixel.
-            * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
+            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
               about the center of the last pixel. This mode is also sometimes referred to as
               whole-sample symmetric.
-            * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
+            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
               about the edge of the last pixel. This mode is also sometimes referred to as
               half-sample symmetric.
-            * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
+            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
               to the opposite edge.
 
         cval (float) : Value to fill past edges of input if mode is ‘constant’. Default is 0.0.
@@ -421,7 +421,8 @@ def median(np.ndarray data not None, np.ndarray mask=None, int axis=0, unsigned 
     return out
 
 def median_filter(np.ndarray data not None, object size=None, np.ndarray footprint=None,
-                  np.ndarray mask=None, str mode='reflect', double cval=0.0, unsigned num_threads=1):
+                  np.ndarray mask=None, np.ndarray good_data=None, str mode='reflect', double cval=0.0,
+                  unsigned num_threads=1):
     """Calculate a median along the `axis`.
 
     Args:
@@ -441,18 +442,18 @@ def median_filter(np.ndarray data not None, object size=None, np.ndarray footpri
             filter overlaps a border. Default value is 'reflect'. The valid values and their
             behavior is as follows:
 
-            * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
+            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
               values beyond the edge with the same constant value, defined by the `cval`
               parameter.
-            * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
+            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
               the last pixel.
-            * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
+            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
               about the center of the last pixel. This mode is also sometimes referred to as
               whole-sample symmetric.
-            * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
+            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
               about the edge of the last pixel. This mode is also sometimes referred to as
               half-sample symmetric.
-            * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
+            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
               to the opposite edge.
         cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
         num_threads (int) : Number of threads used in the calculations.
@@ -471,6 +472,11 @@ def median_filter(np.ndarray data not None, object size=None, np.ndarray footpri
         np.PyArray_FILLWBYTE(mask, 1)
     else:
         mask = check_array(mask, np.NPY_BOOL)
+
+    if good_data is None:
+        good_data = mask
+    else:
+        good_data = check_array(good_data, np.NPY_BOOL)
 
     if size is None and footprint is None:
         raise ValueError('size or footprint must be provided.')
@@ -494,20 +500,21 @@ def median_filter(np.ndarray data not None, object size=None, np.ndarray footpri
     cdef void *_out = <void *>np.PyArray_DATA(out)
     cdef void *_data = <void *>np.PyArray_DATA(data)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+    cdef unsigned char *_gdata = <unsigned char *>np.PyArray_DATA(good_data)
     cdef int _mode = extend_mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
         elif type_num == np.NPY_UINT64:
-            fail = median_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_ulong, num_threads)
+            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_ulong, num_threads)
         else:
             raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
     if fail:
@@ -536,18 +543,18 @@ def maximum_filter(np.ndarray data not None, object size=None, np.ndarray footpr
             filter overlaps a border. Default value is 'reflect'. The valid values and their
             behavior is as follows:
 
-            * 'constant', (k k k k | a b c d | k k k k) : The input is extended by filling all
+            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
               values beyond the edge with the same constant value, defined by the `cval`
               parameter.
-            * 'nearest', (a a a a | a b c d | d d d d) : The input is extended by replicating
+            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
               the last pixel.
-            * 'mirror', (c d c b | a b c d | c b a b) : The input is extended by reflecting
+            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
               about the center of the last pixel. This mode is also sometimes referred to as
               whole-sample symmetric.
-            * 'reflect', (d c b a | a b c d | d c b a) : The input is extended by reflecting
+            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
               about the edge of the last pixel. This mode is also sometimes referred to as
               half-sample symmetric.
-            * 'wrap', (a b c d | a b c d | a b c d) : The input is extended by wrapping around
+            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
               to the opposite edge.
         cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
         num_threads (int) : Number of threads.
@@ -635,7 +642,7 @@ def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_
         :class:`cbclib.bin.LSD` : Line Segment Detector.
     """
     image = check_array(image, np.NPY_UINT32)
-    lines = check_array(lines, np.NPY_FLOAT64)
+    lines = check_array(lines, np.NPY_FLOAT32)
 
     if image.ndim != 2:
         raise ValueError("image array must be two-dimensional")
@@ -645,7 +652,7 @@ def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_
     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
     cdef unsigned long _Y = image.shape[0]
     cdef unsigned long _X = image.shape[1]
-    cdef double *_lines = <double *>np.PyArray_DATA(lines)
+    cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long _n_lines = lines.shape[0]
 
     with nogil:
@@ -680,7 +687,7 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
     See Also:
         :class:`cbclib.bin.LSD` : Line Segment Detector.
     """
-    lines = check_array(lines, np.NPY_FLOAT64)
+    lines = check_array(lines, np.NPY_FLOAT32)
 
     if lines.ndim != 2 or lines.shape[1] != 7:
         raise ValueError(f"lines array has an incompatible shape")
@@ -691,7 +698,7 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
 
     cdef unsigned int *_idxs
     cdef unsigned long _n_idxs
-    cdef double *_lines = <double *>np.PyArray_DATA(lines)
+    cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long _n_lines = lines.shape[0]
 
     with nogil:
@@ -704,9 +711,8 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
 
     return idxs
 
-def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarray,
-                        flatfields: np.ndarray=None, num_threads: cython.uint=1,
-                        out: np.ndarray=None) -> np.ndarray:
+def subtract_background(np.ndarray data not None, np.ndarray mask not None, np.ndarray whitefield not None,
+                        np.ndarray flatfields=None, int num_threads=1, np.ndarray out=None) -> np.ndarray:
     data = check_array(data, np.NPY_UINT32)
     mask = check_array(mask, np.NPY_BOOL)
     whitefield = check_array(whitefield, np.NPY_FLOAT32)
@@ -765,4 +771,35 @@ def subtract_background(data: np.ndarray, mask: np.ndarray, whitefield: np.ndarr
                     else:
                         _out[i, j, k] = 0.0
 
+    return out
+
+def normalize_streak_data(np.ndarray data not None, np.ndarray bgd not None, np.ndarray divisor not None,
+                          int num_threads=1) -> np.ndarray:
+    data = check_array(data, np.NPY_FLOAT32)
+    bgd = check_array(bgd, np.NPY_FLOAT32)
+    divisor = check_array(divisor, np.NPY_FLOAT32)
+
+    cdef int i, j, k
+    cdef float w, I
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
+
+    cdef np.float32_t[:, :, ::1] _data = data
+    cdef np.float32_t[:, :, ::1] _bgd = bgd
+    cdef np.float32_t[:, :, ::1] _div = divisor
+    cdef np.float32_t[:, :, ::1] _out = out
+
+    cdef int n_frames = _data.shape[0]
+    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
+    for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
+        for j in range(_data.shape[1]):
+            for k in range(_data.shape[2]):
+                if _bgd[i, j, k]:
+                    w = _div[i, j, k] - _bgd[i, j, k]
+                    I = _data[i, j, k] - _bgd[i, j, k]
+                    if w <= 0.0 or I <= 0.0:
+                        _out[i, j, k] = 0.0
+                    else:
+                        _out[i, j, k] = I / w
+                else:
+                    _out[i, j, k] = 0.0
     return out
