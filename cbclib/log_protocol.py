@@ -183,21 +183,21 @@ class LogProtocol(INIParser):
                                 attr_dict[part_name][attr] *= self._get_unit(raw_str)
         return attr_dict
 
-    def load_data(self, path: str, indices: Optional[Iterable[int]]=None,
-                  return_indices=False) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    def load_data(self, path: str, idxs: Optional[Iterable[int]]=None,
+                  return_idxs=False) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
         """Retrieve the main data array from the log file.
 
         Args:
             path : Path to the log file.
-            indices : Array of data indices to load. Loads info for all
+            idxs : Array of data indices to load. Loads info for all
                 the frames by default.
 
         Returns:
             Dictionary with data fields and their names retrieved
             from the log file.
         """
-        if indices is not None:
-            indices.sort()
+        if idxs is not None:
+            idxs.sort()
 
         row_cnt = 0
         with open(path, 'r') as log_file:
@@ -210,21 +210,21 @@ class LogProtocol(INIParser):
 
                     if row_cnt == 0:
                         first_row = line_idx
-                    if indices is not None and row_cnt == indices[0]:
+                    if idxs is not None and row_cnt == idxs[0]:
                         skiprows = line_idx - first_row
-                    if indices is not None and row_cnt == indices[-1]:
+                    if idxs is not None and row_cnt == idxs[-1]:
                         max_rows = line_idx - skiprows
                         break
 
                     row_cnt += 1
             else:
-                if indices is None:
-                    indices = np.arange(row_cnt)
+                if idxs is None:
+                    idxs = np.arange(row_cnt)
                     skiprows = 0
                     max_rows = line_idx - skiprows
                 else:
-                    indices = indices[:np.searchsorted(indices, row_cnt)]
-                    if not indices.size:
+                    idxs = idxs[:np.searchsorted(idxs, row_cnt)]
+                    if not idxs.size:
                         skiprows = line_idx
                     max_rows = line_idx - skiprows
 
@@ -256,13 +256,14 @@ class LogProtocol(INIParser):
         data_tuple = np.loadtxt(path, delimiter=';', converters=converters,
                                 dtype=dtypes, unpack=True, skiprows=skiprows,
                                 max_rows=max_rows + 1)
-        data_dict = {key: data[indices - skiprows] for key, data in zip(keys, data_tuple)}
+        data_dict = {key: data[idxs - skiprows] for key, data in zip(keys, data_tuple)}
 
-        if return_indices:
-            return data_dict, indices
+        if return_idxs:
+            return data_dict, idxs
         return data_dict
 
-def converter_petra(dir_path, scan_num, out_path, indices=None, **kwargs):
+def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=None,
+                    **attributes: Any) -> CrystData:
     log_prt = LogProtocol.import_default()
 
     h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
@@ -270,13 +271,12 @@ def converter_petra(dir_path, scan_num, out_path, indices=None, **kwargs):
     h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
                        if path.endswith(('LambdaFar.nxs', '.h5'))])
 
-    files = CXIStore(input_files=h5_files, output_file=out_path)
+    input_files = CXIStore(h5_files, mode='r')
 
     log_attrs = log_prt.load_attributes(log_path)
-    log_data, indices = log_prt.load_data(log_path, indices=indices,
-                                          return_indices=True)
+    log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
 
-    n_frames = indices.size
+    n_frames = idxs.size
     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
     z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
@@ -297,4 +297,5 @@ def converter_petra(dir_path, scan_num, out_path, indices=None, **kwargs):
             if log_key in data_key:
                 tilts[:log_dset.size] = log_dset
 
-    return CrystData(files=files, translations=translations, tilts=tilts, **kwargs)
+    return CrystData(input_files=input_files, translations=translations,
+                     tilts=tilts, **attributes)

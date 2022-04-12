@@ -2,7 +2,7 @@
 """
 from __future__ import annotations
 from typing import (Any, Callable, Dict, ItemsView, Iterable,
-                    KeysView, List, Optional, ValuesView, TypeVar, Type)
+                    List, Optional, ValuesView, TypeVar, Type)
 
 T = TypeVar('T')
 

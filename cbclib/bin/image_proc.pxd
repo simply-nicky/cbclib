@@ -67,11 +67,11 @@ cdef extern from "median.h":
 
 cdef extern from "img_proc.h":
     int draw_lines(unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
-                   float *lines, unsigned long lines, unsigned int dilation) nogil
+                   float *lines, unsigned long *ldims, float dilation) nogil
 
     int draw_line_indices(unsigned int **out, unsigned long *n_idxs, unsigned long Y, unsigned long X,
-                          unsigned int max_val, float *lines, unsigned long n_lines,
-                          unsigned int dilation) nogil
+                          unsigned int max_val, float *lines, unsigned long *ldims,
+                          float dilation) nogil
 
 cdef extern from "fftw3.h":
     void fftw_init_threads() nogil

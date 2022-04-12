@@ -615,7 +615,8 @@ def maximum_filter(np.ndarray data not None, object size=None, np.ndarray footpr
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_val=255, int dilation=0) -> np.ndarray:
+def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_val=255,
+                  double dilation=0.0) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -646,22 +647,23 @@ def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_
 
     if image.ndim != 2:
         raise ValueError("image array must be two-dimensional")
-    if lines.ndim != 2 or lines.shape[1] != 7:
+    if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
         raise ValueError(f"lines array has an incompatible shape")
 
     cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
     cdef unsigned long _Y = image.shape[0]
     cdef unsigned long _X = image.shape[1]
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
-    cdef unsigned long _n_lines = lines.shape[0]
+    cdef unsigned long *_ldims = <unsigned long *>lines.shape
 
     with nogil:
-        fail = draw_lines(_image, _Y, _X, max_val, _lines, _n_lines, dilation)
+        fail = draw_lines(_image, _Y, _X, max_val, _lines, _ldims, <float>dilation)
     if fail:
         raise RuntimeError('C backend exited with error.')    
     return image
 
-def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int max_val=255, int dilation=0) -> np.ndarray:
+def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int max_val=255,
+                         double dilation=0.0) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -689,7 +691,7 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
     """
     lines = check_array(lines, np.NPY_FLOAT32)
 
-    if lines.ndim != 2 or lines.shape[1] != 7:
+    if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
         raise ValueError(f"lines array has an incompatible shape")
 
     cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
@@ -699,10 +701,10 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
     cdef unsigned int *_idxs
     cdef unsigned long _n_idxs
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
-    cdef unsigned long _n_lines = lines.shape[0]
+    cdef unsigned long *_ldims = <unsigned long *>lines.shape
 
     with nogil:
-        fail = draw_line_indices(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _n_lines, dilation)
+        fail = draw_line_indices(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 
@@ -711,65 +713,67 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
 
     return idxs
 
-def subtract_background(np.ndarray data not None, np.ndarray mask not None, np.ndarray whitefield not None,
-                        np.ndarray flatfields=None, int num_threads=1, np.ndarray out=None) -> np.ndarray:
+def project_effs(np.ndarray data not None, np.ndarray mask not None, np.ndarray effs not None,
+                 np.ndarray out=None, int num_threads=1) -> np.ndarray:
+    data = check_array(data, np.NPY_FLOAT32)
+    mask = check_array(mask, np.NPY_BOOL)
+    effs = check_array(effs, np.NPY_FLOAT32)
+
+    cdef int i, j, k, ii
+    cdef np.float32_t w1, w0
+
+    if out is None:
+        out = <np.ndarray>np.PyArray_ZEROS(data.ndim, data.shape, np.NPY_FLOAT32, 0)
+
+    cdef np.float32_t[:, :, ::1] _data = data
+    cdef np.npy_bool[:, :, ::1] _mask = mask
+    cdef np.float32_t[:, :, ::1] _effs = effs
+    cdef np.float32_t[:, :, ::1] _out = out
+
+    cdef int n_frames = _data.shape[0]
+    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
+    for i in prange(n_frames, schedule='guided', nogil=True):
+        for ii in range(_effs.shape[0]):
+            w1 = 0.0; w0 = 0.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    if _mask[i, j, k]:
+                        w1 = w1 + _data[i, j, k] * _effs[ii, j, k]
+                        w0 = w0 + _effs[ii, j, k] * _effs[ii, j, k]
+            w1 = w1 / w0 if w0 > 0.0 else 1.0
+            for j in range(_data.shape[1]):
+                for k in range(_data.shape[2]):
+                    _out[i, j, k] = _out[i, j, k] + _effs[ii, j, k] * w1
+
+    return out
+
+def subtract_background(np.ndarray data not None, np.ndarray mask not None, np.ndarray bgd not None,
+                        int num_threads=1) -> np.ndarray:
     data = check_array(data, np.NPY_UINT32)
     mask = check_array(mask, np.NPY_BOOL)
-    whitefield = check_array(whitefield, np.NPY_FLOAT32)
+    bgd = check_array(bgd, np.NPY_FLOAT32)
 
     cdef int i, j, k
     cdef float res, w0, w1
 
-    if out is None:
-        out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
-    else:
-        out = check_array(out, np.NPY_FLOAT32)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
 
     cdef np.uint32_t[:, :, ::1] _data = data
     cdef np.npy_bool[:, :, ::1] _mask = mask
-    cdef np.float32_t[:, ::1] _whitefield = whitefield
     cdef np.float32_t[:, :, ::1] _out = out
-    cdef np.uint32_t[:, :, ::1] _flatfields
+    cdef np.float32_t[:, :, ::1] _bgd = bgd
 
     cdef int n_frames = _data.shape[0]
     num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
 
-    if flatfields is None:
-        for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-            w0 = 0.0; w1 = 0.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
-                    if _mask[i, j, k]:
-                        w0 = w0 + <float>_data[i, j, k] * _whitefield[j, k]
-                        w1 = w1 + _whitefield[j, k] * _whitefield[j, k]
-            w0 = w0 / w1 if w1 > 0.0 else 1.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
-                    if _mask[i, j, k]:
-                        res = <float>_data[i, j, k] - w0 * _whitefield[j, k]
-                        _out[i, j, k] = res if res > 0.0 else 0.0
-                    else:
-                        _out[i, j, k] = 0.0
-
-    else:
-        flatfields = check_array(flatfields, np.NPY_UINT32)
-        _flatfields = flatfields
-
-        for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-            w0 = 0.0; w1 = 0.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
-                    if _mask[i, j, k]:
-                        w0 = w0 + <float>_data[i, j, k] * <float>_flatfields[i, j, k]
-                        w1 = w1 + <float>_flatfields[i, j, k] * <float>_flatfields[i, j, k]
-            w0 = w0 / w1 if w1 > 0.0 else 1.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
-                    if _mask[i, j, k]:
-                        res = <float>_data[i, j, k] - w0 * <float>_flatfields[i, j, k]
-                        _out[i, j, k] = res if res > 0.0 else 0.0
-                    else:
-                        _out[i, j, k] = 0.0
+    for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
+        for j in range(_data.shape[1]):
+            for k in range(_data.shape[2]):
+                if _mask[i, j, k]:
+                    res = <float>_data[i, j, k] - _bgd[i, j, k]
+                    _out[i, j, k] = res if res > 0.0 else 0.0
+                else:
+                    _out[i, j, k] = 0.0
 
     return out
 

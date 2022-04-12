@@ -1,5 +1,8 @@
 cimport numpy as np
 from cpython.ref cimport Py_INCREF
+from libc.stdlib cimport free, malloc, calloc
+from libc.string cimport memset
+from .image_proc cimport check_array, normalize_sequence
 
 cdef extern from "lsd.h":
     int LineSegmentDetection(float **out, int *n_out, float *img, int img_x, int img_y,
@@ -10,12 +13,14 @@ cdef extern from "lsd.h":
 
 cdef extern from "img_proc.h":
     int draw_lines(unsigned int *out, unsigned long Y, unsigned long X,
-                   unsigned int max_val, float *lines, unsigned long lines,
-                   unsigned int dilation) nogil
+                   unsigned int max_val, float *lines, unsigned long *ldims,
+                   float dilation) nogil
 
-    int filter_lines_c "filter_lines" (float *olines, float *data, unsigned long Y,
-                       unsigned long X, float *ilines, unsigned long n_lines, float x_c,
-                       float y_c, float *radii, float thr) nogil
+    int filter_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
+                     float *ilines, unsigned long *ldims, float threshold, float dilation) nogil
+
+    int group_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
+                    float *ilines, unsigned long *ldims, float cutoff, float threshold, float dilation) nogil
 
 cdef class ArrayWrapper:
     cdef void* _data

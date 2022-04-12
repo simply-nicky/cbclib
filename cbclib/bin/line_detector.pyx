@@ -1,7 +1,5 @@
 import numpy as np
-from libc.stdlib cimport free, malloc, calloc
-from cython.parallel import prange
-from .image_proc cimport check_array, normalize_sequence
+from cython.parallel import prange, parallel
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
@@ -9,7 +7,6 @@ np.import_array()
 
 DEF N_BINS = 1024
 DEF LINE_SIZE = 7
-DEF NOT_DEF = -1.0
 
 cdef class ArrayWrapper:
     """A wrapper class for a C data structure. """
@@ -35,8 +32,7 @@ cdef class LSD:
     """
 
     def __cinit__(self, float scale=0.8, float sigma_scale=0.6, float log_eps=0.,
-                  float ang_th=45.0, float density_th=0.7, float quant=2.0,
-                  float x_c=NOT_DEF, float y_c=NOT_DEF):
+                  float ang_th=45.0, float density_th=0.7, float quant=2.0):
         if scale < 0 or scale > 1:
             raise ValueError('scale is out of bounds (0.0, 1.0)')
         else:
@@ -58,12 +54,9 @@ cdef class LSD:
             raise ValueError('quant msut be positive')
         else:
             self.quant = quant
-        self.x_c = x_c
-        self.y_c = y_c
 
     def __init__(self, float scale=0.8, float sigma_scale=0.6, float log_eps=0,
-                 float ang_th=45.0, float density_th=0.7, float quant=2.0,
-                 float x_c=NOT_DEF, float y_c=NOT_DEF):
+                 float ang_th=45.0, float density_th=0.7, float quant=2.0):
         """Create a LSD object for streak detection on digital images.
 
         Parameters
@@ -103,9 +96,9 @@ cdef class LSD:
             gives an error of 2.0. Default value is 2.0.
         """
 
-    def detect(self, np.ndarray image not None, object radii=1.0, float threshold=1.0,
-               bint filter_lines=False, bint return_labels=False, unsigned int n_filter=3,
-               unsigned int num_threads=1):
+    def detect(self, np.ndarray image not None, float cutoff, float filter_threshold=0.0,
+               float group_threshold=0.6, bint filter=True, bint group=True, int n_group=2,
+               float dilation=6.0, bint return_labels=False, unsigned int num_threads=1):
         """Perform the LSD streak detection on `image`.
 
         Parameters
@@ -142,13 +135,14 @@ cdef class LSD:
         cdef int _X = <int>image.shape[ndim - 1]
         cdef int _Y = <int>image.shape[ndim - 2]
         cdef int repeats = image.size / _X / _Y
-        cdef np.ndarray streaks
-
-        cdef np.ndarray rs = normalize_sequence(radii, 3, np.NPY_FLOAT32)
-        cdef float * _rs = <float *>np.PyArray_DATA(rs)
+        cdef np.ndarray streaks, cond
 
         cdef float **_outs = <float **>malloc(repeats * sizeof(float *))
         if _outs is NULL:
+            raise MemoryError('not enough memory')
+
+        cdef unsigned char **_masks = <unsigned char **>malloc(repeats * sizeof(unsigned char *))
+        if _masks is NULL:
             raise MemoryError('not enough memory')
 
         cdef int *_ns = <int *>malloc(repeats * sizeof(int))
@@ -174,19 +168,34 @@ cdef class LSD:
         cdef int fail = 0, i, j
         cdef dict line_dict = {}, reg_dict = {}, out_dict = {}
         cdef np.npy_intp *out_dims = [0, LINE_SIZE]
+        cdef unsigned long *ldims
 
         num_threads = repeats if <int>num_threads > repeats else <int>num_threads
-        cdef bint is_filter = filter_lines and self.x_c > 0.0 and self.x_c < _X and self.y_c > 0.0 and self.y_c < _Y
 
-        for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-            fail |= LineSegmentDetection(&_outs[i], &_ns[i], _img + i * _Y * _X, _Y, _X,
-                                        self.scale, self.sigma_scale, self.quant,
-                                        self.ang_th, self.log_eps, self.density_th, N_BINS,
-                                        &_regs[i], &_reg_ys[i], &_reg_xs[i])
-            if is_filter:
-                for j in range(<int>n_filter):
-                    fail |= filter_lines_c(_outs[i], _img + i * _Y * _X, _Y, _X, _outs[i], _ns[i],
-                                           self.x_c, self.y_c, _rs, threshold)
+        with nogil, parallel(num_threads=num_threads):
+            ldims = <unsigned long *>malloc(2 * sizeof(unsigned long))
+            ldims[1] = LINE_SIZE
+
+            for i in prange(repeats, schedule='guided'):
+                fail |= LineSegmentDetection(&_outs[i], &_ns[i], _img + i * _Y * _X, _Y, _X,
+                                            self.scale, self.sigma_scale, self.quant,
+                                            self.ang_th, self.log_eps, self.density_th, N_BINS,
+                                            &_regs[i], &_reg_ys[i], &_reg_xs[i])
+
+                _masks[i] = <unsigned char *>calloc(_ns[i], sizeof(unsigned char))
+                memset(_masks[i], 1, _ns[i] * sizeof(unsigned char))
+                ldims[0] = _ns[i]
+                
+                if group:
+                    for j in range(n_group):
+                        fail |= group_lines(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
+                                            ldims, cutoff, group_threshold, dilation)
+
+                if filter:
+                    fail |= filter_lines(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
+                                         ldims, filter_threshold, dilation)
+
+            free(ldims)
 
         if fail:
             raise RuntimeError("LSD execution finished with an error")
@@ -194,7 +203,8 @@ cdef class LSD:
         for i in range(repeats):
             out_dims[0] = _ns[i]
             streaks = ArrayWrapper.from_ptr(<void *>_outs[i]).to_ndarray(2, out_dims, np.NPY_FLOAT32)
-            line_dict[i] = np.PyArray_Compress(streaks, streaks[:, 0], 0, <np.ndarray>NULL)
+            cond = ArrayWrapper.from_ptr(<void *>_masks[i]).to_ndarray(1, out_dims, np.NPY_BOOL)
+            line_dict[i] = np.PyArray_Compress(streaks, cond, 0, <np.ndarray>NULL)
 
         out_dict['lines'] = line_dict
 
@@ -213,8 +223,8 @@ cdef class LSD:
 
         return out_dict
 
-    def draw_lines(self, np.ndarray mask not None, dict lines not None, np.ndarray idxs,
-                   int max_val=1, int dilation=0, unsigned int num_threads=1):
+    def draw_lines(self, np.ndarray mask not None, dict lines not None,
+                   int max_val=1, double dilation=0.0, unsigned int num_threads=1):
         """Perform the streak detection on `image` and return rasterized lines
         drawn on a mask array.
 
@@ -246,24 +256,25 @@ cdef class LSD:
         cdef int repeats = mask.size / _X / _Y
 
         cdef int fail = 0, i, N = len(lines)
+        cdef list frames = list(lines)
         cdef float **_lines = <float **>malloc(N * sizeof(float *))
-        cdef unsigned long *_n_lines = <unsigned long *>malloc(N * sizeof(unsigned long))
+        cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
         cdef np.ndarray _larr
         for i in range(N):
-            _larr = lines[idxs[i]]
+            _larr = lines[frames[i]]
             _lines[i] = <float *>np.PyArray_DATA(_larr)
-            _n_lines[i] = <unsigned long>_larr.shape[0]
+            _ldims[i] = <unsigned long *>_larr.shape
 
         if N < repeats:
             repeats = N
         num_threads = repeats if <int>num_threads > repeats else <int>num_threads        
 
         for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-            draw_lines(_mask + i * _Y * _X, _Y, _X, max_val, _lines[i], _n_lines[i], dilation)
+            draw_lines(_mask + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation)
 
         if fail:
             raise RuntimeError("LSD execution finished with an error")
 
-        free(_lines); free(_n_lines)
+        free(_lines); free(_ldims)
 
         return mask
