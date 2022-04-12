@@ -6,6 +6,7 @@
 #include "img_proc.h"
 
 static int test_draw_lines();
+static int test_draw_line_indices();
 static int test_lsd();
 static int test_median();
 static int test_pairs();
@@ -17,7 +18,7 @@ static double rd()
 
 int main(int argc, char *argv[])
 {
-    return test_pairs();
+    return test_draw_line_indices();
 }
 
 static int test_draw_lines()
@@ -46,6 +47,40 @@ static int test_draw_lines()
     {
         printf("%3d ", i);
         for (int j = 0; j < (int)X; j++) printf("%03d ", out[j + X * i]);
+        printf("\n");
+    }
+    printf("\n");
+
+    free(lines); free(out);
+
+    return EXIT_SUCCESS;
+}
+
+static int test_draw_line_indices()
+{
+    size_t X = 32;
+    size_t Y = 48;
+    size_t n_lines = 2;
+    double *lines = (double *)calloc(n_lines * 7, sizeof(double));
+    unsigned int *out;
+    size_t n_idxs;
+
+    if (!lines)
+    {
+        printf("not enough memory\n");
+        return EXIT_FAILURE;
+    }
+
+    lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
+    lines[7] = 30.; lines[8] = 15.; lines[9] = 5.; lines[10] = 10.; lines[11] = 3.5;
+
+    draw_line_indices(&out, &n_idxs, X, Y, 255, lines, n_lines, 0);
+
+    printf("Result:\n");
+    printf("idx  x   y   I \n");
+    for (int i = 0; i < (int)n_idxs; i++)
+    {
+        for (int j = 0; j < 4; j++) printf("%03d ", out[j + 4 * i]);
         printf("\n");
     }
     printf("\n");

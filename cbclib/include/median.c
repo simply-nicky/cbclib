@@ -71,9 +71,12 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
         else
         {
             RAVEL_INDEX(fpt->coordinates + i * fpt->ndim, &index, arr);
-            memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
-                arr->item_size);
-            fpt->counter++;
+            if (*(unsigned char *)(mask->data + index * mask->item_size))
+            {
+                memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
+                    arr->item_size);
+                fpt->counter++;
+            }
         }
     }
 }
@@ -101,6 +104,13 @@ int compare_uint(const void *a, const void *b)
 {
     if (*(unsigned int *)a > *(unsigned int *)b) return 1;
     else if (*(unsigned int *)a < *(unsigned int *)b) return -1;
+    else return 0;
+}
+
+int compare_ulong(const void *a, const void *b)
+{
+    if (*(unsigned long *)a > *(unsigned long *)b) return 1;
+    else if (*(unsigned long *)a < *(unsigned long *)b) return -1;
     else return 0;
 }
 
@@ -156,8 +166,8 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
         #pragma omp for
         for (int i = 0; i < (int)repeats; i++)
         {
-            UPDATE_LINE(iline, iarr, i);
-            UPDATE_LINE(mline, marr, i);
+            UPDATE_LINE(iline, i);
+            UPDATE_LINE(mline, i);
 
             int len = 0;
             for (int n = 0; n < (int)iline->npts; n++)
@@ -185,8 +195,8 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
     return 0;
 }
 
-int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size,
-    size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gdata, int ndim, size_t *dims,
+    size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
     /* check parameters */
@@ -196,7 +206,7 @@ int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *
     if (threads == 0) {ERROR("median_filter: threads must be positive."); return -1;}
 
     array iarr = new_array(ndim, dims, item_size, data);
-    array marr = new_array(ndim, dims, 1, mask);
+    array marr = new_array(ndim, dims, 1, gdata);
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
@@ -208,14 +218,17 @@ int median_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *
         #pragma omp for schedule(guided)
         for (int i = 0; i < (int)iarr->size; i++)
         {
-            UNRAVEL_INDEX(coord, &i, iarr);
-
-            update_footprint(fpt, coord, iarr, marr, mode, cval);
-
-            if (fpt->counter)
+            if (mask[i])
             {
-                wirthselect(fpt->data, key, fpt->counter / 2, 0, fpt->counter - 1, fpt->item_size, compar);
-                memcpy(out + i * fpt->item_size, key, fpt->item_size);
+                UNRAVEL_INDEX(coord, &i, iarr);
+
+                update_footprint(fpt, coord, iarr, marr, mode, cval);
+
+                if (fpt->counter)
+                {
+                    wirthselect(fpt->data, key, fpt->counter / 2, 0, fpt->counter - 1, fpt->item_size, compar);
+                    memcpy(out + i * fpt->item_size, key, fpt->item_size);
+                }
             }
             else memset(out + i * fpt->item_size, 0, fpt->item_size);
         }

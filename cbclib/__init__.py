@@ -5,7 +5,8 @@ of convergent beam crystallography datasets.
 
 (c) Nikolay Ivanov, 2021.
 """
-from .cxi_protocol import CXIProtocol, CXILoader
+from .cbc_indexing import ScanSetup
+from .cxi_protocol import CXIProtocol, CXIStore
 from .log_protocol import LogProtocol, converter_petra
-from .data_processing import CrystData, StreakDetector
+from .data_processing import Crop, Downscale, ComposeTransforms, CrystData, StreakDetector
 from . import bin

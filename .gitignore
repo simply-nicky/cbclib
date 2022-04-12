@@ -6,6 +6,7 @@
 /cbclib/include/*.o
 /cbclib/include/*.out
 /cbclib/include/*.so
+/cbclib/bin/*.c
 dev.ipynb
 
 #jupyter checkpoints

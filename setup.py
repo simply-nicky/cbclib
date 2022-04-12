@@ -26,14 +26,18 @@ extensions = [Extension(name='cbclib.bin.line_detector',
                         sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c',
                                  'cbclib/include/img_proc.c', 'cbclib/include/array.c'],
                         **extension_args),
-              Extension(name='cbclib.bin.data_processing',
-                        sources=['cbclib/bin/data_processing' + ext, 'cbclib/include/pocket_fft.c',
+              Extension(name='cbclib.bin.image_proc',
+                        sources=['cbclib/bin/image_proc' + ext, 'cbclib/include/pocket_fft.c',
                                  'cbclib/include/img_proc.c', 'cbclib/include/fft_functions.c',
                                  'cbclib/include/median.c', 'cbclib/include/array.c'],
-                                 **extension_args)]
+                        **extension_args),
+              Extension(name='cbclib.bin.cbc_indexing',
+                        sources=['cbclib/bin/cbc_indexing' + ext, 'cbclib/include/img_proc.c',
+                                 'cbclib/include/array.c'],
+                        **extension_args)]
 
 if USE_CYTHON:
-    extensions = cythonize(extensions, annotate=True, language_level="3",
+    extensions = cythonize(extensions, annotate=True, language_level="3", include_path=['cbclib/bin',],
                            compiler_directives={'cdivision': True,
                                                 'boundscheck': False,
                                                 'wraparound': False,
@@ -44,10 +48,15 @@ with open('README.md', 'r') as readme:
     long_description = readme.read()
 
 setup(name='cbclib',
-      version='0.1.0',
+      version='0.2.0',
+      author='Nikolay Ivanov',
+      author_email="nikolay.ivanov@desy.de",
       long_description=long_description,
       long_description_content_type='text/markdown',
+      url="https://github.com/simply-nicky/cbclib",
       packages=find_packages(),
+      include_package_data=True,
+      package_data={'cbclib': ['config/*.ini',]},
       install_requires=['h5py', 'numpy', 'scipy'],
       ext_modules=extensions,
       classifiers=[

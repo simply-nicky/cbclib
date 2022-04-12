@@ -39,7 +39,7 @@
 /*----------------------------------------------------------------------------*/
 /** LSD Full Interface
 
-    @param out         Pointer to a double array of size 7 x n_out, containing the list
+    @param out         Pointer to a float array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -58,7 +58,7 @@
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
-                       doubles of size X x Y, and the pixel at coordinates
+                       floats of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
     @param Y           Y size of the image: the number of rows.
@@ -137,15 +137,15 @@
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
-                         double scale, double sigma_scale, double quant,
-                         double ang_th, double log_eps, double density_th,
+int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
+                         float scale, float sigma_scale, float quant,
+                         float ang_th, float log_eps, float density_th,
                          int n_bins, int ** reg_img, int * reg_y, int * reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
 
-    @param out         Pointer to a double array of size 7 x n_out, containing the list
+    @param out         Pointer to a float array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -164,7 +164,7 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
-                       doubles of size X x Y, and the pixel at coordinates
+                       floats of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
     @param Y           Y size of the image: the number of rows.
@@ -205,13 +205,13 @@ int LineSegmentDetection(double ** out, int * n_out, double * img, int Y, int X,
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
-                     double scale, int ** reg_img, int * reg_y, int * reg_x);
+int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
+                     float scale, int ** reg_img, int * reg_y, int * reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale
 
-    @param out         Pointer to a double array of size 7 x n_out, containing the list
+    @param out         Pointer to a float array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -230,7 +230,7 @@ int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
-                       doubles of size X x Y, and the pixel at coordinates
+                       floats of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
     @param Y           Y size of the image: the number of rows.
@@ -247,12 +247,12 @@ int lsd_scale_region(double ** out, int * n_out, double * img, int X, int Y,
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double scale);
+int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface
 
-    @param out         Pointer to a double array of size 7 x n_out, containing the list
+    @param out         Pointer to a float array of size 7 x n_out, containing the list
                        of line segments detected. The array contains first
                        7 values of line segment number 1, then the 7 values
                        of line segment number 2, and so on, and it finish
@@ -271,7 +271,7 @@ int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double sca
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
-                       doubles of size X x Y, and the pixel at coordinates
+                       floats of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x+y*X].
 
     @param Y           Y size of the image: the number of rows.
@@ -280,7 +280,7 @@ int lsd_scale(double ** out, int * n_out, double * img, int Y, int X, double sca
 
     @return            LSD returns 0 if it finished normally, -1 othrewise.
  */
-int lsd(double ** out, int * n_out, double * img, int Y, int X);
+int lsd(float ** out, int * n_out, float * img, int Y, int X);
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/
