@@ -12,10 +12,6 @@ cdef extern from "lsd.h":
                              int **reg_img, int *reg_x, int *reg_y) nogil
 
 cdef extern from "img_proc.h":
-    int draw_lines(unsigned int *out, unsigned long Y, unsigned long X,
-                   unsigned int max_val, float *lines, unsigned long *ldims,
-                   float dilation) nogil
-
     int filter_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
                      float *ilines, unsigned long *ldims, float threshold, float dilation) nogil
 

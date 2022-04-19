@@ -615,8 +615,8 @@ def maximum_filter(np.ndarray data not None, object size=None, np.ndarray footpr
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_val=255,
-                  double dilation=0.0) -> np.ndarray:
+def draw_lines(np.ndarray image not None, np.ndarray lines not None, int max_val=255,
+               double dilation=0.0) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -657,13 +657,69 @@ def draw_lines_aa(np.ndarray image not None, np.ndarray lines not None, int max_
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
 
     with nogil:
-        fail = draw_lines(_image, _Y, _X, max_val, _lines, _ldims, <float>dilation)
+        fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _ldims, <float>dilation)
     if fail:
         raise RuntimeError('C backend exited with error.')    
     return image
 
-def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int max_val=255,
-                         double dilation=0.0) -> np.ndarray:
+def draw_lines_stack(np.ndarray mask not None, dict lines not None,
+                     int max_val=1, double dilation=0.0, unsigned int num_threads=1):
+    """Perform the streak detection on `image` and return rasterized lines
+    drawn on a mask array.
+
+    Parameters
+    ----------
+    image : np.ndarray
+        2D array of the digital image.
+    max_val : int, optional
+        Maximal value in the output mask.
+    dilation : int, optional
+        Size of the morphology dilation applied to the output mask.
+    num_threads : int, optional
+        Number of the computational threads.
+    
+    Returns
+    -------
+    mask : np.ndarray
+        Array, that has the same shape as `image`, with the regions
+        masked by the detected lines.
+    """
+    if mask.ndim < 2:
+        raise ValueError('Mask must be >=2D array.')
+    mask = check_array(mask, np.NPY_UINT32)
+
+    cdef int ndim = mask.ndim
+    cdef unsigned int *_mask = <unsigned int *>np.PyArray_DATA(mask)
+    cdef int _X = <int>mask.shape[ndim - 1]
+    cdef int _Y = <int>mask.shape[ndim - 2]
+    cdef int repeats = mask.size / _X / _Y
+
+    cdef int fail = 0, i, N = len(lines)
+    cdef list frames = list(lines)
+    cdef float **_lines = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
+    cdef np.ndarray _larr
+    for i in range(N):
+        _larr = lines[frames[i]]
+        _lines[i] = <float *>np.PyArray_DATA(_larr)
+        _ldims[i] = <unsigned long *>_larr.shape
+
+    if N < repeats:
+        repeats = N
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads        
+
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        draw_lines_c(_mask + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation)
+
+    if fail:
+        raise RuntimeError("LSD execution finished with an error")
+
+    free(_lines); free(_ldims)
+
+    return mask
+
+def draw_line_indices(np.ndarray lines not None, object shape not None, int max_val=255,
+                      double dilation=0.0) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -704,7 +760,7 @@ def draw_line_indices_aa(np.ndarray lines not None, object shape not None, int m
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
 
     with nogil:
-        fail = draw_line_indices(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation)
+        fail = draw_line_indices_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 

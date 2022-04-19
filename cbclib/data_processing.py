@@ -1,13 +1,14 @@
 from __future__ import annotations
 from multiprocessing import cpu_count
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, ItemsView, Iterable, List, Optional, Set, Tuple, Union, ValuesView
 from weakref import ref, ReferenceType
 import numpy as np
 import pandas as pd
 from .cxi_protocol import CXIStore
 from .data_container import DataContainer, dict_to_object
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  maximum_filter, normalize_streak_data, draw_line_indices_aa)
+                  maximum_filter, normalize_streak_data, draw_lines, draw_lines_stack,
+                  draw_line_indices)
 from .cbc_indexing import ScanSetup
 
 Indices = Union[int, slice]
@@ -406,10 +407,10 @@ class ComposeTransforms(Transform):
         return {'transforms': self.transforms, 'shape': self.shape}
 
 class CrystData(DataContainer):
-    attr_set = {'input_files'}
-    init_set = {'background', 'cor_data', 'data', 'good_frames', 'frames', 'mask',
-                'num_threads', 'output_file', 'streak_data', 'tilts', 'transform',
-                'translations', 'whitefield'}
+    attr_set: Set[str] = {'input_files'}
+    init_set: Set[str] = {'background', 'cor_data', 'data', 'good_frames', 'frames', 'mask',
+                          'num_threads', 'output_file', 'streak_data', 'tilts', 'transform',
+                          'translations', 'whitefield'}
 
     # Necessary attributes
     input_files:    CXIStore
@@ -427,7 +428,6 @@ class CrystData(DataContainer):
     frames:         Optional[np.ndarray]
     output_file:    Optional[CXIStore]
     streak_data:    Optional[np.ndarray]
-    streaks:        Optional[np.ndarray]
     tilts:          Optional[np.ndarray]
     translations:   Optional[np.ndarray]
     whitefield:     Optional[np.ndarray]
@@ -438,9 +438,10 @@ class CrystData(DataContainer):
                                         transform=transform, **kwargs)
 
         self._init_functions(num_threads=lambda: np.clip(1, 64, cpu_count()))
+        if self.shape[0] > 0:
+            self._init_functions(good_frames=lambda: np.arange(self.shape[0]))
         if self._isdata:
-            self._init_functions(good_frames=lambda: np.where(self.data.sum(axis=(1, 2)) > 0)[0],
-                                 mask=self._mask)
+            self._init_functions(mask=self._mask)
             if self._iswhitefield:
                 bgd_func = lambda: project_effs(data=self.data, mask=self.mask,
                                                 effs=self.whitefield[None, ...],
@@ -466,6 +467,8 @@ class CrystData(DataContainer):
         for attr, data in self.items():
             if attr in self.input_files.protocol and data is not None:
                 kind = self.input_files.protocol.get_kind(attr)
+                if kind == 'sequence':
+                    shape[0] = data.shape[0]
                 if kind == 'stack':
                     shape[:] = data.shape
                 if kind == 'frame':
@@ -591,9 +594,9 @@ class CrystData(DataContainer):
         if attributes is None:
             attributes = self.keys()
         data_dict = {}
-        for attr in attributes:
+        for attr in self.input_files.protocol.str_to_list(attributes):
             data = self.get(attr)
-            if attr in self.input_files.protocol and data is not None:
+            if attr in self and isinstance(data, np.ndarray):
                 data_dict[attr] = None
         return data_dict
 
@@ -704,7 +707,7 @@ class CrystData(DataContainer):
         if detector.parent() is not self:
             raise ValueError("'detector' wasn't derived from this data container")
 
-        self.streak_data = np.zeros(self.shape, dtype=detector.dtypes['streak_data'])
+        self.streak_data = np.zeros(self.shape, dtype=detector.streak_data.dtype)
         self.streak_data[self.good_frames] = detector.streak_data
 
     @dict_to_object
@@ -723,7 +726,7 @@ class CrystData(DataContainer):
         """
         if whitefield.shape != self.shape[1:]:
             raise ValueError('whitefield and data have incompatible shapes: '\
-                             f'{whitefield.shape:s} != {self.shape[1:]:s}')
+                             f'{whitefield.shape} != {self.shape[1:]}')
         return {'whitefield': whitefield, 'cor_data': None}
 
     @dict_to_object
@@ -888,52 +891,132 @@ class CrystData(DataContainer):
         if self.cor_data is None:
             raise ValueError("No 'cor_data' in the container")
 
-        dtypes = StreakDetector.dtypes
-        data = np.asarray(self.cor_data[self.good_frames], order='C', dtype=dtypes['data'])
-        frames = dict(zip(self.frames[self.good_frames], self.good_frames))
+        data = np.asarray(self.cor_data[self.good_frames], order='C', dtype=np.float32)
+        frames = dict(zip(self.good_frames, self.frames[self.good_frames]))
         if not data.size:
             raise ValueError('No good frames in the stack')
 
         if import_contents and self.streak_data is not None:
             streak_data = np.asarray(self.streak_data[self.good_frames], order='C',
-                                     dtype=dtypes['streak_data'])
+                                     dtype=np.float32)
             return StreakDetector(parent=ref(self), data=data, frames=frames,
                                   num_threads=self.num_threads, streak_data=streak_data)
 
         return StreakDetector(parent=ref(self), data=data, frames=frames,
                               num_threads=self.num_threads)
 
+
+class Streaks:
+    streak_size: int = 5
+    dtype: np.dtype = np.float32
+    _indices: Dict[str, int] = {'x0': 0, 'x1': 1, 'y0': 2, 'y1': 3, 'width': 4}
+
+    def __init__(self, array: np.ndarray):
+        if array.ndim != 2 or array.shape[1] != self.streak_size:
+            raise ValueError(f'Incompatible shape: {array.shape}')
+
+        self._data = np.asarray(array, dtype=self.dtype)
+
+    @classmethod
+    def read_dataframe(self, df: pd.DataFrame):
+        return self(df[self._indices.keys()])
+
+    def __repr__(self) -> str:
+        return dict(self).__repr__()
+
+    def __str__(self) -> str:
+        return dict(self).__str__()
+
+    def __len__(self) -> int:
+        return self._data.shape[0]
+
+    def __contains__(self, attr: str) -> bool:
+        return attr in self.keys()
+
+    def __getitem__(self, attr: str) -> np.ndarray:
+        if attr in self:
+            return self.__getattribute__(attr)
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
+
+    def keys(self) -> List[str]:
+        return [attr for attr, val in vars(Streaks).items() if isinstance(val, property)]
+
+    def values(self) -> ValuesView:
+        return dict(self).values()
+
+    def items(self) -> ItemsView:
+        return dict(self).items()
+
+    @property
+    def x0(self) -> np.ndarray:
+        return self._data[:, self._indices['x0']]
+
+    @property
+    def x1(self) -> np.ndarray:
+        return self._data[:, self._indices['x1']]
+
+    @property
+    def y0(self) -> np.ndarray:
+        return self._data[:, self._indices['y0']]
+
+    @property
+    def y1(self) -> np.ndarray:
+        return self._data[:, self._indices['y1']]
+
+    @property
+    def width(self) -> np.ndarray:
+        return self._data[:, self._indices['width']]
+
+    @property
+    def length(self) -> np.ndarray:
+        return np.sqrt((self._data[:, 0] - self._data[:, 2])**2 +
+                       (self._data[:, 1] - self._data[:, 3])**2)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame(dict(self))
+
+    def to_numpy(self) -> np.ndarray:
+        return np.copy(self._data)
+
+    def draw(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0) -> np.ndarray:
+        mask = np.zeros(shape, dtype=np.uint32)
+        return draw_lines(mask, self._data, max_val=max_val, dilation=dilation)
+
+    def draw_indices(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0) -> pd.DataFrame:
+        idxs = draw_line_indices(lines=self._data, shape=shape, max_val=max_val, dilation=dilation)
+        return pd.DataFrame({'streaks': idxs[:, 0], 'x': idxs[:, 1], 'y': idxs[:, 2], 'val': idxs[:, 3],
+                             'length': self.length[idxs[:, 0]], 'width': self.width[idxs[:, 0]]})
+
 class StreakDetector(DataContainer):
     attr_set: Set[str] = {'parent', 'data', 'frames', 'num_threads'}
     init_set: Set[str] = {'bgd_dilation', 'bgd_mask', 'lsd_obj', 'streak_data', 'streak_dilation',
                           'streak_mask', 'streaks'}
-    dtypes: Dict[str, np.dtype] = {'bgd_mask': np.uint32, 'data': np.float32, 'frames': np.uint32,
-                                   'streak_data': np.float32, 'streak_mask': np.uint32,
-                                   'streaks': np.float32}
     footprint: np.ndarray = np.array([[[False, False,  True, False, False],
                                        [False,  True,  True,  True, False],
                                        [ True,  True,  True,  True,  True],
                                        [False,  True,  True,  True, False],
                                        [False, False,  True, False, False]]])
-    txt_header: str = 'Frame  x0, pix  y0, pix  x1, pix  y1, pix  w, pix'
-    txt_fmt = ('%7d', '%8.2f', '%8.2f', '%8.2f', '%8.2f', '%7.2f')
 
-    parent: ReferenceType[CrystData]
-    lsd_obj: LSD
+    # Necessary attributes
+    data:               np.ndarray
+    frames:             Dict[int, int]
+    num_threads:        int
+    parent:             ReferenceType[CrystData]
 
-    bgd_dilation : int
-    bgd_mask : np.ndarray
-    data: np.ndarray
-    frames: Dict[int, int]
-    num_threads: int
-    streak_dilation : int
-    streak_data: np.ndarray
-    streak_mask: np.ndarray
-    streaks: Dict[int, np.ndarray]
-    txt_fmt: Tuple[str, str, str, str, str, str]
+    # Automatically generated attributes
+    lsd_obj:            LSD
+    indices:            Dict[int, int]
+    streak_width:       Optional[float]
+    streak_mask:        Optional[np.ndarray]
+
+    # Optional attributes
+    bgd_dilation :      Optional[float]
+    bgd_mask :          Optional[np.ndarray]
+    streak_data:        Optional[np.ndarray]
+    streaks:            Optional[Dict[int, Streaks]]
 
     def __init__(self, parent: ReferenceType, lsd_obj: Optional[LSD]=None,
-                 **kwargs: Union[int, np.ndarray, Dict[int, np.ndarray]]) -> None:
+                 **kwargs: Union[int, np.ndarray, Dict[int, Streaks]]) -> None:
         """
         Args:
             parent : The Speckle tracking data container, from which the
@@ -948,17 +1031,17 @@ class StreakDetector(DataContainer):
         super(StreakDetector, self).__init__(parent=parent, lsd_obj=lsd_obj, **kwargs)
 
         self._init_functions(lsd_obj=lambda: LSD(scale=0.9, sigma_scale=0.9, log_eps=0.0,
-                                                 ang_th=60.0, density_th=0.5, quant=2e-2))
+                                                 ang_th=60.0, density_th=0.5, quant=2e-2),
+                             indices=lambda: {frame: index for index, frame in self.frames.items()})
+        if self.streaks is not None:
+            width_func = lambda: np.mean([val.width.mean() for val in self.streaks.values()])
+            self._init_functions(streak_width=width_func, streak_mask=self.draw)
 
         self._init_attributes()
 
     @property
     def shape(self) -> Tuple[int, int, int]:
         return self.data.shape
-
-    @staticmethod
-    def frame_dict() -> Dict[str, List]:
-        return {'frames': [], 'streaks': [], 'x': [], 'y': [], 'I': [], 'bgd': []}
 
     @dict_to_object
     def update_lsd(self, scale: float=0.9, sigma_scale: float=0.9,
@@ -967,44 +1050,53 @@ class StreakDetector(DataContainer):
         return {'lsd_obj': LSD(scale=scale, sigma_scale=sigma_scale, log_eps=log_eps,
                                ang_th=ang_th, density_th=density_th, quant=quant)}
 
-    @dict_to_object
-    def load_txt(self, path: str) -> StreakDetector:
-        txt_arr = np.loadtxt(path)
-        frames, idxs = np.unique(txt_arr[:, 0], return_inverse=True)
-        streaks = {}
-        for idx in range(frames.size):
-            streaks[int(frames[idx])] = txt_arr[idxs == idx][:, 1:].astype(self.dtypes['streaks'])
-        return {'streaks': streaks}
-
-    def save_txt(self, path: str) -> None:
+    def to_dataframe(self, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         if self.streaks is None:
             raise ValueError("No 'streaks' specified inside the container.")
-        txt_list = []
-        for frame, streaks in list(self.streaks.items()):
-            txt_arr = np.concatenate([frame * np.ones((streaks.shape[0], 1),
-                                                      dtype=streaks.dtype),
-                                     streaks[:, :5]], axis=1)
-            txt_list.append(txt_arr)
-        np.savetxt(path, np.concatenate(txt_list, axis=0), fmt=self.txt_fmt,
-                   header=self.txt_header)
 
-    def to_dataframe(self) -> pd.DataFrame:
-        if self.streaks:
-            frame_dict = self.frame_dict()
-            for frame, index in self.frames.items():
-                idxs = draw_line_indices_aa(lines=self.streaks[frame], shape=self.shape[1:],
-                                            max_val=1)
-                frame_dict['frames'].append(frame * np.ones(idxs.shape[0],
-                                                            dtype=self.dtypes['frames']))
-                frame_dict['streaks'].append(idxs[:, 0])
-                frame_dict['x'].append(idxs[:, 1])
-                frame_dict['y'].append(idxs[:, 2])
-                frame_dict['I'].append(self.parent().cor_data[index][idxs[:, 2], idxs[:, 1]])
-                frame_dict['bgd'].append(self.parent().background[index][idxs[:, 2], idxs[:, 1]])
+        transform = self.parent().transform
+        dataframes = []
+        for frame, streaks in self.streaks.items():
+            df = streaks.to_dataframe()
 
-            return pd.DataFrame({key: np.concatenate(val) for key, val in frame_dict.items()})
+            if transform:
+                df.loc[:, ['y0', 'x0']] = transform.backward_points(df.loc[:, ['y0', 'x0']])
+                df.loc[:, ['y1', 'x1']] = transform.backward_points(df.loc[:, ['y1', 'x1']])
+            df['streaks'] = df.index
+            df['frames'] = frame
 
-        raise ValueError("No 'streaks' specified inside the container.")
+            dataframes.append(df)
+
+        if concatenate:
+            return pd.concat(dataframes)
+        return dataframes
+
+    def export_table(self, dilation: float=0.0, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
+        if self.streaks is None:
+            raise ValueError("No 'streaks' specified inside the container.")
+
+        transform = self.parent().transform
+        dataframes = []
+        for index, frame in self.frames.items():
+            index = self.indices[frame]
+            df = self.streaks[frame].draw_indices(shape=self.shape[1:], dilation=dilation)
+            df = df[df['val'] > 0].drop('val', axis=1)
+            df['frames'] = frame
+
+            raw_data = self.parent().data[index] * self.parent().mask[index]
+            df['I_raw'] = raw_data[df.loc[:, 'y'], df.loc[:, 'x']]
+            df['sgn'] = self.parent().cor_data[index][df.loc[:, 'y'], df.loc[:, 'x']]
+            df['bgd'] = self.parent().background[index][df.loc[:, 'y'], df.loc[:, 'x']]
+            df = df[df.loc[:, 'sgn'] > 0.0]
+
+            if transform:
+                df.loc[:, ['y', 'x']] = transform.backward_points(df.loc[:, ['y', 'x']])
+
+            dataframes.append(df)
+
+        if concatenate:
+            return pd.concat(dataframes)
+        return dataframes
 
     @dict_to_object
     def generate_streak_data(self, vmin: float, vmax: float,
@@ -1021,24 +1113,13 @@ class StreakDetector(DataContainer):
                                        group_threshold=group_threshold,
                                        n_group=n_group, dilation=line_width,
                                        num_threads=self.num_threads)
-        return {'streaks': {self.frames[idx]: np.around(lines[:, :5], 2)
+        return {'streaks': {self.frames[idx]: Streaks(np.around(lines[:, :5], 2))
                             for idx, lines in out_dict['lines'].items()}}
 
     @dict_to_object
-    def update_streak_mask(self, streak_dilation: int=6, bgd_dilation: int=14) -> StreakDetector:
-        if self.streaks:
-            streak_mask = np.zeros(self.data.shape, dtype=self.dtypes['streak_mask'])
-            streak_mask = self.lsd_obj.draw_lines(streak_mask, self.streaks,
-                                                dilation=streak_dilation,
-                                                num_threads=self.num_threads)
-            bgd_mask = np.zeros(self.data.shape, dtype=self.dtypes['bgd_mask'])
-            bgd_mask = self.lsd_obj.draw_lines(bgd_mask, self.streaks,
-                                            dilation=bgd_dilation,
-                                            num_threads=self.num_threads)
-            return {'bgd_dilation': bgd_dilation, 'bgd_mask': bgd_mask,
-                    'streak_dilation': streak_dilation, 'streak_mask': streak_mask}
-
-        raise AttributeError("No 'streaks' specified inside the container.")
+    def generate_background_mask(self, bgd_dilation: float=8.0) -> StreakDetector:
+        bgd_mask = self.draw(dilation=bgd_dilation)
+        return {'bgd_dilation': bgd_dilation, 'bgd_mask': bgd_mask}
 
     @dict_to_object
     def update_streak_data(self) -> StreakDetector:
@@ -1046,15 +1127,24 @@ class StreakDetector(DataContainer):
             raise AttributeError("'streak_mask' and 'bgd_mask' must be generated before.")
 
         divisor = self.data
-        for _ in range(self.streak_dilation // 2):
+        for _ in range(int(self.streak_width) // 2):
             divisor = maximum_filter(divisor, mask=self.streak_mask, footprint=self.footprint,
                                      num_threads=self.num_threads)
 
         bgd = self.data * (self.bgd_mask - self.streak_mask)
-        for _ in range(self.bgd_dilation // 2):
+        for _ in range(int(self.bgd_dilation + self.streak_width) // 2):
             bgd = median_filter(bgd, mask=self.bgd_mask, good_data=bgd,
                                 footprint=self.footprint, num_threads=self.num_threads)
 
         streak_data = normalize_streak_data(data=self.data, bgd=bgd, divisor=divisor,
                                             num_threads=self.num_threads)
         return {'streak_data': streak_data}
+
+    def draw(self, max_val: int=1, dilation: float=0.0) -> np.ndarray:
+        if self.streaks is None:
+            raise ValueError("No 'streaks' specified inside the container.")
+
+        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
+        mask = np.zeros(self.data.shape, dtype=np.uint32)
+        return draw_lines_stack(mask, streaks, max_val=max_val, dilation=dilation,
+                                num_threads=self.num_threads)

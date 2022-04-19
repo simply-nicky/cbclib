@@ -197,9 +197,10 @@ class LogProtocol(INIParser):
             from the log file.
         """
         if idxs is not None:
+            idxs = np.asarray(idxs)
             idxs.sort()
 
-        row_cnt = 0
+        line_count = 0
         with open(path, 'r') as log_file:
             for line_idx, line in enumerate(log_file):
                 if line.startswith('# '):
@@ -208,25 +209,23 @@ class LogProtocol(INIParser):
                 else:
                     data_line = line
 
-                    if row_cnt == 0:
-                        first_row = line_idx
-                    if idxs is not None and row_cnt == idxs[0]:
-                        skiprows = line_idx - first_row
-                    if idxs is not None and row_cnt == idxs[-1]:
-                        max_rows = line_idx - skiprows
+                    if idxs is None:
+                        skiprows = line_idx
+                        max_rows = None
                         break
 
-                    row_cnt += 1
-            else:
-                if idxs is None:
-                    idxs = np.arange(row_cnt)
-                    skiprows = 0
-                    max_rows = line_idx - skiprows
-                else:
-                    idxs = idxs[:np.searchsorted(idxs, row_cnt)]
-                    if not idxs.size:
+                    if idxs.size == 0:
                         skiprows = line_idx
-                    max_rows = line_idx - skiprows
+                        max_rows = 0
+                        break
+
+                    if line_count == idxs[0]:
+                        skiprows = line_idx
+                    if line_count == idxs[-1]:
+                        max_rows = line_idx - skiprows + 1
+                        break
+
+                    line_count += 1
 
         keys = keys_line.strip('\n').split(';')
         data_strings = data_line.strip('\n').split(';')
@@ -237,30 +236,39 @@ class LogProtocol(INIParser):
             dtypes['names'].append(key)
             unit = self._get_unit(key)
             if 'float' in key:
-                dtypes['formats'].append(np.float_)
+                dtypes['formats'].append(np.dtype(float))
                 converters[idx] = lambda item, unit=unit: unit * float(item)
             elif 'int' in key:
                 if self._has_unit(key):
                     converters[idx] = lambda item, unit=unit: unit * float(item)
-                    dtypes['formats'].append(np.float_)
+                    dtypes['formats'].append(np.dtype(float))
                 else:
-                    dtypes['formats'].append(np.int)
+                    dtypes['formats'].append(np.dtype(int))
             elif 'Array' in key:
                 dtypes['formats'].append(np.ndarray)
-                converters[idx] = lambda item, unit=unit: np.array([float(part.strip(b' []')) * unit
-                                                                    for part in item.split(b',')])
+                func = lambda part, unit=unit: unit * float(part)
+                conv = lambda item, func=func: np.asarray(list(map(func, item.strip(b' []').split(b','))))
+                converters[idx] = conv
             else:
                 dtypes['formats'].append('<S' + str(len(val)))
                 converters[idx] = lambda item: item.strip(b' []')
 
-        data_tuple = np.loadtxt(path, delimiter=';', converters=converters,
-                                dtype=dtypes, unpack=True, skiprows=skiprows,
-                                max_rows=max_rows + 1)
-        data_dict = {key: data[idxs - skiprows] for key, data in zip(keys, data_tuple)}
+        txt_dict = {}
+        txt_tuple = np.loadtxt(path, delimiter=';', converters=converters,
+                               dtype=dtypes, unpack=True, skiprows=skiprows,
+                               max_rows=max_rows)
+
+        if idxs is None:
+            txt_dict.update(zip(keys, txt_tuple))
+            idxs = np.arange(txt_tuple[0].size)
+        elif idxs.size == 0:
+            txt_dict.update(zip(keys, txt_tuple))
+        else:
+            txt_dict.update({key: np.atleast_1d(data)[idxs - np.min(idxs)] for key, data in zip(keys, txt_tuple)})
 
         if return_idxs:
-            return data_dict, idxs
-        return data_dict
+            return txt_dict, idxs
+        return txt_dict
 
 def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=None,
                     **attributes: Any) -> CrystData:
@@ -277,25 +285,28 @@ def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=
     log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
 
     n_frames = idxs.size
-    x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
-    y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
-    z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
-    r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-    translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
-    tilts = r_sample * np.ones(n_frames)
-    for data_key, log_dset in log_data.items():
-        for log_key in log_prt.log_keys['x_sample']:
-            if log_key in data_key:
-                translations[:log_dset.size, 0] = log_dset
-        for log_key in log_prt.log_keys['y_sample']:
-            if log_key in data_key:
-                translations[:log_dset.size, 1] = log_dset
-        for log_key in log_prt.log_keys['z_sample']:
-            if log_key in data_key:
-                translations[:log_dset.size, 2] = log_dset
-        for log_key in log_prt.log_keys['r_sample']:
-            if log_key in data_key:
-                tilts[:log_dset.size] = log_dset
+    if n_frames:
+        x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
+        y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
+        z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
+        r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
+        translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
+        tilts = r_sample * np.ones(n_frames)
+        for data_key, log_dset in log_data.items():
+            for log_key in log_prt.log_keys['x_sample']:
+                if log_key in data_key:
+                    translations[:log_dset.size, 0] = log_dset
+            for log_key in log_prt.log_keys['y_sample']:
+                if log_key in data_key:
+                    translations[:log_dset.size, 1] = log_dset
+            for log_key in log_prt.log_keys['z_sample']:
+                if log_key in data_key:
+                    translations[:log_dset.size, 2] = log_dset
+            for log_key in log_prt.log_keys['r_sample']:
+                if log_key in data_key:
+                    tilts[:log_dset.size] = log_dset
 
-    return CrystData(input_files=input_files, translations=translations,
-                     tilts=tilts, **attributes)
+        return CrystData(input_files=input_files, translations=translations,
+                         tilts=tilts, **attributes)
+
+    return CrystData(input_files=input_files, **attributes)

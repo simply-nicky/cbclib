@@ -8,5 +8,5 @@ of convergent beam crystallography datasets.
 from .cbc_indexing import ScanSetup
 from .cxi_protocol import CXIProtocol, CXIStore
 from .log_protocol import LogProtocol, converter_petra
-from .data_processing import Crop, Downscale, ComposeTransforms, CrystData, StreakDetector
+from .data_processing import Crop, Downscale, ComposeTransforms, CrystData, StreakDetector, Streaks
 from . import bin

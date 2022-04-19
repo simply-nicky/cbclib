@@ -545,7 +545,7 @@ class CXIStore():
         if cxi_path in self.file and self.file[cxi_path].shape[1:] == data.shape[1:]:
             if mode == 'append':
                 self.file[cxi_path].resize(self.file[cxi_path].shape[0] + data.shape[0],
-                                               axis=0)
+                                           axis=0)
                 self.file[cxi_path][-data.shape[0]:] = data
             elif mode == 'overwrite':
                 self.file[cxi_path].resize(data.shape[0], axis=0)
@@ -553,7 +553,7 @@ class CXIStore():
             elif mode == 'insert':
                 if idxs is None or len(idxs) != data.shape[0]:
                     raise ValueError('Incompatible indices')
-                self.file[cxi_path].resize(max(self.file[cxi_path].shape[0], max(idxs)),
+                self.file[cxi_path].resize(max(self.file[cxi_path].shape[0], max(idxs) + 1),
                                                axis=0)
                 self.file[cxi_path][idxs] = data
 
@@ -561,9 +561,9 @@ class CXIStore():
             if cxi_path in self.file:
                 del self.file[cxi_path]
             self.file.create_dataset(cxi_path, data=data, shape=data.shape,
-                                         chunks=(1,) + data.shape[1:],
-                                         maxshape=(None,) + data.shape[1:],
-                                         dtype=self.protocol.get_dtype(attr, data.dtype))
+                                     chunks=(1,) + data.shape[1:],
+                                     maxshape=(None,) + data.shape[1:],
+                                     dtype=self.protocol.get_dtype(attr, data.dtype))
 
     def _save_data(self, attr: str, data: np.ndarray) -> None:
         cxi_path = self.find_dataset(attr)
