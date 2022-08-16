@@ -102,12 +102,12 @@ class INIParser:
         fmt = self.get_format(section, option)
 
         if isinstance(kwargs[section][option], (list, tuple)):
-            return [fmt(part) for part in kwargs[section][option]]
+            return np.asarray([fmt(part) for part in kwargs[section][option]])
 
         if isinstance(kwargs[section][option], np.ndarray):
             if kwargs[section][option].ndim > 1:
                 raise ValueError(f'{kwargs[section][option]:s} must be one-dimensional')
-            return [fmt(part) for part in kwargs[section][option]]
+            return np.asarray([fmt(part) for part in kwargs[section][option]])
 
         return fmt(kwargs[section][option])
 

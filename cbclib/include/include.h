@@ -36,6 +36,12 @@
 #define M_LN10 2.30258509299404568402f
 #endif /* !M_LN10 */
 
+/** 3/2 pi */
+#define M_3_2_PI    4.71238898038f
+
+/** 2 pi */
+#define M_2__PI     6.28318530718f
+
 #define SQ(x)   ((x) * (x))
 
 #define RALLOC(type,num) \

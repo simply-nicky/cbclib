@@ -15,7 +15,7 @@ ext = '.pyx' if USE_CYTHON else '.c'
 extension_args = {'language': 'c',
                   'extra_compile_args': ['-fopenmp', '-std=c99'],
                   'extra_link_args': ['-lgomp', '-Wl,-rpath,/usr/local/lib'],
-                  'libraries': ['fftw3', 'fftw3_omp'],
+                  'libraries': ['fftw3', 'fftw3f', 'fftw3_omp', 'fftw3f_omp'],
                   'library_dirs': ['/usr/local/lib',
                                    os.path.join(sys.prefix, 'lib')],
                   'include_dirs': [numpy.get_include(),
@@ -34,7 +34,9 @@ extensions = [Extension(name='cbclib.bin.line_detector',
               Extension(name='cbclib.bin.cbc_indexing',
                         sources=['cbclib/bin/cbc_indexing' + ext, 'cbclib/include/img_proc.c',
                                  'cbclib/include/array.c'],
-                        **extension_args)]
+                        **extension_args),
+              Extension(name='cbclib.bin.pyfftw',
+                        sources=['cbclib/bin/pyfftw' + ext], **extension_args)]
 
 if USE_CYTHON:
     extensions = cythonize(extensions, annotate=True, language_level="3", include_path=['cbclib/bin',],
@@ -48,7 +50,7 @@ with open('README.md', 'r') as readme:
     long_description = readme.read()
 
 setup(name='cbclib',
-      version='0.2.1',
+      version='0.3.0',
       author='Nikolay Ivanov',
       author_email="nikolay.ivanov@desy.de",
       long_description=long_description,

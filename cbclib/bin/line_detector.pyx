@@ -20,18 +20,8 @@ cdef class ArrayWrapper:
             self._data = NULL
 
 cdef class LSD:
-    """LSD  is a class for performing the streak detection
-    on digital images with Line Segment Detector algorithm [LSD]_.
 
-    References
-    ----------
-    .. [LSD] "LSD: a Line Segment Detector" by Rafael Grompone von Gioi,
-             Jeremie Jakubowicz, Jean-Michel Morel, and Gregory Randall,
-             Image Processing On Line, 2012. DOI:10.5201/ipol.2012.gjmr-lsd
-             http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd
-    """
-
-    def __cinit__(self, float scale=0.8, float sigma_scale=0.6, float log_eps=0.,
+    def __cinit__(self, float scale=0.8, float sigma_scale=0.6, float log_eps=0.0,
                   float ang_th=45.0, float density_th=0.7, float quant=2.0):
         if scale < 0 or scale > 1:
             raise ValueError('scale is out of bounds (0.0, 1.0)')
@@ -55,77 +45,9 @@ cdef class LSD:
         else:
             self.quant = quant
 
-    def __init__(self, float scale=0.8, float sigma_scale=0.6, float log_eps=0,
-                 float ang_th=45.0, float density_th=0.7, float quant=2.0):
-        """Create a LSD object for streak detection on digital images.
-
-        Parameters
-        ----------
-        scale : float, optional
-            When different from 1.0, LSD will scale the input image
-            by 'scale' factor by Gaussian filtering, before detecting
-            line segments. Default value is 0.8.
-        sigma_scale : float, optional
-            When `scale` is different from 1.0, the sigma of the Gaussian
-            filter is :code:`sigma = sigma_scale / scale`, if scale is less
-            than 1.0, and :code:`sigma = sigma_scale` otherwise. Default
-            value is 0.6.
-        log_eps : float, optional
-            Detection threshold, accept if -log10(NFA) > log_eps.
-            The larger the value, the more strict the detector is, and will
-            result in less detections. The value -log10(NFA) is equivalent
-            but more intuitive than NFA:
-
-            * -1.0 gives an average of 10 false detections on noise.
-            *  0.0 gives an average of 1 false detections on noise.
-            *  1.0 gives an average of 0.1 false detections on nose.
-            *  2.0 gives an average of 0.01 false detections on noise.
-            Default value is 0.0.
-        ang_th : float, optional
-            Gradient angle tolerance in the region growing algorithm, in
-            degrees. Default value is 45.0.
-        density_th : float, optional
-            Minimal proportion of 'supporting' points in a rectangle.
-            Default value is 0.7.
-        quant : float, optional
-            Bound to the quantization error on the gradient norm.
-            Example: if gray levels are quantized to integer steps,
-            the gradient (computed by finite differences) error
-            due to quantization will be bounded by 2.0, as the
-            worst case is when the error are 1 and -1, that
-            gives an error of 2.0. Default value is 2.0.
-        """
-
     def detect(self, np.ndarray image not None, float cutoff, float filter_threshold=0.0,
                float group_threshold=0.6, bint filter=True, bint group=True, int n_group=2,
                float dilation=6.0, bint return_labels=False, unsigned int num_threads=1):
-        """Perform the LSD streak detection on `image`.
-
-        Parameters
-        ----------
-        image : np.ndarray
-            2D array of the digital image.
-        
-        Returns
-        -------
-        dict
-            :class:`dict` with the following fields:
-
-            * `lines` : An array of the detected lines. Each line is
-            comprised of 7 parameters as follows:
-
-                * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's
-                  ends.
-                * `width` : Line's width.
-                * `p` : Angle precision [0, 1] given by angle tolerance
-                  over 180 degree.
-                * `-log10(NFA)` : Number of false alarms.
-            
-            * `labels` : image where each pixel indicates the line
-              segment to which it belongs. Unused pixels have the value
-              0, while the used ones have the number of the line segment,
-              numbered in the same order as in `lines`.
-        """
         if image.ndim < 2:
             raise ValueError('Image must be a 2D array.')
         image = check_array(image, np.NPY_FLOAT32)

@@ -109,12 +109,6 @@
 /** Label for pixels with undefined gradient. */
 #define NOTDEF      -1024.0f
 
-/** 3/2 pi */
-#define M_3_2_PI    4.71238898038f
-
-/** 2 pi */
-#define M_2__PI     6.28318530718f
-
 /** Label for pixels not used in yet. */
 #define NOTUSED     0
 
@@ -652,8 +646,8 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
 					j = xc - h + i;
 
 					/* symmetry boundary condition */
-					while(j < 0) j += float_x_size;
-					while(j >= float_x_size) j -= float_x_size;
+					while (j < 0) j += float_x_size;
+					while (j >= float_x_size) j -= float_x_size;
 					if (j >= (int) in->xsize) j = float_x_size - 1 - j;
 
 					sum += in->data[j + y * in->xsize] * kernel->values[i];
@@ -686,8 +680,8 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
 					j = yc - h + i;
 
 					/* symmetry boundary condition */
-					while(j < 0) j += float_y_size;
-					while(j >= float_y_size) j -= float_y_size;
+					while (j < 0) j += float_y_size;
+					while (j >= float_y_size) j -= float_y_size;
 					if (j >= (int) in->ysize) j = float_y_size-1-j;
 
 					sum += aux->data[x + j * aux->xsize] * kernel->values[i];
@@ -726,7 +720,7 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
             free the memory when it is not used anymore.
  */
 static image_float ll_angle(image_float in, float threshold, struct coorlist ** list_p,
-	void ** mem_p, image_float * modgrad, unsigned int n_bins)
+	                        void ** mem_p, image_float * modgrad, unsigned int n_bins)
 {
     image_float g;
     unsigned int n, p, x, y, adr, i;
@@ -816,7 +810,7 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
     /* compute histogram of gradient values */
     for (x = 0; x < p - 1; x++)
 	{
-        for (y= 0; y < n - 1; y++)
+        for (y = 0; y < n - 1; y++)
 		{
 			norm = (*modgrad)->data[y * p + x];
 
@@ -846,7 +840,7 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
     end = range_l_e[i];
     if (start != NULL)
 	{
-        while(i > 0)
+        while (i > 0)
 		{
 			--i;
 			if (range_l_s[i] != NULL)
@@ -868,8 +862,7 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
 /*----------------------------------------------------------------------------*/
 /** Is point (x,y) aligned to angle theta, up to precision 'prec'?
  */
-static int isaligned(int x, int y, image_float angles, float theta,
-                                            float prec)
+static int isaligned(int x, int y, image_float angles, float theta, float prec)
 {
     float a;
 
@@ -1064,7 +1057,7 @@ static float nfa(int n, int k, float p, float logNT)
     if (n==k) return -logNT - (float) n * log10(p);
 
     /* probability term */
-    p_term = p / (1.0f-p);
+    p_term = p / (1.0f - p);
 
     /* compute the first term of the series */
     /*
@@ -1142,13 +1135,13 @@ static float nfa(int n, int k, float p, float logNT)
  */
 struct rect
 {
-    float x1, y1, x2, y2;			/* first and second point of the line segment */
+    float x1, y1, x2, y2;		    /* first and second point of the line segment */
     float width;                	/* rectangle width */
-    float x, y;                    /* center of the rectangle */
+    float x, y;                     /* center of the rectangle */
     float theta;                	/* angle */
-    float dx,dy;                	/* (dx,dy) is vector oriented as the line segment */
+    float dx, dy;                	/* (dx, dy) is vector oriented as the line segment */
     float prec;                 	/* tolerance angle */
-    float p;                       /* probability of a point with angle within 'prec' */
+    float p;                        /* probability of a point with angle within 'prec' */
 };
 
 /*----------------------------------------------------------------------------*/
@@ -1397,14 +1390,14 @@ static rect_iter * ri_ini(struct rect * r)
 
     /* build list of rectangle corners ordered
        in a circular way around the rectangle */
-    vx[0] = r->x1 - r->dy * r->width / 2.0f;
-    vy[0] = r->y1 + r->dx * r->width / 2.0f;
-    vx[1] = r->x2 - r->dy * r->width / 2.0f;
-    vy[1] = r->y2 + r->dx * r->width / 2.0f;
-    vx[2] = r->x2 + r->dy * r->width / 2.0f;
-    vy[2] = r->y2 - r->dx * r->width / 2.0f;
-    vx[3] = r->x1 + r->dy * r->width / 2.0f;
-    vy[3] = r->y1 - r->dx * r->width / 2.0f;
+    vx[0] = r->x1 - 0.5f * r->dy * r->width;
+    vy[0] = r->y1 + 0.5f * r->dx * r->width;
+    vx[1] = r->x2 - 0.5f * r->dy * r->width;
+    vy[1] = r->y2 + 0.5f * r->dx * r->width;
+    vx[2] = r->x2 + 0.5f * r->dy * r->width;
+    vy[2] = r->y2 - 0.5f * r->dx * r->width;
+    vx[3] = r->x1 + 0.5f * r->dy * r->width;
+    vy[3] = r->y1 - 0.5f * r->dx * r->width;
 
     /*  compute rotation of index of corners needed so that the first
         point has the smaller x.
@@ -1541,7 +1534,7 @@ static float rect_nfa(struct rect * rec, image_float angles, float logNT)
 	get better numeric precision).
  */
 static float get_theta(struct point * reg, int reg_size, float x, float y,
-                                                 image_float modgrad, float reg_angle, float prec)
+                       image_float modgrad, float reg_angle, float prec)
 {
     float lambda,theta,weight;
     float Ixx = 0.0f;
@@ -1867,7 +1860,7 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
         LSD_ERROR("reduce_region_radius: invalid image 'angles'.");
 
     /* compute region points density */
-    density = (float) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
+    density = (float) *reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
 
     /* if the density criterion is satisfied there is nothing to do */
     if (density >= density_th) return TRUE;

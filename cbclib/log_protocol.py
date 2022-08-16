@@ -279,7 +279,7 @@ def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=
     h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
                        if path.endswith(('LambdaFar.nxs', '.h5'))])
 
-    input_files = CXIStore(h5_files, mode='r')
+    input_file = CXIStore(h5_files, mode='r')
 
     log_attrs = log_prt.load_attributes(log_path)
     log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
@@ -306,7 +306,7 @@ def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=
                 if log_key in data_key:
                     tilts[:log_dset.size] = log_dset
 
-        return CrystData(input_files=input_files, translations=translations,
+        return CrystData(input_file=input_file, translations=translations,
                          tilts=tilts, **attributes)
 
-    return CrystData(input_files=input_files, **attributes)
+    return CrystData(input_file=input_file, **attributes)

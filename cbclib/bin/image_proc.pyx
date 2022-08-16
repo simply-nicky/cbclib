@@ -6,11 +6,21 @@ from libc.stdlib cimport malloc, free
 from cython.parallel import prange
 from .line_detector cimport ArrayWrapper
 
+cdef line_profile profiles[3]
+cdef void build_profiles():
+    profiles[0] = linear_profile
+    profiles[1] = quad_profile
+    profiles[2] = tophat_profile
+
+cdef dict profile_scheme
+profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2}
+
 # Set the cleanup routine
 cdef void _cleanup():
     fftw_cleanup()
     fftw_cleanup_threads()
 
+build_profiles()
 fftw_init_threads()
 
 Py_AtExit(_cleanup)
@@ -20,22 +30,6 @@ Py_AtExit(_cleanup)
 np.import_array()
 
 def next_fast_len(unsigned target, str backend='numpy'):
-    r"""Find the next fast size of input data to fft, for zero-padding, etc.
-    FFT algorithms gain their speed by a recursive divide and conquer strategy.
-    This relies on efficient functions for small prime factors of the input length.
-    Thus, the transforms are fastest when using composites of the prime factors handled
-    by the fft implementation. If there are efficient functions for all radices <= n,
-    then the result will be a number x >= target with only prime factors < n. (Also
-    known as n-smooth numbers)
-
-    Args:
-        target (int) : Length to start searching from. Must be a positive integer.
-        backend (str) : Find n-smooth number for the FFT implementation from the numpy
-            ('numpy') or FFTW ('fftw') library.
-
-    Returns:
-        int : The smallest fast length greater than or equal to `target`.
-    """
     if target < 0:
         raise ValueError('Target length must be positive')
     if backend == 'fftw':
@@ -48,41 +42,6 @@ def next_fast_len(unsigned target, str backend='numpy'):
 def fft_convolve(np.ndarray array not None, np.ndarray kernel not None, int axis=-1,
                  str mode='constant', double cval=0.0, str backend='numpy',
                  unsigned num_threads=1):
-    """Convolve a multi-dimensional `array` with one-dimensional `kernel` along the
-    `axis` by means of FFT. Output has the same size as `array`.
-
-    Args:
-        array (numpy.ndarray) : Input array.
-        kernel (numpy.ndarray) : Kernel array.
-        axis (int) : Array axis along which convolution is performed.
-        mode (str) : The mode parameter determines how the input array is extended
-            when the filter overlaps a border. Default value is 'constant'. The
-            valid values and their behavior is as follows:
-
-            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by
-              filling all values beyond the edge with the same constant value, defined
-              by the `cval` parameter.
-            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by
-              replicating the last pixel.
-            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by
-              reflecting about the center of the last pixel. This mode is also sometimes
-              referred to as whole-sample symmetric.
-            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by
-              reflecting about the edge of the last pixel. This mode is also sometimes
-              referred to as half-sample symmetric.
-            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping
-              around to the opposite edge.
-
-        cval (float) :  Value to fill past edges of input if mode is 'constant'. Default
-            is 0.0.
-        backend (str) : Choose between numpy ('numpy') or FFTW ('fftw') library for the FFT
-            implementation.
-        num_threads (int) : Number of threads used in the calculations.
-
-    Returns:
-        numpy.ndarray : A multi-dimensional array containing the discrete linear
-        convolution of `array` with `kernel`.
-    """
     cdef int fail = 0
     cdef int ndim = array.ndim
     axis = axis if axis >= 0 else ndim + axis
@@ -142,20 +101,7 @@ def fft_convolve(np.ndarray array not None, np.ndarray kernel not None, int axis
         raise RuntimeError('C backend exited with error.')
     return out
 
-def gaussian_kernel(double sigma, unsigned order=0, double truncate=4.):
-    """Discrete Gaussian kernel.
-    
-    Args:
-        sigma (float) : Standard deviation for Gaussian kernel.
-        order (int) : The order of the filter. An order of 0 corresponds to
-            convolution with a Gaussian kernel. A positive order corresponds
-            to convolution with that derivative of a Gaussian. Default is 0.
-        truncate (float) : Truncate the filter at this many standard deviations.
-            Default is 4.0.
-    
-    Returns:
-        numpy.ndarray : Gaussian kernel.
-    """
+def gaussian_kernel(double sigma, unsigned order=0, double truncate=4.0):
     cdef np.npy_intp radius = <np.npy_intp>(sigma * truncate)
     cdef np.npy_intp *dims = [2 * radius + 1,]
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(1, dims, np.NPY_FLOAT64)
@@ -165,48 +111,8 @@ def gaussian_kernel(double sigma, unsigned order=0, double truncate=4.):
     return out
 
 def gaussian_filter(np.ndarray inp not None, object sigma not None, object order not None=0,
-                    str mode='reflect', double cval=0., double truncate=4., str backend='numpy',
+                    str mode='reflect', double cval=0.0, double truncate=4.0, str backend='numpy',
                     unsigned num_threads=1):
-    r"""Multidimensional Gaussian filter. The multidimensional filter is implemented as
-    a sequence of 1-D FFT convolutions.
-
-    Args:
-        inp (numpy.ndarray) : The input array.
-        sigma (Union[float, List[float]]): Standard deviation for Gaussian kernel. The standard
-            deviations of the Gaussian filter are given for each axis as a sequence, or as a
-            single number, in which case it is equal for all axes.
-        order (Union[int, List[int]]): The order of the filter along each axis is given as a
-            sequence of integers, or as a single number. An order of 0 corresponds to convolution
-            with a Gaussian kernel. A positive order corresponds to convolution with that
-            derivative of a Gaussian.
-        mode (str) : The mode parameter determines how the input array is extended when the
-            filter overlaps a border. Default value is 'reflect'. The valid values and their
-            behavior is as follows:
-
-            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
-              values beyond the edge with the same constant value, defined by the `cval`
-              parameter.
-            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
-              the last pixel.
-            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
-              about the center of the last pixel. This mode is also sometimes referred to as
-              whole-sample symmetric.
-            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
-              about the edge of the last pixel. This mode is also sometimes referred to as
-              half-sample symmetric.
-            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-              to the opposite edge.
-
-        cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
-        truncate (float) : Truncate the filter at this many standard deviations. Default is 4.0.
-        backend (str) : Choose between numpy ('numpy') or FFTW ('fftw') backend library for the
-            FFT implementation.
-        num_threads (int) : Number of threads.
-    
-    Returns:
-        numpy.ndarray : Returned array of the same shape as `input`.
-    """
-
     cdef int ndim = inp.ndim
     cdef np.ndarray sigmas = normalize_sequence(sigma, ndim, np.NPY_FLOAT64)
     cdef np.ndarray orders = normalize_sequence(order, ndim, np.NPY_UINT32)
@@ -270,41 +176,6 @@ def gaussian_filter(np.ndarray inp not None, object sigma not None, object order
 def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, str mode='reflect',
                                 double cval=0.0, double truncate=4.0, str backend='numpy',
                                 unsigned num_threads=1):
-    r"""Multidimensional gradient magnitude using Gaussian derivatives. The multidimensional
-    filter is implemented as a sequence of 1-D FFT convolutions.
-
-    Args:
-        inp (numpy.ndarray) : The input array.
-        sigma (Union[float, List[float]]): Standard deviation for Gaussian kernel. The standard
-            deviations of the Gaussian filter are given for each axis as a sequence, or as a
-            single number, in which case it is equal for all axes.
-        mode (str) : The mode parameter determines how the input array is extended when the
-            filter overlaps a border. Default value is 'reflect'. The valid values and their
-            behavior is as follows:
-
-            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
-              values beyond the edge with the same constant value, defined by the `cval`
-              parameter.
-            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
-              the last pixel.
-            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
-              about the center of the last pixel. This mode is also sometimes referred to as
-              whole-sample symmetric.
-            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
-              about the edge of the last pixel. This mode is also sometimes referred to as
-              half-sample symmetric.
-            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-              to the opposite edge.
-
-        cval (float) : Value to fill past edges of input if mode is ‘constant’. Default is 0.0.
-        truncate (float) : Truncate the filter at this many standard deviations. Default is 4.0.
-        backend (str) : Choose between numpy ('numpy') or FFTW ('fftw') backend library for the
-            FFT implementation.
-        num_threads (int) : Number of threads.
-
-    Returns:
-        numpy.ndarray : Gaussian gradient magnitude array. The array is the same shape as `input`.
-    """
     cdef int ndim = inp.ndim
     cdef np.ndarray sigmas = normalize_sequence(sigma, ndim, np.NPY_FLOAT64)
     cdef double *_sig = <double *>np.PyArray_DATA(sigmas)
@@ -357,115 +228,66 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
         raise RuntimeError('C backend exited with error.')
     return out
 
-def median(np.ndarray data not None, np.ndarray mask=None, int axis=0, unsigned num_threads=1):
-    """Calculate a median along the `axis`.
+def median(np.ndarray inp not None, np.ndarray mask=None, int axis=0, unsigned num_threads=1):
+    if not np.PyArray_IS_C_CONTIGUOUS(inp):
+        inp = np.PyArray_GETCONTIGUOUS(inp)
 
-    Args:
-        data (numpy.ndarray) : Intensity frames.
-        mask (numpy.ndarray) : Bad pixel mask.
-        axis (int) : Array axis along which median values are calculated.
-        num_threads (int) : Number of threads used in the calculations.
-
-    Returns:
-        numpy.ndarray : Array of medians along the given axis.
-    """
-    if not np.PyArray_IS_C_CONTIGUOUS(data):
-        data = np.PyArray_GETCONTIGUOUS(data)
-
-    cdef int ndim = data.ndim
+    cdef int ndim = inp.ndim
     axis = axis if axis >= 0 else ndim + axis
     axis = axis if axis <= ndim - 1 else ndim - 1
 
     if mask is None:
-        mask = <np.ndarray>np.PyArray_SimpleNew(ndim, data.shape, np.NPY_BOOL)
+        mask = <np.ndarray>np.PyArray_SimpleNew(ndim, inp.shape, np.NPY_BOOL)
         np.PyArray_FILLWBYTE(mask, 1)
     else:
         mask = check_array(mask, np.NPY_BOOL)
-        if memcmp(data.shape, mask.shape, ndim * sizeof(np.npy_intp)):
-            raise ValueError('mask and data arrays must have identical shapes')
+        if memcmp(inp.shape, mask.shape, ndim * sizeof(np.npy_intp)):
+            raise ValueError('mask and inp arrays must have identical shapes')
 
-    cdef unsigned long *_dims = <unsigned long *>data.shape
+    cdef unsigned long *_dims = <unsigned long *>inp.shape
 
     cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
     if odims is NULL:
         raise MemoryError('not enough memory')
     cdef int i
     for i in range(axis):
-        odims[i] = data.shape[i]
+        odims[i] = inp.shape[i]
     for i in range(axis + 1, ndim):
-        odims[i - 1] = data.shape[i]
+        odims[i - 1] = inp.shape[i]
 
-    cdef int type_num = np.PyArray_TYPE(data)
+    cdef int type_num = np.PyArray_TYPE(inp)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
     cdef void *_out = <void *>np.PyArray_DATA(out)
-    cdef void *_data = <void *>np.PyArray_DATA(data)
+    cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_float, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = median_c(_out, _data, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
         elif type_num == np.NPY_UINT64:
-            fail = median_c(_out, _data, _mask, ndim, _dims, 8, axis, compare_ulong, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim, _dims, 8, axis, compare_ulong, num_threads)
         else:
-            raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+            raise TypeError('inp argument has incompatible type: {:s}'.format(inp.dtype))
     if fail:
         raise RuntimeError('C backend exited with error.')
 
     free(odims)
     return out
 
-def median_filter(np.ndarray data not None, object size=None, np.ndarray footprint=None,
-                  np.ndarray mask=None, np.ndarray good_data=None, str mode='reflect', double cval=0.0,
+def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprint=None,
+                  np.ndarray mask=None, np.ndarray inp_mask=None, str mode='reflect', double cval=0.0,
                   unsigned num_threads=1):
-    """Calculate a median along the `axis`.
+    if not np.PyArray_IS_C_CONTIGUOUS(inp):
+        inp = np.PyArray_GETCONTIGUOUS(inp)
 
-    Args:
-        data (numpy.ndarray) : Intensity frames.
-        size (Optional[Union[int, Tuple[int, ...]]]) : See footprint, below. Ignored if footprint
-            is given.
-        footprint (Optional[numpy.ndarray]) :  Either size or footprint must be defined. size
-            gives the shape that is taken from the input array, at every element position, to
-            define the input to the filter function. footprint is a boolean array that specifies
-            (implicitly) a shape, but also which of the elements within this shape will get passed
-            to the filter function. Thus size=(n,m) is equivalent to footprint=np.ones((n,m)).
-            We adjust size to the number of dimensions of the input array, so that, if the input
-            array is shape (10,10,10), and size is 2, then the actual size used is (2,2,2). When
-            footprint is given, size is ignored.
-        mask (Optional[numpy.ndarray]) : Bad pixel mask.
-        mode (str) : The mode parameter determines how the input array is extended when the
-            filter overlaps a border. Default value is 'reflect'. The valid values and their
-            behavior is as follows:
-
-            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
-              values beyond the edge with the same constant value, defined by the `cval`
-              parameter.
-            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
-              the last pixel.
-            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
-              about the center of the last pixel. This mode is also sometimes referred to as
-              whole-sample symmetric.
-            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
-              about the edge of the last pixel. This mode is also sometimes referred to as
-              half-sample symmetric.
-            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-              to the opposite edge.
-        cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
-        num_threads (int) : Number of threads used in the calculations.
-
-    Returns:
-        numpy.ndarray : Filtered array. Has the same shape as `input`.
-    """
-    if not np.PyArray_IS_C_CONTIGUOUS(data):
-        data = np.PyArray_GETCONTIGUOUS(data)
-
-    cdef int ndim = data.ndim
-    cdef np.npy_intp *dims = data.shape
+    cdef int ndim = inp.ndim
+    cdef np.npy_intp *dims = inp.shape
 
     if mask is None:
         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
@@ -473,10 +295,10 @@ def median_filter(np.ndarray data not None, object size=None, np.ndarray footpri
     else:
         mask = check_array(mask, np.NPY_BOOL)
 
-    if good_data is None:
-        good_data = mask
+    if inp_mask is None:
+        inp_mask = mask
     else:
-        good_data = check_array(good_data, np.NPY_BOOL)
+        inp_mask = check_array(inp_mask, np.NPY_BOOL)
 
     if size is None and footprint is None:
         raise ValueError('size or footprint must be provided.')
@@ -495,78 +317,40 @@ def median_filter(np.ndarray data not None, object size=None, np.ndarray footpri
     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
 
     cdef unsigned long *_dims = <unsigned long *>dims
-    cdef int type_num = np.PyArray_TYPE(data)
+    cdef int type_num = np.PyArray_TYPE(inp)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
     cdef void *_out = <void *>np.PyArray_DATA(out)
-    cdef void *_data = <void *>np.PyArray_DATA(data)
+    cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
-    cdef unsigned char *_gdata = <unsigned char *>np.PyArray_DATA(good_data)
+    cdef unsigned char *_imask = <unsigned char *>np.PyArray_DATA(inp_mask)
     cdef int _mode = extend_mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+            fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+            fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+            fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+            fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
         elif type_num == np.NPY_UINT64:
-            fail = median_filter_c(_out, _data, _mask, _gdata, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_ulong, num_threads)
+            fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_ulong, num_threads)
         else:
-            raise TypeError('data argument has incompatible type: {:s}'.format(data.dtype))
+            raise TypeError('inp argument has incompatible type: {:s}'.format(inp.dtype))
     if fail:
         raise RuntimeError('C backend exited with error.')
 
     return out
 
-def maximum_filter(np.ndarray data not None, object size=None, np.ndarray footprint=None, np.ndarray mask=None,
+def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footprint=None, np.ndarray mask=None,
                    str mode='reflect', double cval=0.0, int num_threads=1):
-    """Calculate a multidimensional maximum filter.
+    if not np.PyArray_IS_C_CONTIGUOUS(inp):
+        inp = np.PyArray_GETCONTIGUOUS(inp)
 
-    Parameters
-    ----------
-        data (numpy.ndarray) : Intensity frames.
-        size (Optional[Union[int, Tuple[int, ...]]]) : See footprint, below. Ignored if footprint
-            is given.
-        footprint (Optional[numpy.ndarray]) :  Either size or footprint must be defined. size
-            gives the shape that is taken from the input array, at every element position, to
-            define the input to the filter function. footprint is a boolean array that specifies
-            (implicitly) a shape, but also which of the elements within this shape will get passed
-            to the filter function. Thus size=(n,m) is equivalent to footprint=np.ones((n,m)).
-            We adjust size to the number of dimensions of the input array, so that, if the input
-            array is shape (10,10,10), and size is 2, then the actual size used is (2,2,2). When
-            footprint is given, size is ignored.
-        mode (str) : The mode parameter determines how the input array is extended when the
-            filter overlaps a border. Default value is 'reflect'. The valid values and their
-            behavior is as follows:
-
-            * `constant`, (k k k k | a b c d | k k k k) : The input is extended by filling all
-              values beyond the edge with the same constant value, defined by the `cval`
-              parameter.
-            * `nearest`, (a a a a | a b c d | d d d d) : The input is extended by replicating
-              the last pixel.
-            * `mirror`, (c d c b | a b c d | c b a b) : The input is extended by reflecting
-              about the center of the last pixel. This mode is also sometimes referred to as
-              whole-sample symmetric.
-            * `reflect`, (d c b a | a b c d | d c b a) : The input is extended by reflecting
-              about the edge of the last pixel. This mode is also sometimes referred to as
-              half-sample symmetric.
-            * `wrap`, (a b c d | a b c d | a b c d) : The input is extended by wrapping around
-              to the opposite edge.
-        cval (float) : Value to fill past edges of input if mode is 'constant'. Default is 0.0.
-        num_threads (int) : Number of threads.
-
-    Returns:
-        numpy.ndarray : Filtered array. Has the same shape as `input`.
-    """
-    if not np.PyArray_IS_C_CONTIGUOUS(data):
-        data = np.PyArray_GETCONTIGUOUS(data)
-
-    cdef int ndim = data.ndim
-    cdef np.npy_intp *dims = data.shape
+    cdef int ndim = inp.ndim
+    cdef np.npy_intp *dims = inp.shape
 
     if mask is None:
         mask = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, np.NPY_BOOL)
@@ -591,108 +375,63 @@ def maximum_filter(np.ndarray data not None, object size=None, np.ndarray footpr
     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
 
     cdef unsigned long *_dims = <unsigned long *>dims
-    cdef int type_num = np.PyArray_TYPE(data)
+    cdef int type_num = np.PyArray_TYPE(inp)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
     cdef void *_out = <void *>np.PyArray_DATA(out)
-    cdef void *_data = <void *>np.PyArray_DATA(data)
+    cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
     cdef int _mode = extend_mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = maximum_filter_c(_out, _data, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
         else:
-            raise TypeError('data argument has incompatible type: {:s}'.format(str(data.dtype)))
+            raise TypeError('inp argument has incompatible type: {:s}'.format(str(inp.dtype)))
 
     if fail:
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_lines(np.ndarray image not None, np.ndarray lines not None, int max_val=255,
-               double dilation=0.0) -> np.ndarray:
-    """Draw thick lines with variable thickness and the antialiasing applied.
-    The lines must follow the LSD convention, see the parameters for more info.
-
-    Args:
-        image (numpy.ndarray) : Image array.
-        lines (numpy.ndarray) : An array of the detected lines. Must have a shape
-            of (`N`, 7), where `N` is the number of lines. Each line is comprised
-            of 7 parameters as follows:
-
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's
-            ends.
-            * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance
-            over 180 degree.
-            * `-log10(NFA)` : Number of false alarms.
-
-        max_val (int) : Maximum value of the line mask.
-        dilation (int) : Size of the binary dilation applied to the output image.
-
-    Returns:
-        numpy.ndarray : Output image with the lines drawn.
-
-    See Also:
-        :class:`cbclib.bin.LSD` : Line Segment Detector.
-    """
-    image = check_array(image, np.NPY_UINT32)
+def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=255, double dilation=0.0, str profile='tophat'):
+    inp = check_array(inp, np.NPY_UINT32)
     lines = check_array(lines, np.NPY_FLOAT32)
 
-    if image.ndim != 2:
-        raise ValueError("image array must be two-dimensional")
+    if inp.ndim != 2:
+        raise ValueError("Input array must be two-dimensional")
     if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
         raise ValueError(f"lines array has an incompatible shape")
 
-    cdef unsigned int *_image = <unsigned int *>np.PyArray_DATA(image)
-    cdef unsigned long _Y = image.shape[0]
-    cdef unsigned long _X = image.shape[1]
+    cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
+    cdef unsigned long _Y = inp.shape[0]
+    cdef unsigned long _X = inp.shape[1]
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
 
     with nogil:
-        fail = draw_lines_c(_image, _Y, _X, max_val, _lines, _ldims, <float>dilation)
+        fail = draw_lines_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
-    return image
+    return inp
 
-def draw_lines_stack(np.ndarray mask not None, dict lines not None,
-                     int max_val=1, double dilation=0.0, unsigned int num_threads=1):
-    """Perform the streak detection on `image` and return rasterized lines
-    drawn on a mask array.
+def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1, double dilation=0.0,
+                     str profile='tophat', unsigned int num_threads=1):
+    if inp.ndim < 2:
+        raise ValueError('Input array must be >=2D array.')
+    inp = check_array(inp, np.NPY_UINT32)
 
-    Parameters
-    ----------
-    image : np.ndarray
-        2D array of the digital image.
-    max_val : int, optional
-        Maximal value in the output mask.
-    dilation : int, optional
-        Size of the morphology dilation applied to the output mask.
-    num_threads : int, optional
-        Number of the computational threads.
-    
-    Returns
-    -------
-    mask : np.ndarray
-        Array, that has the same shape as `image`, with the regions
-        masked by the detected lines.
-    """
-    if mask.ndim < 2:
-        raise ValueError('Mask must be >=2D array.')
-    mask = check_array(mask, np.NPY_UINT32)
-
-    cdef int ndim = mask.ndim
-    cdef unsigned int *_mask = <unsigned int *>np.PyArray_DATA(mask)
-    cdef int _X = <int>mask.shape[ndim - 1]
-    cdef int _Y = <int>mask.shape[ndim - 2]
-    cdef int repeats = mask.size / _X / _Y
+    cdef int ndim = inp.ndim
+    cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
+    cdef int _X = <int>inp.shape[ndim - 1]
+    cdef int _Y = <int>inp.shape[ndim - 2]
+    cdef int repeats = inp.size / _X / _Y
 
     cdef int fail = 0, i, N = len(lines)
     cdef list frames = list(lines)
@@ -704,47 +443,24 @@ def draw_lines_stack(np.ndarray mask not None, dict lines not None,
         _lines[i] = <float *>np.PyArray_DATA(_larr)
         _ldims[i] = <unsigned long *>_larr.shape
 
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+
     if N < repeats:
         repeats = N
     num_threads = repeats if <int>num_threads > repeats else <int>num_threads        
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        draw_lines_c(_mask + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation)
+        draw_lines_c(_inp + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation, _prof)
 
     if fail:
         raise RuntimeError("LSD execution finished with an error")
 
     free(_lines); free(_ldims)
 
-    return mask
+    return inp
 
-def draw_line_indices(np.ndarray lines not None, object shape not None, int max_val=255,
-                      double dilation=0.0) -> np.ndarray:
-    """Draw thick lines with variable thickness and the antialiasing applied.
-    The lines must follow the LSD convention, see the parameters for more info.
-
-    Args:
-        lines (numpy.ndarray) : An array of the detected lines. Must have a shape
-            of (`N`, 7), where `N` is the number of lines. Each line is comprised
-            of 7 parameters as follows:
-
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's
-            ends.
-            * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance
-            over 180 degree.
-            * `-log10(NFA)` : Number of false alarms.
-
-        shape (Iterable[int]) : Shape of the image.
-        max_val (int) : Maximum value of the line mask.
-        dilation (int) : Size of the binary dilation applied to the output image.
-
-    Returns:
-        numpy.ndarray : Output line indices.
-
-    See Also:
-        :class:`cbclib.bin.LSD` : Line Segment Detector.
-    """
+def draw_line_indices(np.ndarray lines not None, object shape not None, int max_val=255, double dilation=0.0,
+                      str profile='tophat'):
     lines = check_array(lines, np.NPY_FLOAT32)
 
     if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
@@ -758,9 +474,10 @@ def draw_line_indices(np.ndarray lines not None, object shape not None, int max_
     cdef unsigned long _n_idxs
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
 
     with nogil:
-        fail = draw_line_indices_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation)
+        fail = draw_line_indices_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 
@@ -769,9 +486,9 @@ def draw_line_indices(np.ndarray lines not None, object shape not None, int max_
 
     return idxs
 
-def project_effs(np.ndarray data not None, np.ndarray mask not None, np.ndarray effs not None,
-                 np.ndarray out=None, int num_threads=1) -> np.ndarray:
-    data = check_array(data, np.NPY_FLOAT32)
+def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray effs not None,
+                 np.ndarray out=None, int num_threads=1):
+    inp = check_array(inp, np.NPY_FLOAT32)
     mask = check_array(mask, np.NPY_BOOL)
     effs = check_array(effs, np.NPY_FLOAT32)
 
@@ -779,83 +496,83 @@ def project_effs(np.ndarray data not None, np.ndarray mask not None, np.ndarray 
     cdef np.float32_t w1, w0
 
     if out is None:
-        out = <np.ndarray>np.PyArray_ZEROS(data.ndim, data.shape, np.NPY_FLOAT32, 0)
+        out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
 
-    cdef np.float32_t[:, :, ::1] _data = data
+    cdef np.float32_t[:, :, ::1] _inp = inp
     cdef np.npy_bool[:, :, ::1] _mask = mask
     cdef np.float32_t[:, :, ::1] _effs = effs
     cdef np.float32_t[:, :, ::1] _out = out
 
-    cdef int n_frames = _data.shape[0]
+    cdef int n_frames = _inp.shape[0]
     num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
     for i in prange(n_frames, schedule='guided', nogil=True):
         for ii in range(_effs.shape[0]):
             w1 = 0.0; w0 = 0.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
+            for j in range(_inp.shape[1]):
+                for k in range(_inp.shape[2]):
                     if _mask[i, j, k]:
-                        w1 = w1 + _data[i, j, k] * _effs[ii, j, k]
+                        w1 = w1 + _inp[i, j, k] * _effs[ii, j, k]
                         w0 = w0 + _effs[ii, j, k] * _effs[ii, j, k]
             w1 = w1 / w0 if w0 > 0.0 else 1.0
-            for j in range(_data.shape[1]):
-                for k in range(_data.shape[2]):
+            for j in range(_inp.shape[1]):
+                for k in range(_inp.shape[2]):
                     _out[i, j, k] = _out[i, j, k] + _effs[ii, j, k] * w1
 
     return out
 
-def subtract_background(np.ndarray data not None, np.ndarray mask not None, np.ndarray bgd not None,
-                        int num_threads=1) -> np.ndarray:
-    data = check_array(data, np.NPY_UINT32)
+def subtract_background(np.ndarray inp not None, np.ndarray mask not None, np.ndarray bgd not None,
+                        int num_threads=1):
+    inp = check_array(inp, np.NPY_UINT32)
     mask = check_array(mask, np.NPY_BOOL)
     bgd = check_array(bgd, np.NPY_FLOAT32)
 
     cdef int i, j, k
     cdef float res, w0, w1
 
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(inp.ndim, inp.shape, np.NPY_FLOAT32)
 
-    cdef np.uint32_t[:, :, ::1] _data = data
+    cdef np.uint32_t[:, :, ::1] _inp = inp
     cdef np.npy_bool[:, :, ::1] _mask = mask
     cdef np.float32_t[:, :, ::1] _out = out
     cdef np.float32_t[:, :, ::1] _bgd = bgd
 
-    cdef int n_frames = _data.shape[0]
+    cdef int n_frames = _inp.shape[0]
     num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
 
     for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(_data.shape[1]):
-            for k in range(_data.shape[2]):
+        for j in range(_inp.shape[1]):
+            for k in range(_inp.shape[2]):
                 if _mask[i, j, k]:
-                    res = <float>_data[i, j, k] - _bgd[i, j, k]
+                    res = <float>_inp[i, j, k] - _bgd[i, j, k]
                     _out[i, j, k] = res if res > 0.0 else 0.0
                 else:
                     _out[i, j, k] = 0.0
 
     return out
 
-def normalize_streak_data(np.ndarray data not None, np.ndarray bgd not None, np.ndarray divisor not None,
-                          int num_threads=1) -> np.ndarray:
-    data = check_array(data, np.NPY_FLOAT32)
+def normalize_streak_data(np.ndarray inp not None, np.ndarray bgd not None, np.ndarray divisor not None,
+                          int num_threads=1):
+    inp = check_array(inp, np.NPY_FLOAT32)
     bgd = check_array(bgd, np.NPY_FLOAT32)
     divisor = check_array(divisor, np.NPY_FLOAT32)
 
     cdef int i, j, k
     cdef float w, I
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(data.ndim, data.shape, np.NPY_FLOAT32)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(inp.ndim, inp.shape, np.NPY_FLOAT32)
 
-    cdef np.float32_t[:, :, ::1] _data = data
+    cdef np.float32_t[:, :, ::1] _inp = inp
     cdef np.float32_t[:, :, ::1] _bgd = bgd
     cdef np.float32_t[:, :, ::1] _div = divisor
     cdef np.float32_t[:, :, ::1] _out = out
 
-    cdef int n_frames = _data.shape[0]
+    cdef int n_frames = _inp.shape[0]
     num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
     for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(_data.shape[1]):
-            for k in range(_data.shape[2]):
-                if _bgd[i, j, k]:
+        for j in range(_inp.shape[1]):
+            for k in range(_inp.shape[2]):
+                if _div[i, j, k]:
                     w = _div[i, j, k] - _bgd[i, j, k]
-                    I = _data[i, j, k] - _bgd[i, j, k]
+                    I = _inp[i, j, k] - _bgd[i, j, k]
                     if w <= 0.0 or I <= 0.0:
                         _out[i, j, k] = 0.0
                     else:

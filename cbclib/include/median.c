@@ -195,7 +195,7 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
     return 0;
 }
 
-int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gdata, int ndim, size_t *dims,
+int median_filter(void *out, void *data, unsigned char *mask, unsigned char *imask, int ndim, size_t *dims,
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
@@ -206,7 +206,7 @@ int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gda
     if (threads == 0) {ERROR("median_filter: threads must be positive."); return -1;}
 
     array iarr = new_array(ndim, dims, item_size, data);
-    array marr = new_array(ndim, dims, 1, gdata);
+    array imarr = new_array(ndim, dims, 1, imask);
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
@@ -222,7 +222,7 @@ int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gda
             {
                 UNRAVEL_INDEX(coord, &i, iarr);
 
-                update_footprint(fpt, coord, iarr, marr, mode, cval);
+                update_footprint(fpt, coord, iarr, imarr, mode, cval);
 
                 if (fpt->counter)
                 {
@@ -236,7 +236,7 @@ int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gda
         free_footprint(fpt); free(coord); free(key);
     }
 
-    free_array(iarr); free(marr);
+    free_array(iarr); free(imarr);
 
     return 0;
 }
