@@ -4,21 +4,18 @@
 #include "median.h"
 #include "lsd.h"
 #include "img_proc.h"
+#include "smoothers.h"
 
 static int test_draw_lines();
 static int test_draw_line_indices();
 static int test_lsd();
 static int test_median();
 static int test_pairs();
-
-static double rd()
-{
-    return (double)rand() / RAND_MAX;
-}
+static int test_kerreg();
 
 int main(int argc, char *argv[])
 {
-    return test_draw_line_indices();
+    return test_kerreg();
 }
 
 static int test_draw_lines()
@@ -26,7 +23,9 @@ static int test_draw_lines()
     size_t X = 32;
     size_t Y = 48;
     size_t n_lines = 1;
-    double *lines = (double *)calloc(n_lines * 7, sizeof(double));
+    size_t ldims[2] = {n_lines, 7};
+
+    float *lines = MALLOC(float, n_lines * 7);
     unsigned int *out = (unsigned int *)calloc(X * Y, sizeof(unsigned int));
 
     if (!lines || !out)
@@ -37,7 +36,7 @@ static int test_draw_lines()
 
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
 
-    draw_lines(out, X, Y, 1, lines, n_lines, 0);
+    draw_lines(out, Y, X, 1, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("%3d ", 666);
@@ -51,7 +50,7 @@ static int test_draw_lines()
     }
     printf("\n");
 
-    free(lines); free(out);
+    DEALLOC(lines); DEALLOC(out);
 
     return EXIT_SUCCESS;
 }
@@ -61,7 +60,9 @@ static int test_draw_line_indices()
     size_t X = 32;
     size_t Y = 48;
     size_t n_lines = 2;
-    double *lines = (double *)calloc(n_lines * 7, sizeof(double));
+    size_t ldims[2] = {n_lines, 7};
+
+    float *lines = (float *)calloc(n_lines * 7, sizeof(float));
     unsigned int *out;
     size_t n_idxs;
 
@@ -74,7 +75,7 @@ static int test_draw_line_indices()
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
     lines[7] = 30.; lines[8] = 15.; lines[9] = 5.; lines[10] = 10.; lines[11] = 3.5;
 
-    draw_line_indices(&out, &n_idxs, X, Y, 255, lines, n_lines, 0);
+    draw_line_indices(&out, &n_idxs, Y, X, 255, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("idx  x   y   I \n");
@@ -85,21 +86,21 @@ static int test_draw_line_indices()
     }
     printf("\n");
 
-    free(lines); free(out);
+    DEALLOC(lines); DEALLOC(out);
 
     return EXIT_SUCCESS;
 }
 
 static int test_lsd()
 {
-    double *image;
-    double *out;
+    float *image;
+    float *out;
     int x, y, i, j, n;
     int X = 128;  /* x image size */
     int Y = 128;  /* y image size */
 
     /* create a simple image: left half black, right half gray */
-    image = (double *)malloc(X * Y * sizeof(double));
+    image = MALLOC(float, X * Y);
     if (image == NULL)
     {
         fprintf(stderr,"error: not enough memory\n");
@@ -125,8 +126,8 @@ static int test_lsd()
     }
 
     /* free memory */
-    free(image);
-    free(out);
+    DEALLOC(image);
+    DEALLOC(out);
 
     return EXIT_SUCCESS;
 }
@@ -139,10 +140,11 @@ static int test_median()
     size_t size = 6; 
     size_t fsize[2] = {size, size};
 
-    double *data = (double *)malloc(X * Y * sizeof(double));
-    unsigned char *mask = (unsigned char *)malloc(X * Y * sizeof(unsigned char));
-    double *out = (double *)malloc(X * Y * sizeof(double));
-    unsigned char *fmask = (unsigned char *)calloc(size * size, sizeof(unsigned char));
+    double *data = MALLOC(double, X * Y);
+    unsigned char *mask = MALLOC(unsigned char, X * Y);
+    unsigned char *imask = MALLOC(unsigned char, X * Y);
+    double *out = MALLOC(double, X * Y);
+    unsigned char *fmask = MALLOC(unsigned char, size * size);
 
     if (!data || !mask || !out || !fmask)
     {
@@ -155,7 +157,7 @@ static int test_median()
         for (int j = 0; j < (int)X; j++)
         {
             data[j + X * i] = 2 * (SQ(i - ((double)Y - 1) / 2) + SQ(j - ((double)X - 1) / 2)) / X / Y;
-            mask[j + X * i] = 1;
+            mask[j + X * i] = 1; imask[j + X * i] = 1;
         }
     }
 
@@ -178,8 +180,8 @@ static int test_median()
 
 
     double cval = 0.0;
-    median_filter(out, data, mask, 2, dims, sizeof(double), fsize,
-    fmask, EXTEND_REFLECT, &cval, compare_uint, 1);
+    median_filter(out, data, mask, imask, 2, dims, sizeof(double), fsize,
+                  fmask, EXTEND_REFLECT, &cval, compare_uint, 1);
 
     printf("Result:\n");
     printf("%4d ", 666);
@@ -193,7 +195,7 @@ static int test_median()
     }
     printf("\n");
 
-    free(data); free(mask); free(out); free(fmask);
+    DEALLOC(data); DEALLOC(mask); DEALLOC(imask); DEALLOC(out); DEALLOC(fmask);
 
     return EXIT_SUCCESS;
 }
@@ -356,20 +358,49 @@ static const double LINES[1078] =
 
 static int test_pairs()
 {
-    double x_c = 930;
-    double y_c = 1144;
-
     int X = 2068;
     int Y = 2160;
     int n_lines = 154;
-    double *data = (double *)malloc(X * Y * sizeof(double));
-    double *ilines = (double *)LINES;
-    double *olines = (double *)malloc(n_lines * 7 * sizeof(double));
+    size_t ldims[2] = {n_lines, 7};
+
+    float *data = MALLOC(float, X * Y);
+    float *ilines = (float *)LINES;
+    unsigned char *proc = MALLOC(unsigned char, n_lines);
+    for (int i = 0; i < n_lines; i++) proc[i] = 1;
+    float *olines = MALLOC(float, n_lines * 7);
     for (int i = 0; i < X * Y; i++) data[i] = 1.0;
 
-    filter_lines(olines, data, Y, X, ilines, n_lines, x_c, y_c, 1.);
+    filter_lines(olines, proc, data, Y, X, ilines, ldims, 1.0, 0.0);
 
-    // printf("%3d pairs found.\n", n_pairs);
+    int out_lines = 0;
+    for (int i = 0; i < n_lines; i++) out_lines += proc[i];
+    printf("%3d lines remained.\n", out_lines);
+
+    DEALLOC(data); DEALLOC(proc); DEALLOC(olines);
+
+    return 0;
+}
+
+static int test_kerreg()
+{
+    size_t npts = 2000, ndim = 3, nhat = 100;
+
+    double * x = MALLOC(double, npts * ndim);
+    double * y = MALLOC(double, npts);
+    double * xhat = MALLOC(double, nhat * ndim);
+    double * yhat = MALLOC(double, nhat);
+
+    srand(time(NULL));
+    for (int i = 0; i < (int)npts; i++) y[i] = rand() / (double)RAND_MAX;
+    for (int i = 0; i < (int)npts * ndim; i++) x[i] = rand() / (double)RAND_MAX;
+    for (int i = 0; i < (int)nhat * ndim; i++) xhat[i] = 2.0 * (rand() / (double)RAND_MAX - 0.5);
+
+    predict_kerreg(y, x, npts, ndim, yhat, xhat, nhat, rbf, 1e-2, 1e-1, 1e-1, 1);
+    predict_kerreg(y, x, npts, ndim, yhat, xhat, nhat, rbf, 1e-2, 1e-1, 1e-1, 1);
+
+    printf("Success.\n");
+
+    DEALLOC(x); DEALLOC(y); DEALLOC(xhat); DEALLOC(yhat);
 
     return 0;
 }

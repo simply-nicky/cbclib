@@ -264,7 +264,8 @@ class LogProtocol(INIParser):
         elif idxs.size == 0:
             txt_dict.update(zip(keys, txt_tuple))
         else:
-            txt_dict.update({key: np.atleast_1d(data)[idxs - np.min(idxs)] for key, data in zip(keys, txt_tuple)})
+            txt_dict.update({key: np.atleast_1d(data)[idxs - np.min(idxs)]
+                             for key, data in zip(keys, txt_tuple)})
 
         if return_idxs:
             return txt_dict, idxs

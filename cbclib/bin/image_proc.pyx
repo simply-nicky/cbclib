@@ -314,6 +314,11 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
     if footprint is None:
         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
         np.PyArray_FILLWBYTE(footprint, 1)
+    else:
+        footprint = check_array(footprint, np.NPY_BOOL)
+
+    if footprint.ndim != ndim:
+        raise ValueError('footprint and size must have the same number of dimensions as the input')
     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
 
     cdef unsigned long *_dims = <unsigned long *>dims
@@ -344,8 +349,9 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
 
     return out
 
-def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footprint=None, np.ndarray mask=None,
-                   str mode='reflect', double cval=0.0, int num_threads=1):
+def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footprint=None,
+                   np.ndarray mask=None, np.ndarray inp_mask=None,  str mode='reflect', double cval=0.0,
+                   int num_threads=1):
     if not np.PyArray_IS_C_CONTIGUOUS(inp):
         inp = np.PyArray_GETCONTIGUOUS(inp)
 
@@ -357,6 +363,11 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
         np.PyArray_FILLWBYTE(mask, 1)
     else:
         mask = check_array(mask, np.NPY_BOOL)
+
+    if inp_mask is None:
+        inp_mask = mask
+    else:
+        inp_mask = check_array(inp_mask, np.NPY_BOOL)
 
     if size is None and footprint is None:
         raise ValueError('size or footprint must be provided.')
@@ -372,6 +383,11 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
     if footprint is None:
         footprint = <np.ndarray>np.PyArray_SimpleNew(ndim, <np.npy_intp *>_fsize, np.NPY_BOOL)
         np.PyArray_FILLWBYTE(footprint, 1)
+    else:
+        footprint = check_array(footprint, np.NPY_BOOL)
+
+    if footprint.ndim != ndim:
+        raise ValueError('footprint and size must have the same number of dimensions as the input')
     cdef unsigned char *_fmask = <unsigned char *>np.PyArray_DATA(footprint)
 
     cdef unsigned long *_dims = <unsigned long *>dims
@@ -380,18 +396,19 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
     cdef void *_out = <void *>np.PyArray_DATA(out)
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+    cdef unsigned char *_imask = <unsigned char *>np.PyArray_DATA(inp_mask)
     cdef int _mode = extend_mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = maximum_filter_c(_out, _inp, _mask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
+            fail = maximum_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 4, _fsize, _fmask, _mode, _cval, compare_uint, num_threads)
         else:
             raise TypeError('inp argument has incompatible type: {:s}'.format(str(inp.dtype)))
 
@@ -405,7 +422,7 @@ def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=2
 
     if inp.ndim != 2:
         raise ValueError("Input array must be two-dimensional")
-    if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
+    if lines.ndim != 2 or lines.shape[1] < 5:
         raise ValueError(f"lines array has an incompatible shape")
 
     cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
@@ -433,7 +450,7 @@ def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1
     cdef int _Y = <int>inp.shape[ndim - 2]
     cdef int repeats = inp.size / _X / _Y
 
-    cdef int fail = 0, i, N = len(lines)
+    cdef int i, N = len(lines)
     cdef list frames = list(lines)
     cdef float **_lines = <float **>malloc(N * sizeof(float *))
     cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
@@ -452,9 +469,6 @@ def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
         draw_lines_c(_inp + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation, _prof)
 
-    if fail:
-        raise RuntimeError("LSD execution finished with an error")
-
     free(_lines); free(_ldims)
 
     return inp
@@ -463,7 +477,7 @@ def draw_line_indices(np.ndarray lines not None, object shape not None, int max_
                       str profile='tophat'):
     lines = check_array(lines, np.NPY_FLOAT32)
 
-    if lines.ndim != 2 or lines.shape[1] < 5 or lines.shape[1] > 7:
+    if lines.ndim != 2 or lines.shape[1] < 5:
         raise ValueError(f"lines array has an incompatible shape")
 
     cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
@@ -580,3 +594,6 @@ def normalize_streak_data(np.ndarray inp not None, np.ndarray bgd not None, np.n
                 else:
                     _out[i, j, k] = 0.0
     return out
+
+def lowess(np.ndarray y, np.ndarray x, np.ndarray x_pred, double sigma):
+    pass

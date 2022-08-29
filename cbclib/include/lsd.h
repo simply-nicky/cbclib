@@ -135,7 +135,7 @@
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
 int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                          float scale, float sigma_scale, float quant,
@@ -203,7 +203,7 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
 int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
                      float scale, int ** reg_img, int * reg_y, int * reg_x);
@@ -245,7 +245,7 @@ int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
                        is applied.
                        Suggested value: 0.8
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
 int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale);
 
@@ -278,7 +278,7 @@ int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale)
 
     @param X           X size of the image: the number of columns.
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
 int lsd(float ** out, int * n_out, float * img, int Y, int X);
 

@@ -763,7 +763,7 @@ NOINLINE static int passg (size_t ido, size_t ip, size_t l1,
     size_t ipph = (ip+1)/2;
     size_t idl1 = ido*l1;
 
-    cmplx * restrict wal=RALLOC(cmplx,ip);
+    cmplx * restrict wal=MALLOC(cmplx,ip);
     if (!wal) return -1;
     wal[0]=(cmplx){1.,0.};
     for (size_t i=1; i<ip; ++i)
@@ -865,7 +865,7 @@ NOINLINE WARN_UNUSED_RESULT static int pass_all(cfftp_plan plan, cmplx c[], doub
     if (plan->length==1) return 0;
     size_t len=plan->length;
     size_t l1=1, nf=plan->nfct;
-    cmplx *ch = RALLOC(cmplx, len);
+    cmplx *ch = MALLOC(cmplx, len);
     if (!ch) return -1;
     cmplx *p1=c, *p2=ch;
 
@@ -990,7 +990,7 @@ NOINLINE static size_t cfftp_twsize (cfftp_plan plan)
 NOINLINE WARN_UNUSED_RESULT static int cfftp_comp_twiddle (cfftp_plan plan)
 {
     size_t length=plan->length;
-    double *twid = RALLOC(double, 2*length);
+    double *twid = MALLOC(double, 2*length);
     if (!twid) return -1;
     sincos_2pibyn(length, twid);
     size_t l1=1;
@@ -1025,7 +1025,7 @@ NOINLINE WARN_UNUSED_RESULT static int cfftp_comp_twiddle (cfftp_plan plan)
 static cfftp_plan make_cfftp_plan (size_t length)
 {
     if (length==0) return NULL;
-    cfftp_plan plan = RALLOC(cfftp_plan_i,1);
+    cfftp_plan plan = MALLOC(cfftp_plan_i,1);
     if (!plan) return NULL;
     plan->length=length;
     plan->nfct=0;
@@ -1035,7 +1035,7 @@ static cfftp_plan make_cfftp_plan (size_t length)
     if (length==1) return plan;
     if (cfftp_factorize(plan)!=0) { DEALLOC(plan); return NULL; }
     size_t tws=cfftp_twsize(plan);
-    plan->mem=RALLOC(cmplx,tws);
+    plan->mem=MALLOC(cmplx,tws);
     if (!plan->mem) { DEALLOC(plan); return NULL; }
     if (cfftp_comp_twiddle(plan)!=0)
         { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
@@ -1696,7 +1696,7 @@ static int rfftp_forward(rfftp_plan plan, double c[], double fct)
     if (plan->length==1) return 0;
     size_t n=plan->length;
     size_t l1=n, nf=plan->nfct;
-    double *ch = RALLOC(double, n);
+    double *ch = MALLOC(double, n);
     if (!ch) return -1;
     double *p1=c, *p2=ch;
 
@@ -1732,7 +1732,7 @@ static int rfftp_backward(rfftp_plan plan, double c[], double fct)
     if (plan->length==1) return 0;
     size_t n=plan->length;
     size_t l1=1, nf=plan->nfct;
-    double *ch = RALLOC(double, n);
+    double *ch = MALLOC(double, n);
     if (!ch) return -1;
     double *p1=c, *p2=ch;
 
@@ -1807,7 +1807,7 @@ static size_t rfftp_twsize(rfftp_plan plan)
 WARN_UNUSED_RESULT NOINLINE static int rfftp_comp_twiddle (rfftp_plan plan)
 {
     size_t length=plan->length;
-    double *twid = RALLOC(double, 2*length);
+    double *twid = MALLOC(double, 2*length);
     if (!twid) return -1;
     sincos_2pibyn_half(length, twid);
     size_t l1=1;
@@ -1847,7 +1847,7 @@ WARN_UNUSED_RESULT NOINLINE static int rfftp_comp_twiddle (rfftp_plan plan)
 NOINLINE static rfftp_plan make_rfftp_plan (size_t length)
 {
     if (length==0) return NULL;
-    rfftp_plan plan = RALLOC(rfftp_plan_i,1);
+    rfftp_plan plan = MALLOC(rfftp_plan_i,1);
     if (!plan) return NULL;
     plan->length=length;
     plan->nfct=0;
@@ -1857,7 +1857,7 @@ NOINLINE static rfftp_plan make_rfftp_plan (size_t length)
     if (length==1) return plan;
     if (rfftp_factorize(plan)!=0) { DEALLOC(plan); return NULL; }
     size_t tws=rfftp_twsize(plan);
-    plan->mem=RALLOC(double,tws);
+    plan->mem=MALLOC(double,tws);
     if (!plan->mem) { DEALLOC(plan); return NULL; }
     if (rfftp_comp_twiddle(plan)!=0)
     { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
@@ -1881,17 +1881,17 @@ typedef struct fftblue_plan_i * fftblue_plan;
 
 NOINLINE static fftblue_plan make_fftblue_plan (size_t length)
 {
-    fftblue_plan plan = RALLOC(fftblue_plan_i,1);
+    fftblue_plan plan = MALLOC(fftblue_plan_i,1);
     if (!plan) return NULL;
     plan->n = length;
     plan->n2 = good_size(plan->n*2-1);
-    plan->mem = RALLOC(double, 2*plan->n+2*plan->n2);
+    plan->mem = MALLOC(double, 2*plan->n+2*plan->n2);
     if (!plan->mem) { DEALLOC(plan); return NULL; }
     plan->bk  = plan->mem;
     plan->bkf = plan->bk+2*plan->n;
 
     /* initialize b_k */
-    double *tmp = RALLOC(double,4*plan->n);
+    double *tmp = MALLOC(double,4*plan->n);
     if (!tmp) { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
     sincos_2pibyn(2*plan->n,tmp);
     plan->bk[0] = 1;
@@ -1941,7 +1941,7 @@ static int fftblue_fft(fftblue_plan plan, double c[], int isign, double fct)
     size_t n2=plan->n2;
     double *bk  = plan->bk;
     double *bkf = plan->bkf;
-    double *akf = RALLOC(double, 2*n2);
+    double *akf = MALLOC(double, 2*n2);
     if (!akf) return -1;
 
     /* initialize a_k and FFT it */
@@ -2012,7 +2012,7 @@ WARN_UNUSED_RESULT
 static int rfftblue_backward(fftblue_plan plan, double c[], double fct)
 {
     size_t n=plan->n;
-    double *tmp = RALLOC(double,2*n);
+    double *tmp = MALLOC(double,2*n);
     if (!tmp) return -1;
     tmp[0]=c[0];
     tmp[1]=0.;
@@ -2035,7 +2035,7 @@ WARN_UNUSED_RESULT
 static int rfftblue_forward(fftblue_plan plan, double c[], double fct)
 {
     size_t n=plan->n;
-    double *tmp = RALLOC(double,2*n);
+    double *tmp = MALLOC(double,2*n);
     if (!tmp) return -1;
     for (size_t m=0; m<n; ++m)
     {
@@ -2059,7 +2059,7 @@ typedef struct cfft_plan_i
 cfft_plan make_cfft_plan (size_t length)
 {
     if (length==0) return NULL;
-    cfft_plan plan = RALLOC(cfft_plan_i,1);
+    cfft_plan plan = MALLOC(cfft_plan_i,1);
     if (!plan) return NULL;
     plan->blueplan=0;
     plan->packplan=0;
@@ -2119,7 +2119,7 @@ typedef struct rfft_plan_i
 rfft_plan make_rfft_plan (size_t length)
 {
     if (length==0) return NULL;
-    rfft_plan plan = RALLOC(rfft_plan_i,1);
+    rfft_plan plan = MALLOC(rfft_plan_i,1);
     if (!plan) return NULL;
     plan->blueplan=0;
     plan->packplan=0;

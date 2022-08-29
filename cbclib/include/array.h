@@ -33,6 +33,16 @@ void free_array(array arr);
         *_idx += _arr->strides[_n] * (_coord)[_n];  \
 }
 
+/*---------------------------------------------------------------------------
+    struct line:
+        npts        - number of points along the axis
+        stride      - line stride
+                      line[i + 1] = line[i] + line->stride * line->item_size
+        item_size   - size of values in the array
+        data        - pointer to the first line element
+        first       - pointer to the first array element
+---------------------------------------------------------------------------*/
+
 typedef struct line_s
 {
     size_t npts;
@@ -46,6 +56,10 @@ typedef struct line_s *line;
 line new_line(size_t npts, size_t stride, size_t item_size, void *data);
 line init_line(array arr, int axis);
 
+/*---------------------------------------------------------------------------
+    Update the pointer to the first element of a line
+----------------------------------------------------------------------------*/
+
 #define UPDATE_LINE(_line, _iter)                               \
 {                                                               \
     int _div;                                                   \
@@ -54,13 +68,16 @@ line init_line(array arr, int axis);
     (_iter - _div * _line->stride) * _line->item_size;          \
 }
 
-// -----------Extend line modes-----------
-//
-// EXTEND_CONSTANT: kkkkkkkk|abcd|kkkkkkkk
-// EXTEND_NEAREST:  aaaaaaaa|abcd|dddddddd
-// EXTEND_MIRROR:   cbabcdcb|abcd|cbabcdcb
-// EXTEND_REFLECT:  abcddcba|abcd|dcbaabcd
-// EXTEND_WRAP:     abcdabcd|abcd|abcdabcd
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Extend line modes ------------------------------*/
+/*----------------------------------------------------------------------------*/
+/*
+    EXTEND_CONSTANT: kkkkkkkk|abcd|kkkkkkkk
+    EXTEND_NEAREST:  aaaaaaaa|abcd|dddddddd
+    EXTEND_MIRROR:   cbabcdcb|abcd|cbabcdcb
+    EXTEND_REFLECT:  abcddcba|abcd|dcbaabcd
+    EXTEND_WRAP:     abcdabcd|abcd|abcdabcd
+*/
 typedef enum
 {
     EXTEND_CONSTANT = 0,
@@ -73,8 +90,24 @@ typedef enum
 void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval);
 int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
 
+// Comparing functions
+int compare_double(const void *a, const void *b);
+int compare_float(const void *a, const void *b);
+int compare_int(const void *a, const void *b);
+int compare_uint(const void *a, const void *b);
+int compare_ulong(const void *a, const void *b);
+
+int indirect_compare_double(const void *a, const void *b, void *data);
+int indirect_compare_float(const void *a, const void *b, void *data);
+
+int indirect_search_double(const void *a, const void *b, void *data);
+int indirect_search_float(const void *a, const void *b, void *data);
+
 // Array search
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
-    int (*compar)(const void*, const void*));
+    int (*compar)(const void *, const void *));
+
+size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
+    int (*compar)(const void *, const void *, void *), void *arg);
 
 #endif

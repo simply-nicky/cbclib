@@ -251,6 +251,12 @@ class INIParser:
         crop_dict = {key: self._format(val) for key, val in self.export_dict().items()}
         return crop_dict.__str__()
 
+    def __eq__(self, obj: INIParser) -> bool:
+        return self.export_dict() == obj.export_dict()
+
+    def __ne__(self, obj: INIParser) -> bool:
+        return self.export_dict() != obj.export_dict()
+
     def keys(self) -> KeysView:
         return self.attr_dict.keys()
 
@@ -294,10 +300,17 @@ class INIParser:
         ini_parser = ConfigParser()
         for section in self.attr_dict:
             if 'ALL' in self.attr_dict[section]:
-                ini_parser[section] = kwargs[section]
+                if isinstance(kwargs[section], np.ndarray):
+                    ini_parser[section] = np.array2string(kwargs[section], separator=', ')
+                else:
+                    ini_parser[section] = kwargs[section]
             else:
-                ini_parser[section] = {option: kwargs[section][option]
-                                       for option in self.attr_dict[section]}
+                ini_parser[section] = {}
+                for option in self.attr_dict[section]:
+                    if isinstance(kwargs[section][option], np.ndarray):
+                        ini_parser[section][option] = np.array2string(kwargs[section][option], separator=', ')
+                    else:
+                        ini_parser[section][option] = str(kwargs[section][option])
         return ini_parser
 
     @export_ini.instancemethod
@@ -308,5 +321,5 @@ class INIParser:
         Returns:
             A parser object with all the parsing specifications
             contained in the object.
-        """
+        """        
         return type(self).export_ini(**self.ini_dict)

@@ -319,7 +319,7 @@ cdef int find_intersection(double *t_int, double *q, double *e, double *s, doubl
     return 0
 
 def calc_source_lines(np.float64_t[:, ::1] basis, np.int64_t[:, ::1] hkl, np.float64_t[::1] kin_min,
-                      np.float64_t[::1] kin_max, unsigned int threads):
+                      np.float64_t[::1] kin_max, unsigned int threads=1):
     cdef int n_max = hkl.shape[0], n, i, j
     cdef double[4][2] bs = [[kin_min[0], 0.0], [0.0, kin_min[1]], [0.0, kin_max[1]], [kin_max[0], 0.0]]
     cdef double[4][2] taus = [[0.0, 1.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -373,8 +373,6 @@ def calc_source_lines(np.float64_t[:, ::1] basis, np.int64_t[:, ::1] hkl, np.flo
         free(q)
         free(q_sph)
 
-    cdef np.ndarray cond = ArrayWrapper.from_ptr(<void *>_mask).to_ndarray(1, odims, np.NPY_BOOL)
-    cdef np.ndarray new_hkl = np.PyArray_Compress(hkl.base, cond, 0, <np.ndarray>NULL)
-    out = np.PyArray_Compress(out, cond, 0, <np.ndarray>NULL)
-
-    return out, new_hkl
+    cdef np.ndarray mask = ArrayWrapper.from_ptr(<void *>_mask).to_ndarray(1, odims, np.NPY_BOOL)
+    out = np.PyArray_Compress(out, mask, 0, <np.ndarray>NULL)
+    return out, mask

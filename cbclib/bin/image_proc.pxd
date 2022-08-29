@@ -45,25 +45,26 @@ cdef extern from "fft_functions.h":
                          double *sigma, int mode, double complex cval, double truncate, unsigned threads,
                          cconvolve_func fft_convolve) nogil
 
-cdef extern from "median.h":
+cdef extern from "array.h":
     int compare_double(void *a, void *b) nogil
     int compare_float(void *a, void *b) nogil
     int compare_int(void *a, void *b) nogil
     int compare_uint(void *a, void *b) nogil
     int compare_ulong(void *a, void *b) nogil
 
+cdef extern from "median.h":
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
-    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, unsigned char *gdata,
+    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, unsigned char *imask,
                         int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                         unsigned threads) nogil
 
-    int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, int ndim,
-                         unsigned long *dims, unsigned long item_size, unsigned long *fsize,
-                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
-                         unsigned threads) nogil
+    int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, unsigned char *imask,
+                        int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
+                        unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
+                        unsigned threads) nogil
 
 ctypedef int (*line_profile)(int, float, float)
 

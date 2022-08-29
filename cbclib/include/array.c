@@ -14,7 +14,7 @@ array new_array(int ndim, size_t *dims, size_t item_size, void *data)
     for (int n = 0; n < ndim; n++) arr->size *= dims[n];
 
     arr->dims = dims;
-    arr->strides = (size_t *)malloc(arr->ndim * sizeof(size_t));
+    arr->strides = MALLOC(size_t, arr->ndim);
     if (!arr->strides) {ERROR("new_array: not enough memory."); return NULL;}
     size_t stride = 1;
     for (int n = arr->ndim - 1; n >= 0; n--)
@@ -28,12 +28,12 @@ array new_array(int ndim, size_t *dims, size_t item_size, void *data)
 
 void free_array(array arr)
 {
-    free(arr->strides);
-    free(arr);
+    DEALLOC(arr->strides);
+    DEALLOC(arr);
 }
 
 // note: the line count over axis is given by: arr->size / arr->dims[axis]
-// note: you can free the line just with: free(line)
+// note: you can free the line just with: DEALLOC(line)
 
 line new_line(size_t npts, size_t stride, size_t item_size, void *data)
 {
@@ -248,7 +248,7 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
             return 1;
     }
 
-    int *close = (int *)malloc(arr->ndim * sizeof(int));
+    int *close = MALLOC(int, arr->ndim);
     size_t dist;
 
     switch (mode)
@@ -341,15 +341,84 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
 
     int index;
     RAVEL_INDEX(close, &index, arr);
-    free(close);
+    DEALLOC(close);
 
-    if (((unsigned char *)mask->data)[index])
+    if (*(unsigned char *)(mask->data + index * mask->item_size))
     {
         memcpy(out, arr->data + index * arr->item_size, arr->item_size);
         return 1;
     }
     else return 0;
 
+}
+
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Comparing functions ----------------------------*/
+/*----------------------------------------------------------------------------*/
+
+int compare_double(const void *a, const void *b)
+{
+    if (*(double*)a > *(double*)b) return 1;
+    else if (*(double*)a < *(double*)b) return -1;
+    else return 0;
+}
+
+int compare_float(const void *a, const void *b)
+{
+    if (*(float*)a > *(float*)b) return 1;
+    else if (*(float*)a < *(float*)b) return -1;
+    else return 0;
+}
+
+int compare_int(const void *a, const void *b)
+{
+    return (*(int *)a - *(int *)b);
+}
+
+int compare_uint(const void *a, const void *b)
+{
+    if (*(unsigned int *)a > *(unsigned int *)b) return 1;
+    else if (*(unsigned int *)a < *(unsigned int *)b) return -1;
+    else return 0;
+}
+
+int compare_ulong(const void *a, const void *b)
+{
+    if (*(unsigned long *)a > *(unsigned long *)b) return 1;
+    else if (*(unsigned long *)a < *(unsigned long *)b) return -1;
+    else return 0;
+}
+
+int indirect_compare_double(const void *a, const void *b, void *data)
+{
+    double *dptr = data;
+    if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
+    else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
+    else return 0;
+}
+
+int indirect_compare_float(const void *a, const void *b, void *data)
+{
+    float *dptr = data;
+    if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
+    else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
+    else return 0;
+}
+
+int indirect_search_double(const void *a, const void *b, void *data)
+{
+    double *dptr = data;
+    if (*(double *)a > dptr[*(size_t *)b]) return 1;
+    else if (*(double *)a < dptr[*(size_t *)b]) return -1;
+    else return 0;
+}
+
+int indirect_search_float(const void *a, const void *b, void *data)
+{
+    float *dptr = data;
+    if (*(float *)a > dptr[*(size_t *)b]) return 1;
+    else if (*(float *)a < dptr[*(size_t *)b]) return -1;
+    else return 0;
 }
 
 static size_t binary_search(const void *key, const void *array, size_t l, size_t r, size_t size,
@@ -369,9 +438,33 @@ static size_t binary_search(const void *key, const void *array, size_t l, size_t
 }
 
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
-    int (*compar)(const void*, const void*))
+    int (*compar)(const void *, const void *))
 {
     if (compar(key, base) < 0) return 0;
     if (compar(key, base + (npts - 1) * size) > 0) return npts;
     return binary_search(key, base, 0, npts, size, compar);
+}
+
+static size_t binary_search_r(const void *key, const void *array, size_t l, size_t r, size_t size,
+    int (*compar)(const void *, const void *, void *), void *arg)
+{
+    if (l <= r)
+    {
+        size_t m = l + (r - l) / 2;
+        int cmp0 = compar(key, array + m * size, arg);
+        int cmp1 = compar(key, array + (m + 1) * size, arg);
+        if (cmp0 == 0) return m;
+        if (cmp0 > 0 && cmp1 < 0) return m + 1;
+        if (cmp0 < 0) return binary_search_r(key, array, l, m, size, compar, arg);
+        return binary_search_r(key, array, m + 1, r, size, compar, arg);
+    }
+    return 0;
+}
+
+size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
+    int (*compar)(const void *, const void *, void *), void *arg)
+{
+    if (compar(key, base, arg) < 0) return 0;
+    if (compar(key, base + (npts - 1) * size, arg) > 0) return npts;
+    return binary_search_r(key, base, 0, npts, size, compar, arg);
 }

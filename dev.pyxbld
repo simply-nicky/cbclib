@@ -6,10 +6,8 @@ def make_ext(modname, pyxfilename):
     import sys
     import Cython.Compiler.Options
     Cython.Compiler.Options.annotate = True
-    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/lsd.c",
-                                          'cbclib/include/pocket_fft.c', 'cbclib/include/array.c',
-                                          'cbclib/include/fft_functions.c', 'cbclib/include/median.c',
-                                          'cbclib/include/img_proc.c'],
+    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/smoothers.c",
+                                          "cbclib/include/array.c", "cbclib/include/median.c"],
                      language="c",
                      extra_compile_args=['-fopenmp', '-std=c99'],
                      libraries=['fftw3', 'fftw3_omp', 'gomp'],
@@ -18,4 +16,5 @@ def make_ext(modname, pyxfilename):
                      include_dirs=[numpy.get_include(),
                                    os.path.join(sys.prefix, 'include'),
                                    os.path.join(os.path.dirname(__file__),
-                                                'cbclib/include')])
+                                   'cbclib/include')],
+                     define_macros=[('CYTHON_TRACE', '0'), ('CYTHON_TRACE_NOGIL', '0')])

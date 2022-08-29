@@ -2,6 +2,7 @@ from __future__ import annotations
 from multiprocessing import cpu_count
 from typing import (Any, Dict, ItemsView, Iterable, Iterator, List, Optional, Set, Tuple, Union,
                     ValuesView)
+from dataclasses import dataclass, field
 from weakref import ref, ReferenceType
 import numpy as np
 import pandas as pd
@@ -108,7 +109,8 @@ class ScanSetup(INIParser):
                          np.cos(thetas)), axis=-1)
 
     def _k_to_det(self, karr: np.ndarray, source: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        theta, phi = np.arccos(karr[..., 2]), np.arctan2(karr[..., 1], karr[..., 0])
+        theta = np.arccos(karr[..., 2] / np.sqrt((karr * karr).sum(axis=-1)))
+        phi = np.arctan2(karr[..., 1], karr[..., 0])
         det_x = source[2] * np.tan(theta) * np.cos(phi) + source[0]
         det_y = source[2] * np.tan(theta) * np.sin(phi) + source[1]
         return det_x / self.x_pixel_size, det_y / self.y_pixel_size
@@ -124,15 +126,6 @@ class ScanSetup(INIParser):
 
     def kin_to_detector(self, kin: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return self._k_to_det(kin, self.foc_pos)
-
-    def index_pts(self, streaks: np.ndarray) -> np.ndarray:
-        delta_x = streaks[:, :4:2] * self.x_pixel_size - self.smp_pos[0]
-        delta_y = streaks[:, 1:4:2] * self.y_pixel_size - self.smp_pos[1]
-        taus_x = delta_x[:, 1] - delta_x[:, 0]
-        taus_y = delta_y[:, 1] - delta_y[:, 0]
-        taus_abs = taus_x**2 + taus_y**2
-        products = (delta_y[:, 0] * taus_x - delta_x[:, 0] * taus_y) / taus_abs
-        return np.stack((-taus_y * products, taus_x * products), axis=1)
 
     def tilt_matrices(self, tilts: Union[float, np.ndarray]) -> np.ndarray:
         return tilt_matrix(np.atleast_1d(tilts), self.rot_axis)
@@ -183,6 +176,14 @@ class Crop(Transform):
                 x_min, x_max]`.
         """
         self.roi = roi
+
+    def __eq__(self, obj: Crop) -> bool:
+        return self.roi[0] == obj.roi[0] and self.roi[1] == obj.roi[1] and \
+               self.roi[2] == obj.roi[2] and self.roi[3] == obj.roi[3]
+
+    def __ne__(self, obj: Crop) -> bool:
+        return self.roi[0] != obj.roi[0] or self.roi[1] != obj.roi[1] or \
+               self.roi[2] != obj.roi[2] or self.roi[3] != obj.roi[3]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return (ss_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]],
@@ -271,14 +272,14 @@ class Mirror(Transform):
     Attributes:
         axis : Axis of reflection.
     """
-    def __init__(self, axis: int) -> None:
+    def __init__(self, axis: int, shape: Tuple[int, int]) -> None:
         """
         Args:
             axis : Axis of reflection.
         """
         if axis not in [0, 1]:
             raise ValueError('Axis must equal to 0 or 1')
-        self.axis = axis
+        self.axis, self.shape = axis, shape
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if self.axis == 0:
@@ -297,8 +298,8 @@ class Mirror(Transform):
             Output array of points.
         """
         if self.axis:
-            return x, -y
-        return -x, y
+            return x, self.shape[0] - y
+        return self.shape[1] - x, y
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Tranform back an array of points.
@@ -317,7 +318,7 @@ class Mirror(Transform):
         Returns:
             A dictionary with all the attributes.
         """
-        return {'axis': self.axis}
+        return {'axis': self.axis, 'shape': self.shape}
 
 class ComposeTransforms(Transform):
     """Composes several transforms together.
@@ -422,10 +423,10 @@ class CrystData(DataContainer):
         if self._isdata:
             self._init_functions(mask=lambda: np.ones(self.shape, dtype=bool))
             if self._iswhitefield:
-                bgd_func = lambda: project_effs(data=self.data, mask=self.mask,
+                bgd_func = lambda: project_effs(self.data, mask=self.mask,
                                                 effs=self.whitefield[None, ...],
                                                 num_threads=self.num_threads)
-                cor_func = lambda: subtract_background(data=self.data, mask=self.mask,
+                cor_func = lambda: subtract_background(self.data, mask=self.mask,
                                                        bgd=self.background,
                                                        num_threads=self.num_threads)
                 self._init_functions(background=bgd_func, cor_data=cor_func)
@@ -462,14 +463,12 @@ class CrystData(DataContainer):
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if self.transform:
-            x, y = self.transform.forward_points(x, y)
-            return (x % self.shape[-1], y % self.shape[-2])
+            return self.transform.forward_points(x, y)
         return x, y
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if self.transform:
-            x, y = self.transform.backward_points(x, y)
-            return (x % self.shape[-1], y % self.shape[-2])
+            return self.transform.backward_points(x, y)
         return x, y
 
     @dict_to_object
@@ -925,40 +924,28 @@ class CrystData(DataContainer):
         return StreakDetector(parent=ref(self), data=data, frames=frames,
                               num_threads=self.num_threads)
 
-class Streaks:
-    streak_size: int = 5
-    dtype: np.dtype = np.float32
-    _indices: Dict[str, int] = {'x0': 0, 'y0': 1, 'x1': 2, 'y1': 3, 'width': 4}
+@dataclass
+class Streaks():
+    x0          : np.ndarray
+    y0          : np.ndarray
+    x1          : np.ndarray
+    y1          : np.ndarray
+    width       : np.ndarray
+    length      : np.ndarray = field(init=False)
+    h           : Optional[np.ndarray] = None
+    k           : Optional[np.ndarray] = None
+    l           : Optional[np.ndarray] = None
+    hkl_index   : Optional[np.ndarray] = None
 
-    def __init__(self, array: np.ndarray):
-        if array.ndim != 2 or array.shape[1] != self.streak_size:
-            raise ValueError(f'Incompatible shape: {array.shape}')
+    def __post_init__(self):
+        self.length = np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
 
-        self._data = np.asarray(array, dtype=self.dtype)
-
-    @classmethod
-    def read_dataframe(self, df: pd.DataFrame):
-        return self(df[self._indices.keys()])
-
-    def __repr__(self) -> str:
-        return dict(self).__repr__()
-
-    def __str__(self) -> str:
-        return dict(self).__str__()
-
-    def __len__(self) -> int:
-        return self._data.shape[0]
-
-    def __contains__(self, attr: str) -> bool:
-        return attr in self.keys()
-
-    def __getitem__(self, attr: str) -> np.ndarray:
-        if attr in self:
-            return self.__getattribute__(attr)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{attr}'")
+    def __getitem__(self, attr: str) -> Optional[np.ndarray]:
+        return self.__getattribute__(attr)
 
     def keys(self) -> List[str]:
-        return [attr for attr, val in vars(Streaks).items() if isinstance(val, property)]
+        return [attr for attr in self.__dataclass_fields__.keys()
+                if self.__getitem__(attr) is not None]
 
     def values(self) -> ValuesView:
         return dict(self).values()
@@ -966,55 +953,41 @@ class Streaks:
     def items(self) -> ItemsView:
         return dict(self).items()
 
-    @property
-    def x0(self) -> np.ndarray:
-        return self._data[:, self._indices['x0']]
-
-    @property
-    def x1(self) -> np.ndarray:
-        return self._data[:, self._indices['x1']]
-
-    @property
-    def y0(self) -> np.ndarray:
-        return self._data[:, self._indices['y0']]
-
-    @property
-    def y1(self) -> np.ndarray:
-        return self._data[:, self._indices['y1']]
-
-    @property
-    def width(self) -> np.ndarray:
-        return self._data[:, self._indices['width']]
-
-    @property
-    def length(self) -> np.ndarray:
-        return np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
-
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(dict(self))
 
     def to_numpy(self) -> np.ndarray:
-        return np.copy(self._data)
+        return np.stack(tuple(self.values()), axis=1)
 
-    def pattern_dataframe(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
+    def pattern_dataframe(self, shape: Tuple[int, int], dp: float=1.0, dilation: float=0.0,
                           profile: str='tophat') -> pd.DataFrame:
-        idxs = draw_line_indices(lines=self._data, shape=shape, max_val=max_val,
-                                 dilation=dilation, profile=profile)
-        return pd.DataFrame({'streaks': idxs[:, 0], 'x': idxs[:, 1], 'y': idxs[:, 2],
-                             'val': idxs[:, 3], 'length': self.length[idxs[:, 0]],
-                             'width': self.width[idxs[:, 0]]})
+        df = pd.DataFrame(self.pattern_dict(shape, dp=dp, dilation=dilation, profile=profile))
+        return df[df['p'] > 0.0].drop_duplicates(['x', 'y'])
 
-    def pattern_image(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
+    def pattern_image(self, shape: Tuple[int, int], dp: float=1e-3, dilation: float=0.0,
                       profile: str='tophat') -> np.ndarray:
-        mask = np.zeros(shape, dtype=np.uint32)
-        return draw_lines(mask, lines=self._data, max_val=max_val,
-                          dilation=dilation, profile=profile)
+        if dp > 1.0 or dp <= 0.0:
+            raise ValueError('`dp` must be in the range of (0.0, 1.0]')
+        mask = self.pattern_mask(shape, int(1.0 / dp), dilation, profile)
+        return mask / int(1.0 / dp)
 
-    def pattern_sparse(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
-                       profile: str='tophat') -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        _, x, y, p = draw_line_indices(lines=self._data, shape=shape, max_val=max_val,
-                                       dilation=dilation, profile=profile).T
-        return x, y, p
+    def pattern_mask(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
+                     profile: str='tophat') -> np.ndarray:
+        mask = np.zeros(shape, dtype=np.uint32)
+        return draw_lines(mask, lines=self.to_numpy(), max_val=max_val, dilation=dilation,
+                          profile=profile)
+
+    def pattern_dict(self, shape: Tuple[int, int], dp: float=1e-3, dilation: float=0.0,
+                       profile: str='tophat') -> Dict[str, np.ndarray]:
+        if dp > 1.0 or dp <= 0.0:
+            raise ValueError('`dp` must be in the range of (0.0, 1.0]')
+        idx, x, y, p = draw_line_indices(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
+                                         dilation=dilation, profile=profile).T
+        pattern = {'x': x, 'y': y, 'p': p / int(1.0 / dp)}
+        for attr in ['h', 'k', 'l', 'hkl_index']:
+            if attr in self.keys():
+                pattern[attr] = self.__getattribute__(attr)[idx]
+        return pattern
 
 class StreakDetector(DataContainer):
     attr_set: Set[str] = {'parent', 'data', 'frames', 'num_threads'}
@@ -1106,17 +1079,15 @@ class StreakDetector(DataContainer):
         for index, frame in self.frames.items():
             index = self.indices[frame]
             df = self.streaks[frame].pattern_dataframe(shape=self.shape[1:], dilation=dilation, profile=profile)
-            df = df[df['val'] > 0].drop('val', axis=1)
             df['frames'] = frame
 
             raw_data = self.parent().data[index] * self.parent().mask[index]
-            df['p'] = self.streak_data[index][df.loc[:, 'y'], df.loc[:, 'x']]
-            df['I_raw'] = raw_data[df.loc[:, 'y'], df.loc[:, 'x']]
-            df['sgn'] = self.parent().cor_data[index][df.loc[:, 'y'], df.loc[:, 'x']]
-            df['bgd'] = self.parent().background[index][df.loc[:, 'y'], df.loc[:, 'x']]
-            df = df[df.loc[:, 'sgn'] > 0.0]
-
-            df.loc[:, 'x'], df.loc[:, 'y'] = self.parent().backward_points(df.loc[: 'x'], df.loc[: 'y'])
+            df['p'] = self.streak_data[index][df['y'], df['x']]
+            df = df[df['p'] > 0.0]
+            df['I_raw'] = raw_data[df['y'], df['x']]
+            df['sgn'] = self.parent().cor_data[index][df['y'], df['x']]
+            df['bgd'] = self.parent().background[index][df['y'], df['x']]
+            df['x'], df['y'] = self.parent().backward_points(df['x'], df['y'])
 
             dataframes.append(df)
 
@@ -1132,14 +1103,14 @@ class StreakDetector(DataContainer):
         return {'streak_data': streak_data}
 
     @dict_to_object
-    def detect(self, cutoff: float, filter_threshold: float=0.2,
-               group_threshold: float=0.6, line_width: float=6.0, n_group: int=2) -> StreakDetector:
+    def detect(self, cutoff: float, filter_threshold: float,
+               group_threshold: float=0.7, dilation: float=0.0, n_group: int=2) -> StreakDetector:
         out_dict = self.lsd_obj.detect(self.streak_data, cutoff=cutoff,
                                        filter_threshold=filter_threshold,
                                        group_threshold=group_threshold,
-                                       n_group=n_group, dilation=line_width,
+                                       n_group=n_group, dilation=dilation,
                                        num_threads=self.num_threads)
-        return {'streaks': {self.frames[idx]: Streaks(np.around(lines[:, :5], 2))
+        return {'streaks': {self.frames[idx]: Streaks(*np.around(lines[:, :5], 2).T)
                             for idx, lines in out_dict['lines'].items()}}
 
     @dict_to_object
@@ -1165,7 +1136,7 @@ class StreakDetector(DataContainer):
                 bgd = median_filter(bgd, mask=self.bgd_mask, inp_mask=bgd,
                                     footprint=self.footprint, num_threads=self.num_threads)
 
-        streak_data = normalize_streak_data(data=self.data, bgd=bgd, divisor=divisor,
+        streak_data = normalize_streak_data(self.data, bgd=bgd, divisor=divisor,
                                             num_threads=self.num_threads)
         return {'streak_data': streak_data}
 

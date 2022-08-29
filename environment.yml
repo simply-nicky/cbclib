@@ -1,0 +1,17 @@
+name: cbc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cython
+  - python=3.7
+  - llvm-openmp
+  - h5py
+  - hdf5plugin
+  - numpy
+  - scipy
+  - tqdm
+  - fftw
+  - pygmo
+  - pandas
+  - pytables

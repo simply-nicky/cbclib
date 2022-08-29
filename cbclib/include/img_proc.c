@@ -40,8 +40,8 @@ static void free_ntuple_list(ntuple_list n_tuple)
 {
     if (n_tuple == NULL || n_tuple->values == NULL)
         ERROR("free_ntuple_list: invalid n-tuple input.");
-    free((void *) n_tuple->values);
-    free((void *) n_tuple);
+    DEALLOC(n_tuple->values);
+    DEALLOC(n_tuple);
 }
 
 static ntuple_list new_ntuple_list(size_t dim, size_t max_size)
@@ -77,7 +77,7 @@ static void realloc_ntuple_list(ntuple_list n_tuple, size_t max_size)
     n_tuple->max_size = max_size;
 
     /* realloc memory */
-    n_tuple->values = (unsigned int *)realloc((void *)n_tuple->values, n_tuple->dim * n_tuple->max_size * sizeof(unsigned int));
+    n_tuple->values = REALLOC(n_tuple->values, unsigned int, n_tuple->dim * n_tuple->max_size);
     if (n_tuple->values == NULL) ERROR("not enough memory.");
 }
 
@@ -194,7 +194,7 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
         }
     }
 
-    free(bnd);
+    DEALLOC(bnd);
 }
 
 int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims, float dilation, line_profile profile)
@@ -224,7 +224,7 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, floa
         plot_line_width((void *)oarr, oarr->dims, rt, ln_ptr[4] + dilation, max_val, set_pixel_color, profile);
     }
 
-    free(ln); free(rt);
+    DEALLOC(ln); DEALLOC(rt);
     free_array(larr); free_array(oarr);
 
     return 0;
@@ -270,8 +270,8 @@ int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, un
     *out = idxs->values;
     *n_idxs = idxs->size;
 
-    free(ln); free(rt);
-    free_array(larr); free(idxs);
+    DEALLOC(ln); DEALLOC(rt);
+    free_array(larr); DEALLOC(idxs);
 
     return 0;
 }
@@ -321,10 +321,10 @@ static void create_line_image_pair(unsigned int **out, rect orect, size_t Y, siz
     rt1->x0 -= orect->x0; rt1->y0 -= orect->y0; rt1->x1 -= orect->x0; rt1->y1 -= orect->y0;
 
     /* Plot the lines */
-    plot_line_width((void *)oarr, oarr->dims, rt0, dilation, max_val, set_pixel_color, tophat_profile);
-    plot_line_width((void *)oarr, oarr->dims, rt1, dilation, max_val, set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + dilation, max_val, set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + dilation, max_val, set_pixel_color, tophat_profile);
 
-    free(rt0); free(rt1); free_array(oarr);
+    DEALLOC(rt0); DEALLOC(rt1); free_array(oarr);
 }
 
 static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X,
@@ -356,9 +356,9 @@ static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X
     rt->x0 -= orect->x0; rt->y0 -= orect->y0; rt->x1 -= orect->x0; rt->y1 -= orect->y0;
 
     /* Plot the lines */
-    plot_line_width((void *)oarr, oarr->dims, rt, dilation, max_val, set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt, ln[4] + dilation, max_val, set_pixel_color, tophat_profile);
 
-    free(rt); free_array(oarr);
+    DEALLOC(rt); free_array(oarr);
 }
 
 static void collapse_pair(float *oln, unsigned int *img, rect img_rt, float *data, size_t Y, size_t X,
@@ -442,12 +442,11 @@ static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect
         }
     }
 
-    free(rt);
+    DEALLOC(rt);
 
     if (sum0 && sum1) return cov / sqrtf(sum0) / sqrtf(sum1);
     return 0.0f;
 }
-
 
 int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
     size_t *ldims, float threshold, float dilation)
@@ -491,20 +490,12 @@ int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size
             proc[i] = 0;
         }
 
-        free(img);
+        DEALLOC(img);
     }
 
-    free(rt);
+    DEALLOC(rt);
 
     return 0;
-}
-
-static int indirect_cmp(const void *a, const void *b, void *data)
-{
-    float *dptr = data;
-    if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
-    else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
-    else return 0;
 }
 
 int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines, size_t *ldims,
@@ -523,8 +514,8 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
 
     /* Find the closest line */
     size_t max_pairs = ldims[0];
-    unsigned int *pairs = (unsigned int *)malloc(2 * max_pairs * sizeof(unsigned int));
-    float *ds = (float *)malloc(max_pairs * sizeof(float));
+    unsigned int *pairs = MALLOC(unsigned int, 2 * max_pairs);
+    float *ds = MALLOC(float, max_pairs);
     for (i = 0, ln0 = olines; i < (int)ldims[0]; i++, ln0 += ldims[1])
     {
         /* check if processed already */
@@ -551,20 +542,20 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
             if ((int)max_pairs == n_pairs)
             {
                 max_pairs += ldims[0];
-                pairs = (unsigned int *)realloc(pairs, 2 * max_pairs * sizeof(unsigned int));
-                ds = (float *)realloc(ds, max_pairs * sizeof(float));
+                pairs = REALLOC(pairs, unsigned int, 2 * max_pairs);
+                ds = REALLOC(ds, float, max_pairs);
             }
         }
     }
 
-    size_t *inds = (size_t *)malloc(n_pairs * sizeof(size_t));
+    size_t *inds = MALLOC(size_t, n_pairs);
     for (i = 0; i < n_pairs; i++) inds[i] = i;
 
     /* Sort the pairs based on the distance */
-    qsort_r(inds, n_pairs, sizeof(size_t), indirect_cmp, ds);
-    free(ds);
+    qsort_r(inds, n_pairs, sizeof(size_t), indirect_compare_float, ds);
+    DEALLOC(ds);
 
-    float *oln = (float *)malloc(ldims[1] * sizeof(float));
+    float *oln = MALLOC(float, ldims[1]);
     unsigned int *img_pair, *img_oln;
     rect rt_pair = (rect)malloc(sizeof(struct rect_s));
     rect ort = (rect)malloc(sizeof(struct rect_s));
@@ -597,13 +588,13 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
                 proc[pairs[2 * inds[i] + 1]] = 0;
             }
 
-            free(img_pair);
-            free(img_oln);
+            DEALLOC(img_pair);
+            DEALLOC(img_oln);
         }
     }
 
-    free(pairs);
-    free(rt_pair); free(ort); free(oln);
+    DEALLOC(pairs);
+    DEALLOC(rt_pair); DEALLOC(ort); DEALLOC(oln);
 
     return 0;
 }
@@ -657,7 +648,7 @@ int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats)
         rotmat_to_euler(e_ln->data, rm_ln->data);
     }
 
-    free(e_ln); free(rm_ln);
+    DEALLOC(e_ln); DEALLOC(rm_ln);
     free_array(e_arr); free_array(rm_arr);
 
     return 0;
@@ -701,7 +692,7 @@ int compute_euler_matrix(double *rot_mats, double *eulers, size_t n_mats)
         euler_to_rotmat(rm_ln->data, e_ln->data);
     }
 
-    free(e_ln); free(rm_ln);
+    DEALLOC(e_ln); DEALLOC(rm_ln);
     free_array(e_arr); free_array(rm_arr);
 
     return 0;
@@ -750,7 +741,7 @@ int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double 
         tilt_to_rotmat(rm_ln->data, angles[i], alpha, beta);
     }
 
-    free(rm_ln); free_array(rm_arr);
+    DEALLOC(rm_ln); free_array(rm_arr);
 
     return 0;
 }

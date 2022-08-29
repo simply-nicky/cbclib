@@ -222,8 +222,8 @@ static void free_ntuple_list(ntuple_list in)
 {
     if (in == NULL || in->values == NULL)
         LSD_ERROR("free_ntuple_list: invalid n-tuple input.");
-    free((void *) in->values);
-    free((void *) in);
+    DEALLOC(in->values);
+    DEALLOC(in);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -326,8 +326,8 @@ static void free_image_char(image_char i)
 {
     if (i == NULL || i->data == NULL)
         LSD_ERROR("free_image_char: invalid input image.");
-    free((void *) i->data);
-    free((void *) i);
+    DEALLOC(i->data);
+    DEALLOC(i);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -343,8 +343,7 @@ static image_char new_image_char(unsigned int xsize, unsigned int ysize)
     /* get memory */
     image = (image_char) malloc(sizeof(struct image_char_s));
     if (image == NULL) LSD_ERROR("not enough memory.");
-    image->data = (unsigned char *) calloc((size_t) (xsize*ysize),
-                                                                                    sizeof(unsigned char));
+    image->data = (unsigned char *) calloc((size_t) (xsize * ysize), sizeof(unsigned char));
     if (image->data == NULL) LSD_ERROR("not enough memory.");
 
     /* set image size */
@@ -403,7 +402,7 @@ static image_int new_image_int(unsigned int xsize, unsigned int ysize)
     /* get memory */
     image = (image_int) malloc(sizeof(struct image_int_s));
     if (image == NULL) LSD_ERROR("not enough memory.");
-    image->data = (int *) calloc((size_t) (xsize*ysize), sizeof(int));
+    image->data = (int *) calloc((size_t) (xsize * ysize), sizeof(int));
     if (image->data == NULL) LSD_ERROR("not enough memory.");
 
     /* set image size */
@@ -451,8 +450,8 @@ static void free_image_float(image_float i)
 {
     if (i == NULL || i->data == NULL)
         LSD_ERROR("free_image_float: invalid input image.");
-    free((void *) i->data);
-    free((void *) i);
+    DEALLOC(i->data);
+    DEALLOC(i);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -530,7 +529,7 @@ static void gaussian_kernel(ntuple_list kernel, float sigma, float mean)
     /* compute Gaussian kernel */
     if (kernel->max_size < 1) enlarge_ntuple_list(kernel);
     kernel->size = 1;
-    for (i=0;i<kernel->dim;i++)
+    for (i = 0; i < kernel->dim; i++)
         {
             val = ((float) i - mean) / sigma;
             kernel->values[i] = expf(-0.5f * val * val);
@@ -591,17 +590,15 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
     if (in == NULL || in->data == NULL || in->xsize == 0 || in->ysize == 0)
         LSD_ERROR("gaussian_sampler: invalid image.");
     if (scale <= 0.0f) LSD_ERROR("gaussian_sampler: 'scale' must be positive.");
-    if (sigma_scale <= 0.0f)
-        LSD_ERROR("gaussian_sampler: 'sigma_scale' must be positive.");
+    if (sigma_scale <= 0.0f) LSD_ERROR("gaussian_sampler: 'sigma_scale' must be positive.");
 
     /* compute new image size and get memory for images */
-    if (in->xsize * scale > (float) UINT_MAX ||
-            in->ysize * scale > (float) UINT_MAX)
+    if (in->xsize * scale > (float) UINT_MAX || in->ysize * scale > (float) UINT_MAX)
         LSD_ERROR("gaussian_sampler: the output image size exceeds the handled size.");
     N = (unsigned int) ceilf(in->xsize * scale);
     M = (unsigned int) ceilf(in->ysize * scale);
-    aux = new_image_float(N,in->ysize);
-    out = new_image_float(N,M);
+    aux = new_image_float(N, in->ysize);
+    out = new_image_float(N, M);
 
     /* sigma, kernel size and memory for the kernel */
     sigma = scale < 1.0f ? sigma_scale / scale : sigma_scale;
@@ -682,7 +679,7 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
 					/* symmetry boundary condition */
 					while (j < 0) j += float_y_size;
 					while (j >= float_y_size) j -= float_y_size;
-					if (j >= (int) in->ysize) j = float_y_size-1-j;
+					if (j >= (int) in->ysize) j = float_y_size - 1 - j;
 
 					sum += aux->data[x + j * aux->xsize] * kernel->values[i];
 				}
@@ -749,10 +746,10 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
     p = in->xsize;
 
     /* allocate output image */
-    g = new_image_float(in->xsize,in->ysize);
+    g = new_image_float(in->xsize, in->ysize);
 
     /* get memory for the image of gradient modulus */
-    *modgrad = new_image_float(in->xsize,in->ysize);
+    *modgrad = new_image_float(in->xsize, in->ysize);
 
     /* get memory for "ordered" list of pixels */
     list = (struct coorlist *) calloc((size_t) (n*p), sizeof(struct coorlist));
@@ -816,7 +813,7 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
 
 			/* store the point in the right bin according to its norm */
 			i = (unsigned int) (norm * (float) n_bins / max_grad);
-			if (i >= n_bins) i = n_bins-1;
+			if (i >= n_bins) i = n_bins - 1;
 			if (range_l_e[i] == NULL)
 				range_l_s[i] = range_l_e[i] = list + list_count++;
 			else
@@ -853,8 +850,8 @@ static image_float ll_angle(image_float in, float threshold, struct coorlist ** 
     *list_p = start;
 
     /* free memory */
-    free((void *) range_l_s);
-    free((void *) range_l_e);
+    DEALLOC(range_l_s);
+    DEALLOC(range_l_e);
 
     return g;
 }
@@ -879,12 +876,12 @@ static int isaligned(int x, int y, image_float angles, float theta, float prec)
     /* pixels whose level-line angle is not defined
          are considered as NON-aligned */
     if (a == NOTDEF) return FALSE;    /* there is no need to call the function
-                                                                            'float_equal' here because there is
-                                                                            no risk of problems related to the
-                                                                            comparison floats, we are only
-                                                                            interested in the exact NOTDEF value */
+                                         'float_equal' here because there is
+                                         no risk of problems related to the
+                                         comparison floats, we are only
+                                         interested in the exact NOTDEF value */
 
-    /* it is assumed that 'theta' and 'a' are in the range [-pi,pi] */
+    /* it is assumed that 'theta' and 'a' are in the range [-pi, pi] */
     theta -= a;
     if (theta < 0.0f) theta = -theta;
     if (theta > M_3_2_PI)
@@ -951,7 +948,7 @@ static float angle_diff_signed(float a, float b)
 static float log_gamma_lanczos(float x)
 {
     static float q[7] = { 75122.6331530f, 80916.6278952f, 36308.2951477f,
-        8687.24529705f, 1168.92649479f, 83.8676043424f, 2.50662827511f };
+                          8687.24529705f, 1168.92649479f, 83.8676043424f, 2.50662827511f };
     float a = (x + 0.5f) * logf(x + 5.5f) - (x + 5.5f);
     float b = 0.0f;
     int n;
@@ -1245,7 +1242,7 @@ static float inter_low(float x, float x1, float y1, float x2, float y2)
 {
     /* check parameters */
     if (x1 > x2 || x < x1 || x > x2)
-        LSD_ERROR("inter_low: unsuitable input, 'x1>x2' or 'x<x1' or 'x>x2'.");
+        LSD_ERROR("inter_low: unsuitable input, 'x1 > x2' or 'x < x1' or 'x > x2'.");
 
     /* interpolation */
     if (float_equal(x1, x2) && y1 < y2) return y1;
@@ -1267,7 +1264,7 @@ static float inter_hi(float x, float x1, float y1, float x2, float y2)
 {
     /* check parameters */
     if (x1 > x2 || x < x1 || x > x2)
-        LSD_ERROR("inter_hi: unsuitable input, 'x1>x2' or 'x<x1' or 'x>x2'.");
+        LSD_ERROR("inter_hi: unsuitable input, 'x1 > x2' or 'x < x1' or 'x > x2'.");
 
     /* interpolation */
     if (float_equal(x1, x2) && y1 < y2) return y2;
@@ -1281,7 +1278,7 @@ static float inter_hi(float x, float x1, float y1, float x2, float y2)
 static void ri_del(rect_iter * iter)
 {
     if (iter == NULL) LSD_ERROR("ri_del: NULL iterator.");
-    free((void *) iter);
+    DEALLOC(iter);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1459,8 +1456,7 @@ static float rect_nfa(struct rect * rec, image_float angles, float logNT)
     /* compute the total number of pixels and of aligned points in 'rec' */
     for (i = ri_ini(rec); !ri_end(i); ri_inc(i)) /* rectangle iterator */
 	{
-        if (i->x >= 0 && i->y >= 0 &&
-            i->x < (int)angles->xsize && i->y < (int)angles->ysize)
+        if (i->x >= 0 && i->y >= 0 && i->x < (int)angles->xsize && i->y < (int)angles->ysize)
 		{
 			++pts; /* total number of pixels counter */
 			if (isaligned(i->x, i->y, angles, rec->theta, rec->prec)) ++alg; /* aligned points counter */
@@ -1691,10 +1687,10 @@ static void region_grow(int x, int y, image_float angles, struct point * reg,
     *reg_size = 1;
     reg[0].x = x;
     reg[0].y = y;
-    *reg_angle = angles->data[x+y*angles->xsize];    /* region's angle */
+    *reg_angle = angles->data[x + y * angles->xsize];    /* region's angle */
     sumdx = cosf(*reg_angle);
     sumdy = sinf(*reg_angle);
-    used->data[x+y*used->xsize] = USED;
+    used->data[x + y * used->xsize] = USED;
 
     /* try neighbors as new region points */
     for (i = 0; i < *reg_size; i++)
@@ -1731,8 +1727,7 @@ static float rect_improve(struct rect *rec, image_float angles, float logNT, flo
 {
     struct rect r;
     float log_nfa, log_nfa_new;
-    float delta = 0.5f;
-    float delta_2 = delta / 2.0f;
+    float delta = 0.5f, delta_2 = 0.25f;
     int n;
 
     log_nfa = rect_nfa(rec, angles, logNT);
@@ -1775,7 +1770,7 @@ static float rect_improve(struct rect *rec, image_float angles, float logNT, flo
 
     /* try to reduce one side of the rectangle */
     rect_copy(rec,&r);
-    for (n=0; n<5; n++)
+    for (n = 0; n < 5; n++)
 	{
 		if ((r.width - delta) >= 0.5f)
 		{
@@ -1787,7 +1782,7 @@ static float rect_improve(struct rect *rec, image_float angles, float logNT, flo
 			log_nfa_new = rect_nfa(&r, angles, logNT);
 			if (log_nfa_new > log_nfa)
 			{
-				rect_copy(&r,rec);
+				rect_copy(&r, rec);
 				log_nfa = log_nfa_new;
 			}
 		}
@@ -1827,7 +1822,7 @@ static float rect_improve(struct rect *rec, image_float angles, float logNT, flo
 		if (log_nfa_new > log_nfa)
 		{
 			log_nfa = log_nfa_new;
-			rect_copy(&r,rec);
+			rect_copy(&r, rec);
 		}
 	}
 
@@ -1873,7 +1868,7 @@ static int reduce_region_radius(struct point * reg, int * reg_size,
     rad = rad1 > rad2 ? rad1 : rad2;
 
     /* while the density criterion is not satisfied, remove farther pixels */
-    while(density < density_th)
+    while (density < density_th)
 	{
 		rad *= 0.75f; /* reduce region's radius to 75% of its value */
 
@@ -1935,7 +1930,7 @@ static int refine(struct point * reg, int * reg_size, image_float modgrad,
         LSD_ERROR("refine: invalid image 'angles'.");
 
     /* compute region points density */
-    density = (float) *reg_size / (dist(rec->x1,rec->y1,rec->x2,rec->y2) * rec->width);
+    density = (float) *reg_size / (dist(rec->x1, rec->y1, rec->x2, rec->y2) * rec->width);
 
     /* if the density criterion is satisfied there is nothing to do */
     if (density >= density_th) return TRUE;
@@ -1979,7 +1974,7 @@ static int refine(struct point * reg, int * reg_size, image_float modgrad,
     /*------ Second try: reduce region radius ------*/
     if (density < density_th)
         return reduce_region_radius(reg, reg_size, modgrad, reg_angle, prec, p,
-            rec, used, angles, density_th);
+                                    rec, used, angles, density_th);
 
     /* if this point is reached, the density criterion is satisfied */
     return TRUE;
@@ -2078,14 +2073,13 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                 because we are only interested in the exact NOTDEF value */
 		{
 			/* find the region of connected point and ~equal angle */
-			region_grow(list_p->x, list_p->y, angles, reg, &reg_size,
-				&reg_angle, used, prec);
+			region_grow(list_p->x, list_p->y, angles, reg, &reg_size, &reg_angle, used, prec);
 
 			/* reject small regions */
 			if (reg_size < min_reg_size) continue;
 
 			/* construct rectangular approximation for the region */
-			region2rect(reg,reg_size,modgrad,reg_angle,prec,p,&rec);
+			region2rect(reg, reg_size, modgrad, reg_angle, prec, p, &rec);
 
 			/*  Check if the rectangle exceeds the minimal density of
                 region points. If not, try to improve the region.
@@ -2097,7 +2091,7 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                 The original algorithm is obtained with density_th = 0.0f.
             */
 			if (!refine(reg, &reg_size, modgrad, reg_angle,
-				prec, p, &rec, used, angles, density_th)) continue;
+				        prec, p, &rec, used, angles, density_th)) continue;
 
 			/* compute NFA value */
 			log_nfa = rect_improve(&rec,angles,logNT,log_eps);
@@ -2123,33 +2117,31 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
 			}
 
 			/* add line segment found to output */
-			add_7tuple(out_buf, rec.x1, rec.y1, rec.x2, rec.y2,
-												rec.width, rec.p, log_nfa);
+			add_7tuple(out_buf, rec.x1, rec.y1, rec.x2, rec.y2, rec.width, rec.p, log_nfa);
 
 			/* add region number to 'region' image if needed */
 			if (region != NULL)
-				for (i=0; i<reg_size; i++)
+				for (i = 0; i < reg_size; i++)
 					region->data[reg[i].x + reg[i].y * region->xsize] = ls_count;
 		}
 	}
 
     /* free memory */
-    free((void *) image);     /* only the float_image structure should be freed,
-                                 the data pointer was provided to this functions
-                                 and should not be destroyed. */
+    DEALLOC(image);     /* only the float_image structure should be freed,
+                           the data pointer was provided to this functions
+                           and should not be destroyed. */
     free_image_float(angles);
     free_image_float(modgrad);
     free_image_char(used);
-    free((void *) reg);
-    free((void *) mem_p);
+    DEALLOC(reg);
+    DEALLOC(mem_p);
 
     /* return the result */
     if (reg_img != NULL && reg_x != NULL && reg_y != NULL)
     {
         if (region == NULL) LSD_ERROR("'region' should be a valid image.");
         *reg_img = region->data;
-        if (region->xsize > (unsigned int) INT_MAX ||
-                region->xsize > (unsigned int) INT_MAX)
+        if (region->xsize > (unsigned int) INT_MAX || region->xsize > (unsigned int) INT_MAX)
             LSD_ERROR("region image to big to fit in INT sizes.");
         *reg_x = (int) (region->xsize);
         *reg_y = (int) (region->ysize);
@@ -2157,7 +2149,7 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
         /* free the 'region' structure.
            we cannot use the function 'free_image_int' because we need to keep
     	   the memory with the image data to be returned by this function. */
-        free((void *) region);
+        DEALLOC(region);
     }
     
     if (out != NULL && n_out != NULL)
@@ -2167,9 +2159,9 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
         *n_out = (int) (out_buf->size);
 
         *out = out_buf->values;
-        free((void *) out_buf);    /* only the 'ntuple_list' structure must be freed,
-                                      but the 'values' pointer must be keep to return
-                                      as a result. */
+        DEALLOC(out_buf);    /* only the 'ntuple_list' structure must be freed,
+                                but the 'values' pointer must be keep to return
+                                as a result. */
         
     }
     else free_ntuple_list(out_buf);
