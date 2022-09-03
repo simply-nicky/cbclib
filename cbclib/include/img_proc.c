@@ -698,14 +698,17 @@ int compute_euler_matrix(double *rot_mats, double *eulers, size_t n_mats)
     return 0;
 }
 
+/*-------------------------------------------------------------------------------*/
+/** Calculate the matrix of a rotation by angle theta around the axis defined with
+    spherical angles (alpha, beta)
+
+    @param rm       Output rotation matrix.
+    @param alpha    Angle between the rotation axis and OZ.
+    @param beta     The polar angle of the ratation axis.
+    @param theta    Angle of rotation.
+ */
 static void tilt_to_rotmat(double *rm, double theta, double alpha, double beta)
 {
-    /* Calculate the matrix of a rotation by angle theta around the axis defined with spherical angles (alpha, beta)
-
-       alpha - angle between the rotation axis and OZ
-       beta - the polar angle of the ratation axis
-       theta - angle of rotation
-    */
     float a = cos(0.5 * theta), b = -sin(alpha) * cos(beta) * sin(0.5 * theta);
     float c = -sin(alpha) * sin(beta) * sin(0.5 * theta), d = -cos(alpha) * sin(0.5 * theta);
 
@@ -739,6 +742,60 @@ int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double 
         UPDATE_LINE(rm_ln, i);
 
         tilt_to_rotmat(rm_ln->data, angles[i], alpha, beta);
+    }
+
+    DEALLOC(rm_ln); free_array(rm_arr);
+
+    return 0;
+}
+
+/*-------------------------------------------------------------------------------*/
+/** Calculate the rotation matrix rm, that rotates unit vector a to unit vector b.
+
+    @param rm       Output rotation matrix.
+    @param a        Unit vector a.
+    @param b        Unit vector b.
+
+    @note           Yields nan, if cos(a, b) = -1.0.
+ */
+static void rotation_of_a_to_b(double *rm, double *a, double *b)
+{
+    double vx = a[1] * b[2] - a[2] * b[1];
+    double vy = a[2] * b[0] - a[0] * b[2];
+    double vz = a[0] * b[1] - a[1] * b[0];
+    double rat = 1.0 / (1.0 + a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+    rm[0] = 1.0 - rat * (SQ(vy) + SQ(vz));
+    rm[1] = -vz + rat * vx * vy;
+    rm[2] =  vy + rat * vx * vz;
+    rm[3] =  vz + rat * vx * vy;
+    rm[4] = 1.0 - rat * (SQ(vx) + SQ(vz));
+    rm[5] = -vx + rat * vy * vz;
+    rm[6] = -vy + rat * vx * vz;
+    rm[7] =  vx + rat * vy * vz;
+    rm[8] = 1.0 - rat * (SQ(vx) + SQ(vy));
+}
+
+int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats)
+{
+    /* check parameters */
+    if (!as || !bs || !rot_mats) {ERROR("compute_rotations: one of the arguments is NULL."); return -1;}
+    if (!n_mats) {ERROR("compute_rotations: number of matrices must be positive."); return -1;}   
+
+    size_t rm_dims[2] = {n_mats, 9};
+    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
+    line rm_ln = init_line(rm_arr, 1);
+    double a[3], b[3];
+    double a_abs, b_abs;
+
+    for (int i = 0; i < (int)n_mats; i++)
+    {
+        UPDATE_LINE(rm_ln, i);
+
+        a_abs = sqrt(SQ(as[3 * i]) + SQ(as[3 * i + 1]) + SQ(as[3 * i + 2]));
+        a[0] = as[3 * i] / a_abs; a[1] = as[3 * i + 1] / a_abs; a[2] = as[3 * i + 2] / a_abs;
+        b_abs = sqrt(SQ(bs[3 * i]) + SQ(bs[3 * i + 1]) + SQ(bs[3 * i + 2]));
+        b[0] = bs[3 * i] / b_abs; b[1] = bs[3 * i + 1] / b_abs; b[2] = bs[3 * i + 2] / b_abs;
+        rotation_of_a_to_b(rm_ln->data, a, b);
     }
 
     DEALLOC(rm_ln); free_array(rm_arr);

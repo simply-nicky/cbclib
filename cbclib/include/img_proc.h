@@ -73,5 +73,6 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
 int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats);
 int compute_euler_matrix(double *rot_mats, double *eulers, size_t n_mats);
 int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double a0, double a1, double a2);
+int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats);
 
 #endif

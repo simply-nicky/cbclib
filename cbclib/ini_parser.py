@@ -4,11 +4,10 @@ from __future__ import annotations
 import os
 from configparser import ConfigParser
 import re
-from typing import Any, Dict, ItemsView, KeysView, List, TypeVar, Type, Union, ValuesView
+from typing import Any, Dict, ItemsView, KeysView, List, TypeVar, Type, Union, ValuesView, Callable
 import numpy as np
 
 T = TypeVar('T')            # Object type
-Desc = TypeVar('Desc')      # Descriptor type
 ROOT_PATH = os.path.dirname(__file__)
 
 class hybridmethod:
@@ -20,7 +19,7 @@ class hybridmethod:
         finstance : Instance bound method.
         doc : Method's dosctring.
     """
-    def __init__(self, fclass: Desc, finstance: Desc=None, doc: str=None) -> None:
+    def __init__(self, fclass: Callable, finstance: Callable=None, doc: str=None) -> None:
         """Args:
             fclass : Class bound method.
             finstance : Instance bound method.
@@ -30,7 +29,7 @@ class hybridmethod:
         self.__doc__ = doc or fclass.__doc__
         self.__isabstractmethod__ = bool(getattr(fclass, '__isabstractmethod__', False))
 
-    def classmethod(self, fclass: Desc) -> hybridmethod:
+    def classmethod(self, fclass: Callable) -> hybridmethod:
         """Class method decorator
 
         Args:
@@ -42,7 +41,7 @@ class hybridmethod:
         """
         return type(self)(fclass, self.finstance, None)
 
-    def instancemethod(self, finstance: Desc) -> hybridmethod:
+    def instancemethod(self, finstance: Callable) -> hybridmethod:
         """Instance method decorator
 
         Args:
@@ -54,12 +53,12 @@ class hybridmethod:
         """
         return type(self)(self.fclass, finstance, self.__doc__)
 
-    def __get__(self, instance: T, cls: Type[T]) -> Any:
+    def __get__(self, instance: T, cls: Type[T]) -> Callable:
         if instance is None or self.finstance is None:
             return self.fclass.__get__(cls, None)
         return self.finstance.__get__(instance, cls)
 
-class INIParser:
+class INIParser():
     """INI files parser class with the methods for importing and exporting
     ini files and Python dictionaries.
 
@@ -71,7 +70,8 @@ class INIParser:
     """
     err_txt = "Wrong format key '{0:s}' of option '{1:s}'"
     known_types = {'int': int, 'bool': bool, 'float': float, 'str': str}
-    attr_dict, fmt_dict = {}, {}
+    attr_dict: Dict[str, Any] = {}
+    fmt_dict: Dict[str, Any] = {}
     LIST_SPLITTER = r'\s*,\s*'
     LIST_MATCHER = r'^\[([\s\S]*)\]$'
     FMT_LEN = 3
@@ -169,9 +169,9 @@ class INIParser:
         Returns:
             Type of the attribute.
         """
-        fmt = cls.fmt_dict.get(os.path.join(section, option))
+        fmt = cls.fmt_dict.get(os.path.join(section, option), str())
         if not fmt:
-            fmt = cls.fmt_dict.get(section)
+            fmt = cls.fmt_dict.get(section, str())
         return cls.known_types.get(fmt, str)
 
     @classmethod
@@ -198,7 +198,7 @@ class INIParser:
     @classmethod
     def _import_ini(cls, protocol_file: str) -> Dict[str, Dict]:
         ini_parser = cls.read_ini(protocol_file)
-        kwargs = {}
+        kwargs : Dict[str, Dict] = {}
         for section in cls.attr_dict:
             kwargs[section] = {}
             if 'ALL' in cls.attr_dict[section]:
@@ -251,11 +251,15 @@ class INIParser:
         crop_dict = {key: self._format(val) for key, val in self.export_dict().items()}
         return crop_dict.__str__()
 
-    def __eq__(self, obj: INIParser) -> bool:
-        return self.export_dict() == obj.export_dict()
+    def __eq__(self, obj: object) -> bool:
+        if isinstance(obj, INIParser):
+            return self.export_dict() == obj.export_dict()
+        return NotImplemented
 
-    def __ne__(self, obj: INIParser) -> bool:
-        return self.export_dict() != obj.export_dict()
+    def __ne__(self, obj: object) -> bool:
+        if isinstance(obj, INIParser):
+            return self.export_dict() != obj.export_dict()
+        return NotImplemented
 
     def keys(self) -> KeysView:
         return self.attr_dict.keys()
@@ -321,5 +325,5 @@ class INIParser:
         Returns:
             A parser object with all the parsing specifications
             contained in the object.
-        """        
-        return type(self).export_ini(**self.ini_dict)
+        """
+        return self.export_ini.__get__(None, type(self))(**self.ini_dict)

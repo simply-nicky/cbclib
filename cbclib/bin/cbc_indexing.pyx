@@ -2,7 +2,7 @@ cimport numpy as np
 import numpy as np
 import cython
 from libc.stdlib cimport free, calloc, malloc, realloc
-from libc.math cimport exp, sqrt, cos, sin, acos, atan2, fabs
+from libc.math cimport exp, sqrt, cos, sin, acos, atan2, fabs, log
 from libc.float cimport DBL_EPSILON
 from cython.parallel import parallel, prange
 from .image_proc cimport check_array, normalize_sequence
@@ -99,6 +99,57 @@ def tilt_matrix(np.ndarray tilts not None, object axis not None):
     cdef int fail = 0
     with nogil:
         fail = compute_tilt_matrix(rm_ptr, t_ptr, n_mats, a0, a1, a2)
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+
+    if n_mats == 1:
+        return rot_mats[0]
+    return rot_mats
+
+def find_rotations(np.ndarray a not None, np.ndarray b not None):
+    a = check_array(a, np.NPY_FLOAT64)
+
+    cdef np.npy_intp *new_dims
+    cdef np.PyArray_Dims *new_shape
+    if a.ndim == 1:
+        new_dims = <np.npy_intp *>malloc(2 * sizeof(np.npy_intp))
+        new_dims[0] = 1; new_dims[1] = a.shape[0]
+
+        new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+        new_shape[0].ptr = new_dims; new_shape[0].len = 2
+        
+        a = np.PyArray_Newshape(a, new_shape, np.NPY_CORDER)
+        free(new_dims); free(new_shape)
+
+    if a.ndim != 2 or a.shape[1] != 3:
+        raise ValueError('a has incompatible shape')
+
+    b = check_array(b, np.NPY_FLOAT64)
+
+    if b.ndim == 1:
+        new_dims = <np.npy_intp *>malloc(2 * sizeof(np.npy_intp))
+        new_dims[0] = 1; new_dims[1] = b.shape[0]
+
+        new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+        new_shape[0].ptr = new_dims; new_shape[0].len = 2
+        
+        b = np.PyArray_Newshape(b, new_shape, np.NPY_CORDER)
+        free(new_dims); free(new_shape)
+
+    if b.ndim != 2 or b.shape[1] != 3 or b.shape[0] != a.shape[0]:
+        raise ValueError('b has incompatible shape')
+
+    cdef np.npy_intp *rmdims = [a.shape[0], 3, 3]
+    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+
+    cdef double *a_ptr = <double *>np.PyArray_DATA(a)
+    cdef double *b_ptr = <double *>np.PyArray_DATA(b)
+    cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
+    cdef unsigned long n_mats = a.shape[0]
+
+    cdef int fail = 0
+    with nogil:
+        fail = compute_rotations(rm_ptr, a_ptr, b_ptr, n_mats)
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -376,3 +427,11 @@ def calc_source_lines(np.float64_t[:, ::1] basis, np.int64_t[:, ::1] hkl, np.flo
     cdef np.ndarray mask = ArrayWrapper.from_ptr(<void *>_mask).to_ndarray(1, odims, np.NPY_BOOL)
     out = np.PyArray_Compress(out, mask, 0, <np.ndarray>NULL)
     return out, mask
+
+def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, int q_max, double epsilon): 
+    cdef double entropy = 0.0
+    cdef int i, n = x.size
+    with nogil:
+        for i in range(n):
+            entropy -= p[i] * log(<double>(q[x[i]]) / q_max + epsilon)
+    return entropy

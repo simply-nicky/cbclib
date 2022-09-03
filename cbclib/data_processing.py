@@ -1,6 +1,6 @@
 from __future__ import annotations
 from multiprocessing import cpu_count
-from typing import (Any, Dict, ItemsView, Iterable, Iterator, List, Optional, Set, Tuple, Union,
+from typing import (Any, Dict, ItemsView, Iterable, Iterator, KeysView, List, Optional, Set, Tuple, Union,
                     ValuesView)
 from dataclasses import dataclass, field
 from weakref import ref, ReferenceType
@@ -24,25 +24,23 @@ class ScanSetup(INIParser):
     rot_axis - axis of rotation
     smp_pos - sample position relative to the detector [m]
     """
-    attr_dict = {'exp_geom': ('foc_pos', 'rot_axis', 'smp_pos', 'wavelength',
-                              'x_pixel_size', 'y_pixel_size', 'kin_db', 'kin_min', 'kin_max')}
+    attr_dict = {'exp_geom': ('foc_pos', 'rot_axis', 'wavelength', 'x_pixel_size',
+                              'y_pixel_size', 'kin_min', 'kin_max')}
     fmt_dict = {'exp_geom': 'float'}
 
     foc_pos         : np.ndarray
     rot_axis        : np.ndarray
-    smp_pos         : np.ndarray
-    kin_db          : np.ndarray
     kin_min         : np.ndarray
     kin_max         : np.ndarray
     wavelength      : float
     x_pixel_size    : float
     y_pixel_size    : float
 
-    def __init__(self, foc_pos: FloatArray, rot_axis: FloatArray, smp_pos: FloatArray,
-                 kin_db: FloatArray, kin_min: FloatArray, kin_max: FloatArray,
-                 wavelength: float, x_pixel_size: float, y_pixel_size: float) -> None:
-        exp_geom = {'foc_pos': foc_pos, 'rot_axis': rot_axis, 'smp_pos': smp_pos, 'kin_db': kin_db,
-                    'kin_min': kin_min, 'kin_max': kin_max, 'wavelength': wavelength,
+    def __init__(self, foc_pos: FloatArray, rot_axis: FloatArray,
+                 kin_min: FloatArray, kin_max: FloatArray, wavelength: float,
+                 x_pixel_size: float, y_pixel_size: float) -> None:
+        exp_geom = {'foc_pos': foc_pos, 'rot_axis': rot_axis, 'kin_min': kin_min,
+                    'kin_max': kin_max, 'wavelength': wavelength,
                     'x_pixel_size': x_pixel_size, 'y_pixel_size': y_pixel_size}
         super(ScanSetup, self).__init__(exp_geom=exp_geom)
 
@@ -70,8 +68,8 @@ class ScanSetup(INIParser):
     def __str__(self) -> str:
         return self._format(self.export_dict()).__str__()
 
-    def keys(self) -> Iterable[str]:
-        return list(self)
+    def keys(self) -> KeysView[str]:
+        return self._lookup.keys()
 
     @classmethod
     def import_ini(cls, ini_file: str, **kwargs: Any) -> ScanSetup:
@@ -115,11 +113,11 @@ class ScanSetup(INIParser):
         det_y = source[2] * np.tan(theta) * np.sin(phi) + source[1]
         return det_x / self.x_pixel_size, det_y / self.y_pixel_size
 
-    def detector_to_kout(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-        return self._det_to_k(x, y, self.smp_pos)
+    def detector_to_kout(self, x: np.ndarray, y: np.ndarray, smp_pos: np.ndarray) -> np.ndarray:
+        return self._det_to_k(x, y, smp_pos)
 
-    def kout_to_detector(self, kout: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        return self._k_to_det(kout, self.smp_pos)
+    def kout_to_detector(self, kout: np.ndarray, smp_pos: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        return self._k_to_det(kout, smp_pos)
 
     def detector_to_kin(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         return self._det_to_k(x, y, self.foc_pos)
@@ -169,7 +167,7 @@ class Crop(Transform):
         roi : Region of interest. Comprised of four elements `[y_min, y_max,
             x_min, x_max]`.
     """
-    def __init__(self, roi: Iterable[int]) -> None:
+    def __init__(self, roi: Union[List[int], Tuple[int, int, int, int], np.ndarray]) -> None:
         """
         Args:
             roi : Region of interest. Comprised of four elements `[y_min, y_max,
@@ -177,13 +175,17 @@ class Crop(Transform):
         """
         self.roi = roi
 
-    def __eq__(self, obj: Crop) -> bool:
-        return self.roi[0] == obj.roi[0] and self.roi[1] == obj.roi[1] and \
-               self.roi[2] == obj.roi[2] and self.roi[3] == obj.roi[3]
+    def __eq__(self, obj: object) -> bool:
+        if isinstance(obj, Crop):
+            return self.roi[0] == obj.roi[0] and self.roi[1] == obj.roi[1] and \
+                   self.roi[2] == obj.roi[2] and self.roi[3] == obj.roi[3]
+        return NotImplemented
 
-    def __ne__(self, obj: Crop) -> bool:
-        return self.roi[0] != obj.roi[0] or self.roi[1] != obj.roi[1] or \
-               self.roi[2] != obj.roi[2] or self.roi[3] != obj.roi[3]
+    def __ne__(self, obj: object) -> bool:
+        if isinstance(obj, Crop):
+            return self.roi[0] != obj.roi[0] or self.roi[1] != obj.roi[1] or \
+                   self.roi[2] != obj.roi[2] or self.roi[3] != obj.roi[3]
+        return NotImplemented
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return (ss_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]],
@@ -344,7 +346,7 @@ class ComposeTransforms(Transform):
     def __iter__(self) -> Iterator[Transform]:
         return self.transforms.__iter__()
 
-    def __getitem__(self, idx: Indices) -> Transform:
+    def __getitem__(self, idx: Union[int, slice]) -> Union[Transform, List[Transform]]:
         return self.transforms[idx]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -577,7 +579,8 @@ class CrystData(DataContainer):
         """
         if attributes is None:
             attributes = self.keys()
-        data_dict = {}
+
+        data_dict: Dict[str, Any] = {}
         for attr in self.input_file.protocol.str_to_list(attributes):
             data = self.get(attr)
             if attr in self and isinstance(data, np.ndarray):
@@ -612,6 +615,9 @@ class CrystData(DataContainer):
             and `whitefield`.
         """
         if good_frames is None:
+            if not self._isdata:
+                raise ValueError('No data in the container')
+
             good_frames = np.where(self.data.sum(axis=(1, 2)) > 0)[0]
         return {'good_frames': np.asarray(good_frames)}
 
@@ -633,13 +639,13 @@ class CrystData(DataContainer):
                     normalization using eigen flat fields in X-ray imaging," Opt.
                     Express 23, 27975-27989 (2015).
         """
-        if self._iswhitefield:
-            mat_svd = np.tensordot(self.cor_data, self.cor_data, axes=((1, 2), (1, 2)))
-            eig_vals, eig_vecs = np.linalg.eig(mat_svd)
-            effs = np.tensordot(eig_vecs, self.cor_data, axes=((0,), (0,)))
-            return dict(zip(eig_vals / eig_vals.sum(), effs))
+        if not self._iswhitefield:
+            raise AttributeError("No whitefield in the container")
 
-        raise AttributeError("No whitefield in the container")
+        mat_svd = np.tensordot(self.cor_data, self.cor_data, axes=((1, 2), (1, 2)))
+        eig_vals, eig_vecs = np.linalg.eig(mat_svd)
+        effs = np.tensordot(eig_vecs, self.cor_data, axes=((0,), (0,)))
+        return dict(zip(eig_vals / eig_vals.sum(), effs))
 
     @dict_to_object
     def mask_region(self, roi: Iterable[int]) -> CrystData:
@@ -653,6 +659,9 @@ class CrystData(DataContainer):
         Returns:
             New :class:`CrystData` object with the updated `mask`.
         """
+        if not self._isdata:
+            raise ValueError('No data in the container')
+
         mask = self.mask.copy()
         mask[:, roi[0]:roi[1], roi[2]:roi[3]] = False
 
@@ -733,13 +742,13 @@ class CrystData(DataContainer):
         Returns:
             New :class:`CrystData` object with the updated `whitefield`.
         """
-        if whitefield.shape != self.shape[1:]:
+        if sum(self.shape[1:]) and whitefield.shape != self.shape[1:]:
             raise ValueError('whitefield and data have incompatible shapes: '\
                              f'{whitefield.shape} != {self.shape[1:]}')
         return {'whitefield': whitefield, 'cor_data': None}
 
     @dict_to_object
-    def update_cor_data(self) -> None:
+    def update_cor_data(self) -> CrystData:
         return {'cor_data': None}
 
     @dict_to_object
@@ -792,7 +801,7 @@ class CrystData(DataContainer):
                 if effs is None:
                     raise ValueError('No eigen flat fields were provided')
 
-                project_effs(data=self.data, mask=self.mask, effs=effs,
+                project_effs(self.data, mask=self.mask, effs=effs,
                              out=bgd, num_threads=self.num_threads)
 
             else:
@@ -827,6 +836,9 @@ class CrystData(DataContainer):
         Returns:
             New :class:`CrystData` object with the updated `mask`.
         """
+        if not self._isdata:
+            raise ValueError('No data in the container')
+
         if update == 'reset':
             data = self.data
         elif update == 'multiply':
@@ -896,6 +908,9 @@ class CrystData(DataContainer):
         Returns:
             New :class:`CrystData` object with the updated `whitefield`.
         """
+        if not self._isdata:
+            raise ValueError('No data in the container')
+
         if method == 'median':
             whitefield = median(self.data[self.good_frames], mask=self.mask[self.good_frames],
                                 axis=0, num_threads=self.num_threads)
@@ -907,8 +922,8 @@ class CrystData(DataContainer):
         return {'whitefield': whitefield, 'cor_data': None}
 
     def get_detector(self, import_contents: bool=False) -> StreakDetector:
-        if self.cor_data is None:
-            raise ValueError("No 'cor_data' in the container")
+        if not self._iswhitefield:
+            raise ValueError("No whitefield in the container")
 
         data = np.asarray(self.cor_data[self.good_frames], order='C', dtype=np.float32)
         frames = dict(zip(self.good_frames, self.frames[self.good_frames]))
@@ -1042,13 +1057,13 @@ class StreakDetector(DataContainer):
         self._init_attributes()
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> Tuple[int, ...]:
         return self.data.shape
 
     @dict_to_object
     def update_lsd(self, scale: float=0.9, sigma_scale: float=0.9,
                    log_eps: float=0., ang_th: float=60.0, density_th: float=0.5,
-                   quant: float=2e-2) -> StreakDetector:
+                   quant: float=2e-2) -> Dict:
         return {'lsd_obj': LSD(scale=scale, sigma_scale=sigma_scale, log_eps=log_eps,
                                ang_th=ang_th, density_th=density_th, quant=quant)}
 

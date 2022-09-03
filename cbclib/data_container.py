@@ -1,14 +1,10 @@
 """:class:`DataContainer` class implementation.
 """
 from __future__ import annotations
-from typing import (Any, Callable, Dict, ItemsView, Iterable,
-                    List, Optional, ValuesView, TypeVar, Type)
+from typing import (Any, Callable, Dict, ItemsView, Iterator,
+                    List, Optional, Set, ValuesView, TypeVar, Type)
 
-T = TypeVar('T')
-
-class BoundMethod:
-    __func__: Callable[..., Dict]
-    __self__: T
+T = TypeVar('T', bound='DataContainer')
 
 class dict_to_object:
     """Creates a new bound method. Wraps a function implementation of a
@@ -26,32 +22,29 @@ class dict_to_object:
         """
         self.finstance = finstance
 
-    def __get__(self, instance: T, cls: Type[T]):
-        return return_obj_method(self.finstance.__get__(instance, cls), instance, cls)
+    def __get__(self, instance: T, cls: Type[T]) -> Callable[..., T]:
+        if hasattr(self.finstance, '__get__'):
+            return BoundMethod(self.finstance.__get__(instance, cls), instance, cls)
+        return BoundMethod(self.finstance, instance, cls)
 
-class return_obj_method:
+class BoundMethod:
     """Factory class that uses a bound method to return an instance of an
     object instead of a dictionary.
 
     Attributes:
         instance : Object instance.
         cls : Object class.
-        sig_attrs : Signature attributes.
+        func : Method function.
     """
-    sig_attrs = {'__annotations__', '__doc__', '__module__',
-                 '__name__', '__qualname__'}
 
-    def __init__(self, method: BoundMethod, instance: T, cls: Type[T]) -> None:
+    def __init__(self, func: Callable[..., Dict], instance: T, cls: Type[T]) -> None:
         """
         Args:
             method : Wrapped method that returns a dictionary.
             instance : Object instance.
             cls : Object class.
         """
-        self.instance, self.cls = instance, cls
-        self.__wrapped__ = method
-        for attr in self.sig_attrs:
-            self.__dict__[attr] = getattr(method, attr)
+        self.__func__, self.__self__, self.cls = func, instance, cls
 
     def __call__(self, *args: Any, **kwargs: Any) -> T:
         """Return an object from the dictionary yielded by
@@ -65,8 +58,8 @@ class return_obj_method:
             A new object instance.
         """
         dct = {}
-        dct.update(self.__wrapped__(*args, **kwargs))
-        for key, val in self.instance.items():
+        dct.update(self.__func__(*args, **kwargs))
+        for key, val in self.__self__.items():
             if key not in dct:
                 dct[key] = val
         return self.cls(**dct)
@@ -79,9 +72,9 @@ class return_obj_method:
             args : Positional arguments.
             kwargs : Keyword arguments.
         """
-        dct = self.__wrapped__(*args, **kwargs)
+        dct = self.__func__(*args, **kwargs)
         for key, val in dct.items():
-            self.instance.__setattr__(key, val)
+            self.__self__.__setattr__(key, val)
 
 class DataContainer:
     """Abstract data container class.
@@ -91,7 +84,8 @@ class DataContainer:
             to initialize in the constructor.
         init_set : Set of optional data attributes.
     """
-    attr_set, init_set = set(), set()
+    attr_set: Set[str] = set()
+    init_set: Set[str] = set()
 
     def __init__(self, **kwargs: Any) -> None:
         """
@@ -116,7 +110,7 @@ class DataContainer:
             else:
                 raise ValueError(f'Parameter {attr} is invalid')
 
-        self.init_funcs = {}
+        self.init_funcs: Dict[str, Callable] = {}
 
     def _init_functions(self, **kwargs: Callable) -> None:
         self.init_funcs.update(**kwargs)
@@ -126,7 +120,7 @@ class DataContainer:
             if self.__dict__.get(attr, None) is None:
                 self.__setattr__(attr, init_func())
 
-    def __iter__(self) -> Iterable:
+    def __iter__(self) -> Iterator:
         return (self.attr_set | self.init_set).__iter__()
 
     def __contains__(self, attr: str) -> bool:
@@ -164,7 +158,7 @@ class DataContainer:
         """
         return [attr for attr in self if self.get(attr) is not None]
 
-    def keys(self) -> Iterable[str]:
+    def keys(self) -> List[str]:
         """Return a list of the attributes available in the container.
 
         Returns:

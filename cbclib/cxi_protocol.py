@@ -20,7 +20,7 @@ from multiprocessing import Pool
 import os
 from configparser import ConfigParser
 from types import TracebackType
-from typing import (Callable, Dict, ItemsView, Iterable, Iterator, KeysView,
+from typing import (Callable, Dict, ItemsView, Iterator, KeysView,
                     List, Optional, Tuple, Union, ValuesView)
 import h5py
 import numpy as np
@@ -472,7 +472,7 @@ class CXIStore():
         """
         return self._indices.items()
 
-    def read_shape(self) -> None:
+    def read_shape(self) -> Tuple[int, int]:
         if self:
             for attr, indices in self._indices.items():
                 kind = self.protocol.get_kind(attr)
@@ -610,7 +610,7 @@ class CXIStore():
                                          dtype=self.protocol.get_dtype(attr, data.dtype))
 
     def save_attribute(self, attr: str, data: np.ndarray, mode: str='overwrite',
-                       idxs: Optional[Iterable[int]]=None) -> None:
+                       idxs: Optional[Indices]=None) -> None:
         """Save a data array pertained to the data attribute into the first file.
 
         Args:

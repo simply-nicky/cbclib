@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, ClassVar, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List, Optional, Set, Tuple, Union, ValuesView
 from dataclasses import InitVar, dataclass, field
 from weakref import ReferenceType, ref
 import numpy as np
@@ -7,7 +7,7 @@ import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
                   gaussian_grid_grad, cartesian_to_spherical, spherical_to_cartesian,
-                  euler_matrix, calc_source_lines)
+                  euler_matrix, calc_source_lines, find_rotations, cross_entropy)
 from .data_processing import ScanSetup, Crop, Streaks, Indices
 
 IntArray = Union[List[int], Tuple[int, ...], np.ndarray]
@@ -50,26 +50,25 @@ class ScanStreaks():
         return Crop((self.dataframe['y'].min(), self.dataframe['y'].max(),
                      self.dataframe['x'].min(), self.dataframe['x'].max()))
 
-    def create_qmap(self, thetas: Dict[int, float], qx_arr: np.ndarray, qy_arr: np.ndarray,
+    def create_qmap(self, samples: ScanSamples, qx_arr: np.ndarray, qy_arr: np.ndarray,
                     qz_arr: np.ndarray) -> Map3D:
         q_map = np.zeros((qx_arr.size, qy_arr.size, qz_arr.size), dtype=self.dtype)
+        first_frame = self.dataframe['frames'].min()
 
         for frame, df_frame in self.dataframe.groupby('frames'):
-            q_frame = self.setup.detector_to_kout(df_frame.loc[:, 'x'],
-                                                   df_frame.loc[:, 'y']) - self.setup.kin_center
-            q_frame = q_frame.dot(self.setup.tilt_matrices(thetas[frame]).T)
+            kout = samples[frame].detector_to_kout(df_frame['x'], df_frame['y'], self.setup)
+            q_frame = kout - self.setup.kin_center
+            q_frame = q_frame.dot(samples.rotation_matrix(first_frame, frame)[(first_frame, frame)].T)
             x_idxs = np.searchsorted(qx_arr, q_frame[:, 0])
             y_idxs = np.searchsorted(qy_arr, q_frame[:, 1])
             z_idxs = np.searchsorted(qz_arr, q_frame[:, 2])
             mask = (x_idxs < qx_arr.size) & (y_idxs < qy_arr.size) & (z_idxs < qz_arr.size)
-            q_map[x_idxs[mask], y_idxs[mask], z_idxs[mask]] += df_frame.loc[:, 'p'][mask]
+            q_map[x_idxs[mask], y_idxs[mask], z_idxs[mask]] += df_frame['p'][mask]
         return Map3D(q_map, qx_arr, qy_arr, qz_arr)
 
-    def refine_indexing(self, frame: int, tol: Tuple[float, float, float], basis: Basis, q_abs: float,
-                        width: float) -> IndexProblem:
-        model = CBDModel(basis, self.crop, self.setup)
-        hkl = model.generate_hkl(q_abs)
-        return IndexProblem(parent=ref(self), tol=tol, sph_mat=basis.to_spherical(), hkl=hkl,
+    def refine_indexing(self, frame: int, tol: Tuple[float, float, float], sample: Sample,
+                        q_abs: float, width: float) -> IndexProblem:
+        return IndexProblem(parent=ref(self), tol=tol, sample=sample, q_abs=q_abs,
                             width=width, pattern=self.pattern_dict(frame))
 
     def isunique(self) -> bool:
@@ -81,7 +80,7 @@ class ScanStreaks():
     def pattern_dataframe(self, frame: int) -> pd.DataFrame:
         df_frame = self.dataframe[self.dataframe['frames'] == frame]
         mask = (self.crop.roi[0] < df_frame['y']) & (df_frame['y'] < self.crop.roi[1]) & \
-               (self.crop.roi[2] < df_frame['x']) & (df_frame['x'] < self.crop.roi[3]) 
+               (self.crop.roi[2] < df_frame['x']) & (df_frame['x'] < self.crop.roi[3])
         df_frame = df_frame[mask]
         df_frame['x'], df_frame['y'] = self.crop.forward_points(df_frame['x'], df_frame['y'])
         return df_frame
@@ -224,12 +223,15 @@ class Map3D():
         val = median_filter(self.val, footprint=structure, num_threads=num_threads)
         return Map3D(self.val - val, self.x, self.y, self.z)
 
-@dataclass
 class Basis():
-    mat : np.ndarray
+    def __init__(self, mat: np.ndarray):
+        self.mat = mat.reshape((3, 3))
 
-    def __post_init__(self):
-        self.mat = self.mat.reshape((3, 3))
+    def __str__(self) -> str:
+        return self.mat.__str__()
+
+    def __repr__(self) -> str:
+        return self.mat.__repr__()
 
     @classmethod
     def import_spherical(cls, sph_mat: np.ndarray) -> Basis:
@@ -254,8 +256,32 @@ class Basis():
         return Basis(np.stack((a_rec, b_rec, c_rec)) * scan_setup.wavelength)
 
 @dataclass
+class Sample():
+    basis: Basis
+    pos : np.ndarray
+    mat_columns : ClassVar[Tuple[str]] = ('ax', 'ay', 'az',
+                                          'bx', 'by', 'bz',
+                                          'cx', 'cy', 'cz')
+    pos_columns : ClassVar[Tuple[str]] = ('x' , 'y' , 'z' )
+
+    @classmethod
+    def import_dataframe(cls, dataframe: pd.Series) -> Basis:
+        return cls(basis=Basis(dataframe[list(cls.mat_columns)].to_numpy()),
+                   pos=dataframe[list(cls.pos_columns)].to_numpy())
+
+    def to_dataframe(self) -> pd.Series:
+        return pd.Series(np.concatenate((self.basis.mat.ravel(), self.pos)),
+                         index=self.mat_columns + self.pos_columns)
+
+    def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup) -> np.ndarray:
+        return setup.detector_to_kout(x, y, self.pos)
+
+    def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup) -> Tuple[np.ndarray, np.ndarray]:
+        return setup.kout_to_detector(kout, self.pos)
+
+@dataclass
 class CBDModel():
-    basis   : Basis
+    sample  : Sample
     crop    : Crop
     setup   : ScanSetup
 
@@ -264,29 +290,30 @@ class CBDModel():
         return (self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     def generate_hkl(self, q_abs: float) -> np.ndarray:
-        lat_size = np.rint(q_abs / self.basis.to_spherical()[:, 0]).astype(int)
+        lat_size = np.rint(q_abs / self.sample.basis.to_spherical()[:, 0]).astype(int)
         h_idxs = np.arange(-lat_size[0], lat_size[0] + 1)
         k_idxs = np.arange(-lat_size[1], lat_size[1] + 1)
         l_idxs = np.arange(-lat_size[2], lat_size[2] + 1)
         h_grid, k_grid, l_grid = np.meshgrid(h_idxs, k_idxs, l_idxs)
         hkl = np.stack((h_grid.ravel(), k_grid.ravel(), l_grid.ravel()), axis=1)
+        hkl = np.compress(hkl.any(axis=1), hkl, axis=0)
 
-        rec_vec = hkl.dot(self.basis.mat)
+        rec_vec = hkl.dot(self.sample.basis.mat)
         rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
         rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
 
         mask = np.abs(np.sin(rec_th - np.arccos(0.5 * rec_abs))) < np.sqrt(self.setup.kin_max[0]**2 +
                                                                            self.setup.kin_max[1]**2)
-        mask &= (rec_abs != 0.0) & (rec_abs < q_abs)
+        mask &= (rec_abs < q_abs)
         return hkl[mask]
 
     def generate_streaks(self, hkl: np.ndarray, width: float) -> Streaks:
-        kin, mask = calc_source_lines(basis=self.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
+        kin, mask = calc_source_lines(basis=self.sample.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
                                       kin_max=self.setup.kin_max)
         idxs = np.arange(hkl.shape[0])[mask]
-        kout = kin + hkl[idxs].dot(self.basis.mat)[:, None]
+        kout = kin + hkl[idxs].dot(self.sample.basis.mat)[:, None]
 
-        x, y = self.setup.kout_to_detector(kout)
+        x, y = self.sample.kout_to_detector(kout, self.setup)
         mask = (self.crop.roi[0] < y).any(axis=1) & (y < self.crop.roi[1]).any(axis=1) & \
                (self.crop.roi[2] < x).any(axis=1) & (x < self.crop.roi[3]).any(axis=1)
         (x, y), idxs = self.crop.forward_points(x[mask], y[mask]), idxs[mask]
@@ -302,30 +329,22 @@ class CBDModel():
 class IndexProblem:
     parent    : ReferenceType[ScanStreaks]
     tol       : InitVar[Tuple[float, float, float]]
-    sph_mat   : np.ndarray
-    hkl       : np.ndarray
+    sample    : InitVar[Sample]
+    q_abs     : InitVar[float]
     width     : float
-    setup     : ScanSetup = field(init=False)
-    crop      : Crop = field(init=False)
     pattern   : InitVar[Dict[str, np.ndarray]]
 
-    dp        : ClassVar[float] = 1e-3
+    crop      : Crop = field(init=False)
+    hkl       : np.ndarray = field(init=False)
+    setup     : ScanSetup = field(init=False)
+
+    q_max     : ClassVar[int] = 1000
     epsilon   : ClassVar[float] = 1e-12
     footprint : ClassVar[np.ndarray] = np.array([[False, False,  True, False, False],
                                                  [False,  True,  True,  True, False],
                                                  [ True,  True,  True,  True,  True],
                                                  [False,  True,  True,  True, False],
                                                  [False, False,  True, False, False]])
-
-    def _generate_new_setup(self, x: np.ndarray) -> ScanSetup:
-        setup_dict = self.setup.export_dict()
-        setup_dict['smp_pos'] = setup_dict['smp_pos'] * x[6:9]
-        return ScanSetup(**setup_dict)
-
-    def _generate_old_setup(self, x: np.ndarray) -> ScanSetup:
-        setup_dict = self.setup.export_dict()
-        setup_dict['smp_pos'] = setup_dict['smp_pos'] * x[6:9]
-        return ScanSetup(**setup_dict)
 
     @property
     def shape(self) -> Tuple[int, int]:
@@ -336,55 +355,64 @@ class IndexProblem:
         state['parent'] = None
         return state
 
-    def __post_init__(self, tol: Tuple[float, float, float], pattern: Dict[str, np.ndarray]):
+    def _new_position(self, x) -> np.ndarray:
+        return x[6:9] * self._pos
+
+    def _old_position(self, x) -> np.ndarray:
+        return self._pos
+
+    def __post_init__(self, tol: Tuple[float, float, float], sample: Sample, q_abs: float,
+                      pattern: Dict[str, np.ndarray]):
         self.setup, self.crop = self.parent().setup, self.parent().crop
+        self._sph_mat, self._pos = sample.basis.to_spherical(), sample.pos
         self._ij, self._p = self._pattern_to_ij_and_q(pattern)
         self._idxs = np.arange(self._ij.size)
 
         if tol[2]:
             self._bounds = ([1.0 - tol[0],] * 3 + [-tol[1],] * 3 + [1.0 - tol[2],] * 3,
                             [1.0 + tol[0],] * 3 + [tol[1],] * 3 + [1.0 + tol[2],] * 3)
-            self._generate_setup = self._generate_new_setup
+            self._position = self._new_position
+            self.update_hkl(np.concatenate((np.ones(3), np.zeros(3), np.ones(3))), q_abs)
         else:
             self._bounds = ([1.0 - tol[0],] * 3 + [-tol[1],] * 3,
                             [1.0 + tol[0],] * 3 + [tol[1],] * 3)
-            self._generate_setup = self._generate_old_setup
+            self._position = self._old_position
+            self.update_hkl(np.concatenate((np.ones(3), np.zeros(3))), q_abs)
 
     def _pattern_to_ij_and_q(self, pattern: Dict[str, np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
         return pattern['x'] + self.shape[1] * pattern['y'], pattern['p']
 
-    def generate_basis(self, x: np.ndarray) -> Basis:
-        new_mat = np.concatenate(((self.sph_mat[:, 0] * x[:3])[:, None],
-                                   self.sph_mat[:, 1:]), axis=1)
-        return Basis.import_spherical(new_mat).rotate_euler(x[3:6])
-
-    def generate_setup(self, x: np.ndarray) -> ScanSetup:
-        return self._generate_setup(x)
+    def generate_sample(self, x: np.ndarray) -> Sample:
+        new_mat = np.concatenate(((self._sph_mat[:, 0] * x[:3])[:, None],
+                                   self._sph_mat[:, 1:]), axis=1)
+        return Sample(Basis.import_spherical(new_mat).rotate_euler(x[3:6]),
+                      self._position(x))
 
     def generate_model(self, x: np.ndarray) -> CBDModel:
-        return CBDModel(self.generate_basis(x), self.crop, self.generate_setup(x))
+        return CBDModel(self.generate_sample(x), self.crop, self.setup)
 
     def generate_streaks(self, x: np.ndarray) -> Streaks:
         return self.generate_model(x).generate_streaks(self.hkl, self.width)
 
     def pattern_dataframe(self, x: np.ndarray) -> pd.DataFrame:
         return self.generate_model(x).pattern_dataframe(hkl=self.hkl, width=self.width,
-                                                        dp=self.dp, profile='linear')
+                                                        dp=1.0 / self.q_max, profile='linear')
 
     def pattern_image(self, x: np.ndarray) -> np.ndarray:
         streaks = self.generate_streaks(x)
-        return streaks.pattern_image(self.shape, dp=self.dp, profile='linear')
+        return streaks.pattern_image(self.shape, dp=1.0 / self.q_max, profile='linear')
+
+    def pattern_mask(self, x: np.ndarray) -> np.ndarray:
+        streaks = self.generate_streaks(x)
+        return streaks.pattern_mask(self.shape, max_val=self.q_max, profile='linear')
 
     def pattern_dict(self, x: np.ndarray) -> Dict[str, np.ndarray]:
         streaks = self.generate_streaks(x)
-        return streaks.pattern_dict(self.shape, dp=self.dp, profile='linear')
+        return streaks.pattern_dict(self.shape, dp=1.0 / self.q_max, profile='linear')
 
     def fitness(self, x: np.ndarray) -> List[float]:
-        ij, q = self._pattern_to_ij_and_q(self.pattern_dict(x))
-        _, p_int, q_int = np.intersect1d(self._ij, ij, return_indices=True)
-        p_diff = np.setdiff1d(self._idxs, p_int, assume_unique=True)
-        return [-np.sum(self._p[p_int] * np.log(q[q_int] + self.epsilon))
-                -np.log(self.epsilon) * np.sum(self._p[p_diff]),]
+        return [cross_entropy(x=self._ij, p=self._p, q=self.pattern_mask(x).ravel(),
+                              q_max=self.q_max, epsilon=self.epsilon),]
 
     def get_bounds(self) -> Tuple[List[float], List[float]]:
         return self._bounds
@@ -416,3 +444,56 @@ class IndexProblem:
         ij_sim = np.where(labels.ravel())[0]
         df_idxs = df_frame.index[df_frame['ij'].searchsorted(ij_sim)]
         self.parent().dataframe.loc[df_idxs, ['h', 'k', 'l']] = self.hkl[labels.ravel()[ij_sim], :]
+
+MapSamples = Union[Iterable[Tuple[int, Sample]], Dict[int, Sample]]
+
+class ScanSamples:
+    def __init__(self, items: MapSamples=[]):
+        self._dct = dict(items)
+
+    @classmethod
+    def import_dataframe(cls, df: pd.DataFrame) -> ScanSamples:
+        frames = df.index
+        samples = df.apply(Sample.import_dataframe, axis=1)
+        return cls(zip(frames, samples))
+
+    def __getitem__(self, frame: int) -> Sample:
+        return self._dct.__getitem__(frame)
+
+    def __setitem__(self, frame: int, smp: Sample):
+        self._dct.__setitem__(frame, smp)
+
+    def __iter__(self) -> Iterator[int]:
+        return self._dct.__iter__()
+
+    def __contains__(self, frame: int) -> bool:
+        return self._dct.__contains__(frame)
+
+    def __str__(self) -> str:
+        return self._dct.__str__()
+
+    def __repr__(self) -> str:
+        return self._dct.__repr__()
+
+    def keys(self) -> KeysView[str]:
+        return self._dct.keys()
+
+    def values(self) -> ValuesView[Sample]:
+        return self._dct.values()
+
+    def items(self) -> ItemsView[str, Sample]:
+        return self._dct.items()
+
+    def to_dict(self) -> Dict[str, Sample]:
+        return dict(self._dct)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        return pd.DataFrame((sample.to_dataframe() for sample in self.values()), index=self.keys())
+
+    def rotation_matrix(self, first_frames: Union[int, Iterable[int]],
+                        second_frames: Union[int, Iterable[int]]) -> Dict[Tuple[int, int], np.ndarray]:
+        first_frames, second_frames = np.atleast_1d(first_frames), np.atleast_1d(second_frames)
+        a_vecs = np.stack([self[frame].basis.mat[0] for frame in first_frames])
+        b_vecs = np.stack([self[frame].basis.mat[0] for frame in second_frames])
+        rot_mats = find_rotations(a_vecs, b_vecs).reshape((-1, 3, 3))
+        return {(f1, f2): rot_mat for f1, f2, rot_mat in zip(first_frames, second_frames, rot_mats)}

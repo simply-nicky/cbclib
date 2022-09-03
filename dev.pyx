@@ -37,3 +37,11 @@ def kernel_regression(np.ndarray y not None, np.ndarray x not None, np.ndarray x
         raise RuntimeError('C backend exited with error.')
 
     return y_hat
+
+def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, int q_max, double epsilon): 
+    cdef double entropy = 0.0
+    cdef int i, n = x.size
+    with nogil:
+        for i in range(n):
+            entropy -= p[i] * log(<double>(q[x[i]]) / q_max + epsilon)
+    return entropy

@@ -5,7 +5,7 @@ of convergent beam crystallography datasets.
 
 (c) Nikolay Ivanov, 2021.
 """
-from .cbc_indexing import ScanStreaks, Map3D, Basis, CBDModel, IndexProblem
+from .cbc_indexing import ScanStreaks, Map3D, Basis, Sample, ScanSamples, CBDModel, IndexProblem
 from .cxi_protocol import CXIProtocol, CXIStore
 from .log_protocol import LogProtocol, converter_petra
 from .data_processing import Crop, Downscale, ComposeTransforms, CrystData, StreakDetector, Streaks, ScanSetup
