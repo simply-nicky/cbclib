@@ -1,5 +1,6 @@
 from __future__ import annotations
-from typing import Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List, Optional, Set, Tuple, Union, ValuesView
+from typing import (Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List,
+                    Optional, Set, Tuple, Union, ValuesView)
 from dataclasses import InitVar, dataclass, field
 from weakref import ReferenceType, ref
 import numpy as np
@@ -8,7 +9,9 @@ from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
                   gaussian_grid_grad, cartesian_to_spherical, spherical_to_cartesian,
                   euler_matrix, calc_source_lines, find_rotations, cross_entropy)
-from .data_processing import ScanSetup, Crop, Streaks, Indices
+from .data_container import Crop
+from .data_processing import ScanSetup, Streaks
+from .cxi_protocol import Indices
 
 IntArray = Union[List[int], Tuple[int, ...], np.ndarray]
 
