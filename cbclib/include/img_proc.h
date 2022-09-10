@@ -70,9 +70,10 @@ int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size
 int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
     size_t *ldims, float cutoff, float threshold, float dilation);
 
-int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats);
-int compute_euler_matrix(double *rot_mats, double *eulers, size_t n_mats);
-int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double a0, double a1, double a2);
+int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats);
+int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats);
+int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats);
+int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats);
 int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats);
 
 #endif

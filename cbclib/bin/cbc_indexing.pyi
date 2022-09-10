@@ -7,7 +7,10 @@ def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
 def euler_matrix(angles: np.ndarray) -> np.ndarray:
     ...
 
-def tilt_matrix(tilts: np.ndarray, axis: Union[List[int], Tuple[int, ...], np.ndarray]) -> np.ndarray:
+def tilt_angles(rot_mats: np.ndarray) -> np.ndarray:
+    ...
+
+def tilt_matrix(angles: np.ndarray) -> np.ndarray:
     ...
 
 def find_rotations(a: np.ndarray, b: np.ndarray) -> np.ndarray:

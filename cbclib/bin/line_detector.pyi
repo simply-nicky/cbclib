@@ -57,7 +57,7 @@ class LSD:
 
     def detect(self, image: np.ndarray, cutoff: float, filter_threshold: float=0.0,
                group_threshold: float=0.6, filter: bool=True, group: bool=True, n_group: int=2,
-               dilation: float=6.0, return_labels: bool=False, num_threads: int=1) -> Dict[str, Dict]:
+               dilation: float=6.0, return_labels: bool=False, num_threads: int=1) -> Dict[str, Dict[int, np.ndarray]]:
         """Perform the LSD streak detection on `image`.
 
         Parameters

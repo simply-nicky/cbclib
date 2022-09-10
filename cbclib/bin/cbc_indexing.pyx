@@ -82,23 +82,69 @@ def euler_matrix(np.ndarray angles not None):
         return rot_mats[0]
     return rot_mats
 
-def tilt_matrix(np.ndarray tilts not None, object axis not None):
-    cdef np.ndarray _axis = normalize_sequence(axis, 3, np.NPY_FLOAT64)
+def tilt_angles(np.ndarray rot_mats not None):
+    rot_mats = check_array(rot_mats, np.NPY_FLOAT64)
 
-    if tilts.ndim != 1:
-        raise ValueError('tilts has incompatible shape')
+    cdef np.npy_intp *new_dims
+    cdef np.PyArray_Dims *new_shape
+    if rot_mats.ndim == 2:
+        new_dims = <np.npy_intp *>malloc(3 * sizeof(np.npy_intp))
+        new_dims[0] = 1; new_dims[1] = rot_mats.shape[0]; new_dims[2] = rot_mats.shape[1]
+   
+        new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+        new_shape[0].ptr = new_dims; new_shape[0].len = 3
 
-    cdef np.npy_intp *rmdims = [tilts.shape[0], 3, 3]
-    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+        rot_mats = np.PyArray_Newshape(rot_mats, new_shape, np.NPY_CORDER)
+        free(new_dims); free(new_shape)    
 
-    cdef double *t_ptr = <double *>np.PyArray_DATA(tilts)
+    if rot_mats.ndim != 3 or (rot_mats.shape[1] != 3 or rot_mats.shape[2] != 3):
+        raise ValueError('rot_mats has incompatible shape')
+
+    cdef np.npy_intp *edims = [rot_mats.shape[0], 3]
+    cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT64)
+
+    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
     cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
-    cdef unsigned long n_mats = tilts.shape[0]
-    cdef double a0 = _axis[0], a1 = _axis[1], a2 = _axis[2]
+    cdef unsigned long n_mats = rot_mats.shape[0]
 
     cdef int fail = 0
     with nogil:
-        fail = compute_tilt_matrix(rm_ptr, t_ptr, n_mats, a0, a1, a2)
+        fail = compute_tilt_angles(e_ptr, rm_ptr, n_mats)
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+    
+    if rot_mats.shape[0] == 1:
+        return angles[0]
+    return angles
+
+def tilt_matrix(np.ndarray angles not None):
+    angles = check_array(angles, np.NPY_FLOAT64)
+
+    cdef np.npy_intp *new_dims
+    cdef np.PyArray_Dims *new_shape
+    if angles.ndim == 1:
+        new_dims = <np.npy_intp *>malloc(2 * sizeof(np.npy_intp))
+        new_dims[0] = 1; new_dims[1] = angles.shape[0]
+
+        new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+        new_shape[0].ptr = new_dims; new_shape[0].len = 2
+        
+        angles = np.PyArray_Newshape(angles, new_shape, np.NPY_CORDER)
+        free(new_dims); free(new_shape)
+
+    if angles.ndim != 2 or angles.shape[1] != 3:
+        raise ValueError('angles has incompatible shape')
+
+    cdef np.npy_intp *rmdims = [angles.shape[0], 3, 3]
+    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+
+    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
+    cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
+    cdef unsigned long n_mats = angles.shape[0]
+
+    cdef int fail = 0
+    with nogil:
+        fail = compute_tilt_matrix(rm_ptr, e_ptr, n_mats)
     if fail:
         raise RuntimeError('C backend exited with error.')
 

@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
-                  gaussian_grid_grad, cartesian_to_spherical, spherical_to_cartesian,
-                  euler_matrix, calc_source_lines, find_rotations, cross_entropy)
-from .data_container import Crop
-from .data_processing import ScanSetup, Streaks
+                  gaussian_grid_grad,  euler_angles, euler_matrix, tilt_angles,
+                  tilt_matrix, cross_entropy, calc_source_lines)
+from .data_container import Crop, DataContainer, ScanSetup, Basis
+from .data_processing import Streaks
 from .cxi_protocol import Indices
 
 IntArray = Union[List[int], Tuple[int, ...], np.ndarray]
@@ -49,10 +49,6 @@ class ScanStreaks():
     def _repr_html_(self) -> Optional[str]:
         return self.dataframe._repr_html_()
 
-    def get_crop(self) -> Crop:
-        return Crop((self.dataframe['y'].min(), self.dataframe['y'].max(),
-                     self.dataframe['x'].min(), self.dataframe['x'].max()))
-
     def create_qmap(self, samples: ScanSamples, qx_arr: np.ndarray, qy_arr: np.ndarray,
                     qz_arr: np.ndarray) -> Map3D:
         q_map = np.zeros((qx_arr.size, qy_arr.size, qz_arr.size), dtype=self.dtype)
@@ -61,24 +57,23 @@ class ScanStreaks():
         for frame, df_frame in self.dataframe.groupby('frames'):
             kout = samples[frame].detector_to_kout(df_frame['x'], df_frame['y'], self.setup)
             q_frame = kout - self.setup.kin_center
-            q_frame = q_frame.dot(samples.rotation_matrix(first_frame, frame)[(first_frame, frame)].T)
+            q_frame = q_frame.dot(samples.rotation(frame, first_frame)[0])
             x_idxs = np.searchsorted(qx_arr, q_frame[:, 0])
             y_idxs = np.searchsorted(qy_arr, q_frame[:, 1])
             z_idxs = np.searchsorted(qz_arr, q_frame[:, 2])
             mask = (x_idxs < qx_arr.size) & (y_idxs < qy_arr.size) & (z_idxs < qz_arr.size)
-            q_map[x_idxs[mask], y_idxs[mask], z_idxs[mask]] += df_frame['p'][mask]
+            np.add.at(q_map, (x_idxs[mask], y_idxs[mask], z_idxs[mask]), df_frame['p'][mask])
         return Map3D(q_map, qx_arr, qy_arr, qz_arr)
-
-    def refine_indexing(self, frame: int, tol: Tuple[float, float, float], sample: Sample,
-                        q_abs: float, width: float) -> IndexProblem:
-        return IndexProblem(parent=ref(self), tol=tol, sample=sample, q_abs=q_abs,
-                            width=width, pattern=self.pattern_dict(frame))
-
-    def isunique(self) -> bool:
-        return np.unique(self.dataframe.index).size == self.dataframe.index.size
 
     def drop_duplicates(self) -> pd.DataFrame:
         return ScanStreaks(self.dataframe.drop_duplicates(['frames', 'x', 'y']), self.setup)
+
+    def get_crop(self) -> Crop:
+        return Crop((self.dataframe['y'].min(), self.dataframe['y'].max(),
+                     self.dataframe['x'].min(), self.dataframe['x'].max()))
+
+    def isunique(self) -> bool:
+        return np.unique(self.dataframe.index).size == self.dataframe.index.size
 
     def pattern_dataframe(self, frame: int) -> pd.DataFrame:
         df_frame = self.dataframe[self.dataframe['frames'] == frame]
@@ -88,6 +83,9 @@ class ScanStreaks():
         df_frame['x'], df_frame['y'] = self.crop.forward_points(df_frame['x'], df_frame['y'])
         return df_frame
 
+    def pattern_dict(self, frame: int) -> Dict[str, np.ndarray]:
+        return {col: np.asarray(val) for col, val in self.pattern_dataframe(frame).to_dict(orient='list').items()}
+
     def pattern_image(self, frame: int) -> np.ndarray:
         df_frame = self.pattern_dataframe(frame)
         pattern = np.zeros((self.crop.roi[1] - self.crop.roi[0],
@@ -95,8 +93,10 @@ class ScanStreaks():
         pattern[df_frame['y'], df_frame['x']] = df_frame['p']
         return pattern
 
-    def pattern_dict(self, frame: int) -> Dict[str, np.ndarray]:
-        return {col: np.asarray(val) for col, val in self.pattern_dataframe(frame).to_dict(orient='list').items()}
+    def refine_indexing(self, frame: int, tol: Tuple[float, float, float], basis: Basis, sample: Sample,
+                        q_abs: float, width: float) -> IndexProblem:
+        return IndexProblem(parent=ref(self), tol=tol, basis=basis, sample=sample, q_abs=q_abs,
+                            width=width, pattern=self.pattern_dict(frame))
 
     def reset_index(self):
         self.dataframe.reset_index(drop=True, inplace=True)
@@ -128,10 +128,6 @@ class Map3D():
         mask = 2 * np.abs(prod) < (basis * basis).sum(axis=1)
         return np.where(mask.all(axis=1))[0]
 
-    def is_compatible(self, map_3d: Map3D) -> bool:
-        return ((self.x == map_3d.x).all() and (self.y == map_3d.y).all() and
-                (self.z == map_3d.z).all())
-
     def __getitem__(self, idxs: Tuple[Indices, Indices, Indices]) -> Map3D:
         if np.asarray(idxs[0]).ndim > 1 or np.asarray(idxs[1]).ndim > 1 or np.asarray(idxs[2]).ndim > 1:
             raise ValueError('Indices must be 0- or 1-dimensional')
@@ -142,33 +138,46 @@ class Map3D():
         return Map3D(val=self.val[np.meshgrid(*idxs.values(), indexing='ij')],
                      x=self.x[idxs[0]], y=self.y[idxs[1]], z=self.z[idxs[2]])
 
-    def __add__(self, obj: Union[Map3D, float, int]) -> Map3D:
-        if isinstance(obj, (float, int)):
+    def __add__(self, obj: Any) -> Map3D:
+        if np.isscalar(obj):
             return Map3D(self.val + obj, self.x, self.y, self.z)
-        if isinstance(obj, Map3D) and self.is_compatible(obj):
+        if isinstance(obj, Map3D):
+            if not self.is_compatible(obj):
+                raise TypeError("Can't sum two incompatible Map3D objects")
             return Map3D(self.val + obj.val, self.x, self.y, self.z)
-        raise ValueError("Can't sum two incompatible Map3D objects")
+        return NotImplemented
 
-    def __sub__(self, obj: Union[Map3D, float, int]) -> Map3D:
-        if isinstance(obj, (float, int)):
+    def __sub__(self, obj: Any) -> Map3D:
+        if np.isscalar(obj):
             return Map3D(self.val - obj, self.x, self.y, self.z)
-        if isinstance(obj, Map3D) and self.is_compatible(obj):
+        if isinstance(obj, Map3D):
+            if not self.is_compatible(obj):
+                raise TypeError("Can't subtract two incompatible Map3D objects")
             return Map3D(self.val - obj.val, self.x, self.y, self.z)
-        raise ValueError("Can't subtract two incompatible Map3D objects")
+        return NotImplemented
 
-    def __prod__(self, obj: Union[Map3D, float, int]) -> Map3D:
-        if isinstance(obj, (float, int)):
-            return Map3D(self.val / obj, self.x, self.y, self.z)
-        if isinstance(obj, Map3D) and self.is_compatible(obj):
+    def __rmul__(self, obj: Any) -> Map3D:
+        if np.isscalar(obj):
+            return Map3D(obj * self.val, self.x, self.y, self.z)
+        return NotImplemented
+
+    def __mul__(self, obj: Any) -> Map3D:
+        if np.isscalar(obj):
+            return Map3D(obj * self.val, self.x, self.y, self.z)
+        if isinstance(obj, Map3D):
+            if not self.is_compatible(obj):
+                raise TypeError("Can't multiply two incompatible Map3D objects")
             return Map3D(self.val * obj.val, self.x, self.y, self.z)
-        raise ValueError("Can't multiply two incompatible Map3D objects")
+        return NotImplemented
 
-    def __truediv__(self, obj: Union[Map3D, float, int]) -> Map3D:
-        if isinstance(obj, (float, int)):
+    def __truediv__(self, obj: Any) -> Map3D:
+        if np.isscalar(obj):
             return Map3D(self.val / obj, self.x, self.y, self.z)
-        if isinstance(obj, Map3D) and self.is_compatible(obj):
+        if isinstance(obj, Map3D):
+            if self.is_compatible(obj):
+                raise TypeError("Can't divide two incompatible Map3D objects")
             return Map3D(self.val / obj.val, self.x, self.y, self.z)
-        raise ValueError("Can't divide two incompatible Map3D objects")
+        return NotImplemented
 
     def clip(self, vmin: float, vmax: float) -> Map3D:
         return Map3D(np.clip(self.val, vmin, vmax), self.x, self.y, self.z)
@@ -198,11 +207,6 @@ class Map3D():
         val = np.fft.fftshift(np.abs(fft_obj())) / np.sqrt(np.prod(self.shape))
         return Map3D(val, kx, ky, kz)
 
-    def index_to_coord(self, index: np.ndarray) -> np.ndarray:
-        idx = np.rint(index).astype(int)
-        crd = np.take(self.coordinate, idx)
-        return crd + (index - idx) * (np.take(self.coordinate, idx + 1) - crd)
-
     def find_peaks(self, val: float, reduce: bool=False) -> np.ndarray:
         mask = self.val > val
         peak_lbls, peak_num = label(mask)
@@ -222,59 +226,72 @@ class Map3D():
 
         return self.index_to_coord(peaks)
 
+    def index_to_coord(self, index: np.ndarray) -> np.ndarray:
+        idx = np.rint(index).astype(int)
+        crd = np.take(self.coordinate, idx)
+        return crd + (index - idx) * (np.take(self.coordinate, idx + 1) - crd)
+
+    def is_compatible(self, map_3d: Map3D) -> bool:
+        return ((self.x == map_3d.x).all() and (self.y == map_3d.y).all() and
+                (self.z == map_3d.z).all())
+
     def white_tophat(self, structure: np.ndarray, num_threads: int=1) -> Map3D:
         val = median_filter(self.val, footprint=structure, num_threads=num_threads)
         return Map3D(self.val - val, self.x, self.y, self.z)
 
-class Basis():
-    def __init__(self, mat: np.ndarray):
-        self.mat = mat.reshape((3, 3))
+@dataclass
+class Rotation(DataContainer):
+    matrix : np.ndarray = np.eye(3, 3)
 
-    def __str__(self) -> str:
-        return self.mat.__str__()
-
-    def __repr__(self) -> str:
-        return self.mat.__repr__()
+    def __post_init__(self):
+        self.matrix = self.matrix.reshape((3, 3))
 
     @classmethod
-    def import_spherical(cls, sph_mat: np.ndarray) -> Basis:
-        return cls(spherical_to_cartesian(sph_mat))
+    def import_euler(cls, alpha: float, beta: float, gamma: float) -> Rotation:
+        return Rotation(euler_matrix(np.array([alpha, beta, gamma])))
 
-    def to_spherical(self) -> np.ndarray:
-        return cartesian_to_spherical(self.mat)
+    @classmethod
+    def import_tilt(cls, theta: float, alpha: float, beta: float) -> Rotation:
+        return Rotation(tilt_matrix(np.array([theta, alpha, beta])))
 
-    def rotate(self, rot_mat: np.ndarray) -> Basis:
-        return Basis(self.mat.dot(rot_mat.T))
+    def __call__(self, inp: np.ndarray) -> np.ndarray:
+        return inp.dot(self.matrix.T)
 
-    def rotate_euler(self, angles: np.ndarray) -> Basis:
-        return self.rotate(euler_matrix(angles))
+    def __mul__(self, obj: Any) -> Rotation:
+        if isinstance(obj, Rotation):
+            return Rotation(self.matrix.dot(obj.matrix))
+        return NotImplemented
 
-    def tilt(self, tilt: float, setup: ScanSetup) -> Basis:
-        return self.rotate(setup.tilt_matrices(tilt))
+    def reciprocate(self) -> Rotation:
+        return Rotation(self.matrix.T)
 
-    def reciprocate(self, scan_setup: ScanSetup) -> Basis:
-        a_rec = np.cross(self.mat[1], self.mat[2]) / (np.cross(self.mat[1], self.mat[2]).dot(self.mat[0]))
-        b_rec = np.cross(self.mat[2], self.mat[0]) / (np.cross(self.mat[2], self.mat[0]).dot(self.mat[1]))
-        c_rec = np.cross(self.mat[0], self.mat[1]) / (np.cross(self.mat[0], self.mat[1]).dot(self.mat[2]))
-        return Basis(np.stack((a_rec, b_rec, c_rec)) * scan_setup.wavelength)
+    def to_euler(self) -> np.ndarray:
+        return euler_angles(self.matrix)
+
+    def to_tilt(self) -> np.ndarray:
+        if np.allclose(self.matrix, self.matrix.T):
+            eigw, eigv = np.linalg.eigh(self.matrix)
+            axis = eigv[np.isclose(eigw, 1.0)]
+            theta = np.arccos(0.5 * (np.trace(self.matrix) - 1.0))
+            return np.array([theta, np.arccos(axis[0, 2]), np.arctan2(axis[0, 1], axis[0, 0])])
+        return tilt_angles(self.matrix)
 
 @dataclass
 class Sample():
-    basis: Basis
+    rotation : Rotation
     pos : np.ndarray
-    mat_columns : ClassVar[Tuple[str]] = ('ax', 'ay', 'az',
-                                          'bx', 'by', 'bz',
-                                          'cx', 'cy', 'cz')
+    mat_columns : ClassVar[Tuple[str]] = ('Rxx', 'Rxy', 'Rxz',
+                                          'Ryx', 'Ryy', 'Ryz',
+                                          'Rzx', 'Rzy', 'Rzz')
     pos_columns : ClassVar[Tuple[str]] = ('x' , 'y' , 'z' )
 
     @classmethod
-    def import_dataframe(cls, dataframe: pd.Series) -> Basis:
-        return cls(basis=Basis(dataframe[list(cls.mat_columns)].to_numpy()),
+    def import_dataframe(cls, dataframe: pd.Series) -> Sample:
+        return cls(rotation=Rotation(dataframe[list(cls.mat_columns)].to_numpy()),
                    pos=dataframe[list(cls.pos_columns)].to_numpy())
 
-    def to_dataframe(self) -> pd.Series:
-        return pd.Series(np.concatenate((self.basis.mat.ravel(), self.pos)),
-                         index=self.mat_columns + self.pos_columns)
+    def rotate(self, basis: Basis) -> Basis:
+        return Basis.import_matrix(self.rotation(basis.mat))
 
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup) -> np.ndarray:
         return setup.detector_to_kout(x, y, self.pos)
@@ -282,18 +299,26 @@ class Sample():
     def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup) -> Tuple[np.ndarray, np.ndarray]:
         return setup.kout_to_detector(kout, self.pos)
 
+    def to_dataframe(self) -> pd.Series:
+        return pd.Series(np.concatenate((self.rotation.matrix.ravel(), self.pos)),
+                         index=self.mat_columns + self.pos_columns)
+
 @dataclass
 class CBDModel():
+    basis   : Basis
     sample  : Sample
     crop    : Crop
     setup   : ScanSetup
+
+    def __post_init__(self):
+        self.basis = self.sample.rotate(self.basis)
 
     @property
     def shape(self) -> Tuple[int, int]:
         return (self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     def generate_hkl(self, q_abs: float) -> np.ndarray:
-        lat_size = np.rint(q_abs / self.sample.basis.to_spherical()[:, 0]).astype(int)
+        lat_size = np.rint(q_abs / self.basis.to_spherical()[:, 0]).astype(int)
         h_idxs = np.arange(-lat_size[0], lat_size[0] + 1)
         k_idxs = np.arange(-lat_size[1], lat_size[1] + 1)
         l_idxs = np.arange(-lat_size[2], lat_size[2] + 1)
@@ -301,7 +326,7 @@ class CBDModel():
         hkl = np.stack((h_grid.ravel(), k_grid.ravel(), l_grid.ravel()), axis=1)
         hkl = np.compress(hkl.any(axis=1), hkl, axis=0)
 
-        rec_vec = hkl.dot(self.sample.basis.mat)
+        rec_vec = hkl.dot(self.basis.mat)
         rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
         rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
 
@@ -311,10 +336,10 @@ class CBDModel():
         return hkl[mask]
 
     def generate_streaks(self, hkl: np.ndarray, width: float) -> Streaks:
-        kin, mask = calc_source_lines(basis=self.sample.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
+        kin, mask = calc_source_lines(basis=self.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
                                       kin_max=self.setup.kin_max)
         idxs = np.arange(hkl.shape[0])[mask]
-        kout = kin + hkl[idxs].dot(self.sample.basis.mat)[:, None]
+        kout = kin + hkl[idxs].dot(self.basis.mat)[:, None]
 
         x, y = self.sample.kout_to_detector(kout, self.setup)
         mask = (self.crop.roi[0] < y).any(axis=1) & (y < self.crop.roi[1]).any(axis=1) & \
@@ -331,8 +356,9 @@ class CBDModel():
 @dataclass
 class IndexProblem:
     parent    : ReferenceType[ScanStreaks]
-    tol       : InitVar[Tuple[float, float, float]]
-    sample    : InitVar[Sample]
+    tol       : InitVar[Tuple[float, float]]
+    basis     : Basis
+    sample    : Sample
     q_abs     : InitVar[float]
     width     : float
     pattern   : InitVar[Dict[str, np.ndarray]]
@@ -347,7 +373,7 @@ class IndexProblem:
                                                  [False,  True,  True,  True, False],
                                                  [ True,  True,  True,  True,  True],
                                                  [False,  True,  True,  True, False],
-                                                 [False, False,  True, False, False]])
+                                                 [False, False,  True, False, False]], dtype=bool)
 
     @property
     def shape(self) -> Tuple[int, int]:
@@ -358,41 +384,50 @@ class IndexProblem:
         state['parent'] = None
         return state
 
-    def _new_position(self, x) -> np.ndarray:
-        return x[6:9] * self._pos
-
-    def _old_position(self, x) -> np.ndarray:
-        return self._pos
-
-    def __post_init__(self, tol: Tuple[float, float, float], sample: Sample, q_abs: float,
-                      pattern: Dict[str, np.ndarray]):
+    def __post_init__(self, tol: Tuple[float, float, float], q_abs: float, pattern: Dict[str, np.ndarray]):
         self.setup, self.crop = self.parent().setup, self.parent().crop
-        self._sph_mat, self._pos = sample.basis.to_spherical(), sample.pos
         self._ij, self._p = self._pattern_to_ij_and_q(pattern)
         self._idxs = np.arange(self._ij.size)
 
+        _lbounds, _rbounds = [], []
+        self._slices = [None, None, None]
+
+        if tol[0]:
+            _lbounds += [-tol[0],] * 3
+            _rbounds += [tol[0],] * 3
+            self._slices[0] = slice(len(_lbounds) - 3, len(_lbounds))
+        if tol[1]:
+            _lbounds += [1.0 - tol[0],] * 3
+            _rbounds += [1.0 + tol[0],] * 3
+            self._slices[1] = slice(len(_lbounds) - 3, len(_lbounds))
         if tol[2]:
-            self._bounds = ([1.0 - tol[0],] * 3 + [-tol[1],] * 3 + [1.0 - tol[2],] * 3,
-                            [1.0 + tol[0],] * 3 + [tol[1],] * 3 + [1.0 + tol[2],] * 3)
-            self._position = self._new_position
-            self.update_hkl(np.concatenate((np.ones(3), np.zeros(3), np.ones(3))), q_abs)
-        else:
-            self._bounds = ([1.0 - tol[0],] * 3 + [-tol[1],] * 3,
-                            [1.0 + tol[0],] * 3 + [tol[1],] * 3)
-            self._position = self._old_position
-            self.update_hkl(np.concatenate((np.ones(3), np.zeros(3))), q_abs)
+            _lbounds += [1.0 - tol[0],] * 2
+            _rbounds += [1.0 + tol[0],] * 2
+            self._slices[2] = slice(len(_lbounds) - 2, len(_lbounds))
+
+        self._bounds = (_lbounds, _rbounds)
+        self.x0 = np.mean(self._bounds, axis=0)
+        self.update_hkl(self.x0, q_abs)
+
+    def _get_slice(self, x: np.ndarray, i: int) -> np.ndarray:
+        if self._slices[i]:
+            return x[self._slices[i]]
+        return (np.zeros(3), np.ones(3), np.ones(2))[i]
 
     def _pattern_to_ij_and_q(self, pattern: Dict[str, np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
         return pattern['x'] + self.shape[1] * pattern['y'], pattern['p']
 
     def generate_sample(self, x: np.ndarray) -> Sample:
-        new_mat = np.concatenate(((self._sph_mat[:, 0] * x[:3])[:, None],
-                                   self._sph_mat[:, 1:]), axis=1)
-        return Sample(Basis.import_spherical(new_mat).rotate_euler(x[3:6]),
-                      self._position(x))
+        return Sample(Rotation.import_euler(*self._get_slice(x, 0)) * self.sample.rotation,
+                      self.sample.pos * self._get_slice(x, 1))
+
+    def generate_setup(self, x: np.ndarray) -> ScanSetup:
+        foc_pos = np.copy(self.setup.foc_pos)
+        foc_pos[:2] *= self._get_slice(x, 2)
+        return self.setup.replace(foc_pos=foc_pos)
 
     def generate_model(self, x: np.ndarray) -> CBDModel:
-        return CBDModel(self.generate_sample(x), self.crop, self.setup)
+        return CBDModel(self.basis, self.generate_sample(x), self.crop, self.generate_setup(x))
 
     def generate_streaks(self, x: np.ndarray) -> Streaks:
         return self.generate_model(x).generate_streaks(self.hkl, self.width)
@@ -451,7 +486,7 @@ class IndexProblem:
 MapSamples = Union[Iterable[Tuple[int, Sample]], Dict[int, Sample]]
 
 class ScanSamples:
-    def __init__(self, items: MapSamples=[]):
+    def __init__(self, items: MapSamples=list()):
         self._dct = dict(items)
 
     @classmethod
@@ -493,10 +528,18 @@ class ScanSamples:
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame((sample.to_dataframe() for sample in self.values()), index=self.keys())
 
-    def rotation_matrix(self, first_frames: Union[int, Iterable[int]],
-                        second_frames: Union[int, Iterable[int]]) -> Dict[Tuple[int, int], np.ndarray]:
-        first_frames, second_frames = np.atleast_1d(first_frames), np.atleast_1d(second_frames)
-        a_vecs = np.stack([self[frame].basis.mat[0] for frame in first_frames])
-        b_vecs = np.stack([self[frame].basis.mat[0] for frame in second_frames])
-        rot_mats = find_rotations(a_vecs, b_vecs).reshape((-1, 3, 3))
-        return {(f1, f2): rot_mat for f1, f2, rot_mat in zip(first_frames, second_frames, rot_mats)}
+    def rotation(self, from_frames: Union[int, Iterable[int]], to_frames: Union[int, Iterable[int]]) -> List[Rotation]:
+        from_frames, to_frames = np.atleast_1d(from_frames), np.atleast_1d(to_frames)
+        rotations = []
+        for (f1, f2) in zip(from_frames, to_frames):
+            rotations.append(self[f2].rotation * self[f1].rotation.reciprocate())
+        return rotations
+
+    def get_positions(self, axis: int) -> np.ndarray:
+        return np.asarray([sample.pos[axis] for sample in self.values()])
+
+    def set_positions(self, positions: np.ndarray, axis: int) -> ScanSamples:
+        obj = ScanSamples(self.items())
+        for frame in obj:
+            obj[frame].pos[axis] = positions[frame]
+        return obj

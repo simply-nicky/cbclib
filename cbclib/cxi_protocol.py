@@ -15,22 +15,23 @@ Examples:
     'data': 'True', 'defocus_x': 'False', '...': '...'}}
 """
 from __future__ import annotations
+from dataclasses import dataclass
 from functools import partial
 from multiprocessing import Pool
 import os
-from configparser import ConfigParser
 from types import TracebackType
-from typing import (Callable, Dict, ItemsView, Iterator, KeysView,
+from typing import (Any, Callable, ClassVar, Dict, ItemsView, Iterator, KeysView,
                     List, Optional, Tuple, Union, ValuesView)
 import h5py
 import numpy as np
 from tqdm.auto import tqdm
-from .ini_parser import ROOT_PATH, INIParser
+from .data_container import INIContainer
 
-CXI_PROTOCOL = os.path.join(ROOT_PATH, 'config/cxi_protocol.ini')
+CXI_PROTOCOL = os.path.join(os.path.dirname(__file__), 'config/cxi_protocol.ini')
 Indices = Union[int, slice, np.ndarray, List[int], Tuple[int]]
 
-class CXIProtocol(INIParser):
+@dataclass
+class CXIProtocol(INIContainer):
     """CXI protocol class. Contains a CXI file tree path with
     the paths written to all the data attributes necessary for
     the Speckle Tracking algorithm, corresponding attributes'
@@ -45,20 +46,20 @@ class CXIProtocol(INIParser):
             as `data`.
         load_paths : Dictionary with attributes' CXI default file paths.
     """
-    known_types = {'int': np.integer, 'bool': bool, 'float': np.floating, 'str': str,
-                   'uint': np.unsignedinteger}
-    default_types = {'int': np.int64, 'bool': bool, 'float': np.float64, 'str': str,
-                     'uint': np.uint64}
-    known_ndims = {'stack': (3,), 'frame': (2, 3), 'sequence': (1, 2, 3), 'scalar': (0, 1, 2)}
-    attr_dict = {'datatypes': ('ALL', ), 'load_paths': ('ALL', ), 'kinds': ('ALL', )}
-    fmt_dict = {'datatypes': 'str', 'load_paths': 'str', 'kinds': 'str'}
+    __ini_fields__ = {'datatypes': 'datatypes', 'load_paths': 'load_paths', 'kinds': 'kinds'}
 
     datatypes   : Dict[str, str]
     load_paths  : Dict[str, List[str]]
     kinds       : Dict[str, str]
 
-    def __init__(self, datatypes: Dict[str, str], load_paths: Dict[str, Union[str, List[str]]],
-                 kinds: Dict[str, str]) -> None:
+    known_types: ClassVar[Dict[str, Any]] = {'int': np.integer, 'bool': bool, 'float': np.floating,
+                                             'str': str, 'uint': np.unsignedinteger}
+    default_types: ClassVar[Dict[str, Any]] = {'int': np.int64, 'bool': bool, 'float': np.float64,
+                                               'str': str, 'uint': np.uint64}
+    known_ndims: ClassVar[Dict[str, Tuple[int, ...]]] = {'stack': (3,), 'frame': (2, 3),
+                                                         'sequence': (1, 2, 3), 'scalar': (0, 1, 2)}
+
+    def __post_init__(self):
         """
         Args:
             datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
@@ -68,62 +69,35 @@ class CXIProtocol(INIParser):
                 Data type is 2- or 3-dimensional and has the same data shape
                 as `data`.
         """
-        load_paths = {attr: self.str_to_list(val)
-                      for attr, val in load_paths.items() if attr in datatypes}
-        kinds = {attr: val for attr, val in kinds.items() if attr in datatypes}
-        super(CXIProtocol, self).__init__(datatypes=datatypes, load_paths=load_paths,
-                                          kinds=kinds)
+        self.load_paths = {attr: self.str_to_list(val) for attr, val in self.load_paths.items()
+                           if attr in self.datatypes}
+        self.kinds = {attr: val for attr, val in self.kinds.items() if attr in self.datatypes}
+
+    @staticmethod
+    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
+        """Convert `strings` to a list of strings.
+
+        Args:
+            strings : String or a list of strings
+
+        Returns:
+            List of strings.
+        """
+        if isinstance(strings, (str, list)):
+            if isinstance(strings, str):
+                return [strings,]
+            return strings
+
+        raise ValueError('strings must be a string or a list of strings')
 
     @classmethod
-    def import_default(cls, datatypes: Optional[Dict[str, str]]=None,
-                       load_paths: Optional[Dict[str, Union[str, List[str]]]]=None,
-                       kinds: Optional[Dict[str, str]]=None) -> CXIProtocol:
-        """Return the default :class:`CXIProtocol` object. Extra arguments
-        override the default values if provided.
-
-        Args:
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
-                or 'bool' are allowed.
-            load_paths : Dictionary with attributes path in the CXI file.
-            kinds : Dictionary with the flags if the attribute is of data type.
-                Data type is 2- or 3-dimensional and has the same data shape
-                as `data`.
+    def import_default(cls) -> CXIProtocol:
+        """Return the default :class:`CXIProtocol` object. 
 
         Returns:
             A :class:`CXIProtocol` object with the default parameters.
         """
-        return cls.import_ini(CXI_PROTOCOL, datatypes, load_paths, kinds)
-
-    @classmethod
-    def import_ini(cls, ini_file: str, datatypes: Optional[Dict[str, str]]=None,
-                   load_paths: Optional[Dict[str, Union[str, List[str]]]]=None,
-                   kinds: Optional[Dict[str, str]]=None) -> CXIProtocol:
-        """Initialize a :class:`CXIProtocol` object class with an
-        ini file.
-
-        Args:
-            ini_file : Path to the ini file. Load the default CXI protocol if None.
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
-                or 'bool' are allowed. Initialized with `ini_file` if None.
-            load_paths : Dictionary with attributes path in the CXI file. Initialized
-                with `ini_file` if None.
-            kinds : Dictionary with the flags if the attribute is of data type.
-                Data type is 2- or 3-dimensional and has the same data shape
-                as `data`. Initialized with `ini_file` if None.
-
-        Returns:
-            A :class:`CXIProtocol` object with all the attributes imported
-            from the ini file.
-        """
-        kwargs = cls._import_ini(ini_file)
-        if not datatypes is None:
-            kwargs['datatypes'].update(**datatypes)
-        if not load_paths is None:
-            kwargs['load_paths'].update(**load_paths)
-        if not kinds is None:
-            kwargs['kinds'].update(**kinds)
-        return cls(datatypes=kwargs['datatypes'], load_paths=kwargs['load_paths'],
-                   kinds=kwargs['kinds'])
+        return cls.import_ini(CXI_PROTOCOL)
 
     def find_path(self, attr: str, cxi_file: h5py.File) -> str:
         """Find attribute's path in a CXI file `cxi_file`.
@@ -141,25 +115,6 @@ class CXIProtocol(INIParser):
             if path in cxi_file:
                 return path
         return str()
-
-    def parser_from_template(self, path: str) -> ConfigParser:
-        """Return a :class:`configparser.ConfigParser` object using
-        an ini file template.
-
-        Args:
-            path : Path to the ini file template.
-
-        Returns:
-            Parser object with the attributes populated according
-            to the protocol.
-        """
-        ini_template = ConfigParser()
-        ini_template.read(path)
-        parser = ConfigParser()
-        for section in ini_template:
-            parser[section] = {option: ini_template[section][option].format(**self.default_paths)
-                               for option in ini_template[section]}
-        return parser
 
     def __iter__(self) -> Iterator:
         return self.datatypes.__iter__()
@@ -586,16 +541,16 @@ class CXIStore():
                 if idxs is None or len(idxs) != data.shape[0]:
                     raise ValueError('Incompatible indices')
                 self.file[cxi_path].resize(max(self.file[cxi_path].shape[0], max(idxs) + 1),
-                                               axis=0)
+                                           axis=0)
                 self.file[cxi_path][idxs] = data
 
         else:
             if cxi_path in self.file:
                 del self.file[cxi_path]
             self.file.create_dataset(cxi_path, data=data, shape=data.shape,
-                                         chunks=(1,) + data.shape[1:],
-                                         maxshape=(None,) + data.shape[1:],
-                                         dtype=self.protocol.get_dtype(attr, data.dtype))
+                                     chunks=(1,) + data.shape[1:],
+                                     maxshape=(None,) + data.shape[1:],
+                                     dtype=self.protocol.get_dtype(attr, data.dtype))
 
     def _save_data(self, attr: str, data: np.ndarray) -> None:
         cxi_path = self.find_dataset(attr)

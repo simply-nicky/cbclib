@@ -1,15 +1,17 @@
 """:class:`DataContainer` class implementation.
 """
 from __future__ import annotations
+from configparser import ConfigParser
 from dataclasses import dataclass
-from typing import Any, Dict, ItemsView, Iterator, KeysView, List, Tuple, Union, ValuesView, TypeVar
+import os
+import re
+from typing import (Any, Callable, Dict, ItemsView, Iterator, List, Tuple, Type, Union,
+                    ValuesView, TypeVar)
 import numpy as np
-from .ini_parser import INIParser
-from .bin import tilt_matrix
+from .bin import tilt_matrix, cartesian_to_spherical, spherical_to_cartesian
 
 T = TypeVar('T', bound='DataContainer')
 
-@dataclass
 class DataContainer:
     def __getitem__(self, attr: str) -> Any:
         return self.__getattribute__(attr)
@@ -35,9 +37,140 @@ class DataContainer:
     def replace(self, **kwargs: Any) -> T:
         return type(self)(**dict(self, **kwargs))
 
+I = TypeVar('I', bound='INIContainer')
+
+class INIContainer(DataContainer):
+    __ini_fields__ : Dict[str, Union[str, Tuple[str]]]
+
+    @classmethod
+    def _format_list(cls, string: str, f: Callable=str) -> List:
+        is_list = re.search(r'^\[([\s\S]*)\]$', string)
+        if is_list:
+            return [f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_list.group(1)) if p]
+        raise ValueError(f"Invalid string: '{string}'")
+
+    @classmethod
+    def _format_tuple(cls, string: str, f: Callable=str) -> Tuple:
+        is_tuple = re.search(r'^\[([\s\S]*)\]$', string)
+        if is_tuple:
+            return [f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p]
+        raise ValueError(f"Invalid string: '{string}'")
+
+    @classmethod
+    def _format_array(cls, string: str) -> List:
+        is_list = re.search(r'^\[([\s\S]*)\]$', string)
+        if is_list:
+            return np.fromstring(is_list.group(1), sep=',')
+        raise ValueError(f"Invalid string: '{string}'")
+
+    @classmethod
+    def _format_bool(cls, string: str) -> bool:
+        return string in ('yes', 'True', 'true', 'T')
+
+    @classmethod
+    def get_formatter(cls, t: str) -> Callable:
+        _f1 = {'list': cls._format_list, 'List': cls._format_list,
+               'tuple': cls._format_tuple, 'Tuple': cls._format_tuple}
+        _f2 = {'ndarray': cls._format_array, 'float': float, 'int': int,
+               'bool': cls._format_bool, 'complex': complex}
+        for k1, f1 in _f1.items():
+            if k1 in t:
+                idx = t.index(k1) + len(k1)
+                for k2, f2 in _f2.items():
+                    if k2 in t[idx:]:
+                        return lambda string: f1(string, f2)
+                return f1
+        for k2, f2 in _f2.items():
+            if k2 in t:
+                return f2
+        return str
+
+    @classmethod
+    def _format_dict(cls, ini_dict: Dict[str, Union[str, Dict[str, str]]]) -> Dict[str, Any]:
+        for attr, val in ini_dict.items():
+            formatter = cls.get_formatter(cls.__dataclass_fields__[attr].type)
+            if isinstance(val, dict):
+                ini_dict[attr] = {k: formatter(v) for k, v in val.items()}
+            if isinstance(val, str):
+                ini_dict[attr] = formatter(val)
+        return ini_dict
+
+    @classmethod
+    def import_ini(cls: Type[I], ini_file: str) -> I:
+        if not os.path.isfile(ini_file):
+            raise ValueError(f"File {ini_file} doesn't exist")
+        ini_parser = ConfigParser()
+        ini_parser.read(ini_file)
+
+        ini_dict = {}
+        for section, attrs in cls.__ini_fields__.items():
+            if isinstance(attrs, str):
+                ini_dict[attrs] = dict(ini_parser[section])
+            elif isinstance(attrs, tuple):
+                for attr in attrs:
+                    ini_dict[attr] = ini_parser[section][attr]
+            else:
+                raise TypeError(f"Invalid '__ini_fields__' values: {attrs}")
+
+        return cls(**cls._format_dict(ini_dict))
+
+    def _get_string(self, attr) -> str:
+        val = self.get(attr)
+        if isinstance(val, np.ndarray):
+            return np.array2string(val, separator=',')
+        if isinstance(val, dict):
+            return {k: str(v) for k, v in val.items()}
+        return str(val)
+
+    def ini_dict(self) -> Dict[str, Union[str, Dict[str, str]]]:
+        ini_dict = {}
+        for section, attrs in self.__ini_fields__.items():
+            if isinstance(attrs, str):
+                ini_dict[section] = self._get_string(attrs)
+            if isinstance(attrs, tuple):
+                ini_dict[section] = {attr: self._get_string(attr) for attr in attrs}
+        return ini_dict
+
+    def to_ini(self, ini_path: str):
+        ini_parser = ConfigParser()
+        for section, val in self.ini_dict().items():
+            ini_parser[section] = val
+
+        with open(ini_path, 'w') as ini_file:
+            ini_parser.write(ini_file)
+
+@dataclass
+class Basis(INIContainer):
+    __ini_fields__ = {'basis': ('a_vec', 'b_vec', 'c_vec')}
+
+    a_vec : np.ndarray
+    b_vec : np.ndarray
+    c_vec : np.ndarray
+
+    def __post_init__(self):
+        self.mat = np.stack((self.a_vec, self.b_vec, self.c_vec))
+
+    @classmethod
+    def import_matrix(cls, mat: np.ndarray) -> Basis:
+        return cls(mat[0], mat[1], mat[2])
+
+    @classmethod
+    def import_spherical(cls, sph_mat: np.ndarray) -> Basis:
+        return cls.import_matrix(spherical_to_cartesian(sph_mat))
+
+    def reciprocate(self, scan_setup: ScanSetup) -> Basis:
+        a_rec = np.cross(self.b_vec, self.c_vec) / (np.cross(self.b_vec, self.c_vec).dot(self.a_vec))
+        b_rec = np.cross(self.c_vec, self.a_vec) / (np.cross(self.c_vec, self.a_vec).dot(self.b_vec))
+        c_rec = np.cross(self.a_vec, self.b_vec) / (np.cross(self.a_vec, self.b_vec).dot(self.c_vec))
+        return Basis(*(np.stack((a_rec, b_rec, c_rec)) * scan_setup.wavelength))
+
+    def to_spherical(self) -> np.ndarray:
+        return cartesian_to_spherical(self.mat)
+
 FloatArray = Union[List[float], Tuple[float, ...], np.ndarray]
 
-class ScanSetup(INIParser):
+@dataclass
+class ScanSetup(INIContainer):
     """
     Detector tilt scan experimental setup class
 
@@ -46,78 +179,22 @@ class ScanSetup(INIParser):
     rot_axis - axis of rotation
     smp_pos - sample position relative to the detector [m]
     """
-    attr_dict = {'exp_geom': ('foc_pos', 'rot_axis', 'wavelength', 'x_pixel_size',
-                              'y_pixel_size', 'kin_min', 'kin_max')}
-    fmt_dict = {'exp_geom': 'float'}
+    __ini_fields__ = {'exp_geom': ('foc_pos', 'rot_axis', 'pupil_min', 'pupil_max',
+                                   'wavelength', 'x_pixel_size', 'y_pixel_size')}
 
     foc_pos         : np.ndarray
     rot_axis        : np.ndarray
-    kin_min         : np.ndarray
-    kin_max         : np.ndarray
+    pupil_min       : np.ndarray
+    pupil_max       : np.ndarray
     wavelength      : float
     x_pixel_size    : float
     y_pixel_size    : float
 
-    def __init__(self, foc_pos: FloatArray, rot_axis: FloatArray,
-                 kin_min: FloatArray, kin_max: FloatArray, wavelength: float,
-                 x_pixel_size: float, y_pixel_size: float) -> None:
-        exp_geom = {'foc_pos': foc_pos, 'rot_axis': rot_axis, 'kin_min': kin_min,
-                    'kin_max': kin_max, 'wavelength': wavelength,
-                    'x_pixel_size': x_pixel_size, 'y_pixel_size': y_pixel_size}
-        super(ScanSetup, self).__init__(exp_geom=exp_geom)
-
-    @classmethod
-    def _lookup_dict(cls) -> Dict[str, str]:
-        lookup = {}
-        for section in cls.attr_dict:
-            for option in cls.attr_dict[section]:
-                lookup[option] = section
-        return lookup
-
-    @property
-    def kin_center(self) -> np.ndarray:
-        return 0.5 * (self.kin_max + self.kin_min)
-
-    def __iter__(self) -> Iterator[str]:
-        return self._lookup.__iter__()
-
-    def __contains__(self, attr: str) -> bool:
-        return attr in self._lookup
-
-    def __repr__(self) -> str:
-        return self._format(self.export_dict()).__repr__()
-
-    def __str__(self) -> str:
-        return self._format(self.export_dict()).__str__()
-
-    def keys(self) -> KeysView[str]:
-        return self._lookup.keys()
-
-    @classmethod
-    def import_ini(cls, ini_file: str, **kwargs: Any) -> ScanSetup:
-        """Initialize a :class:`ScanSetup` object with an
-        ini file.
-
-        Parameters
-        ----------
-        ini_file : str, optional
-            Path to the ini file. Load the default parameters
-            if None.
-        **kwargs : dict
-            Experimental geometry parameters.
-            Initialized with `ini_file` if not provided.
-
-        Returns
-        -------
-        scan_setup : ScanSetup
-            A :class:`ScanSetup` object with all the attributes
-            imported from the ini file.
-        """
-        attr_dict = cls._import_ini(ini_file)
-        for option, section in cls._lookup_dict().items():
-            if option in kwargs:
-                attr_dict[section][option] = kwargs[option]
-        return cls(**attr_dict['exp_geom'])
+    def __post_init__(self):
+        self.kin_min = self.detector_to_kin(self.pupil_min[0], self.pupil_min[1])
+        self.kin_max = self.detector_to_kin(self.pupil_max[0], self.pupil_max[1])
+        self.kin_center = self.detector_to_kin(0.5 * (self.pupil_min[0] + self.pupil_max[0]),
+                                               0.5 * (self.pupil_min[1] + self.pupil_max[1]))
 
     def _det_to_k(self, x: np.ndarray, y: np.ndarray, source: np.ndarray) -> np.ndarray:
         delta_y = y * self.y_pixel_size - source[1]
@@ -156,12 +233,6 @@ class Transform():
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         raise NotImplementedError
 
-    def __repr__(self) -> str:
-        return self.state_dict().__repr__()
-
-    def __str__(self) -> str:
-        return self.state_dict().__str__()
-
     def forward(self, inp: np.ndarray) -> np.ndarray:
         ss_idxs, fs_idxs = np.indices(inp.shape[-2:])
         ss_idxs, fs_idxs = self.index_array(ss_idxs, fs_idxs)
@@ -179,23 +250,15 @@ class Transform():
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         raise NotImplementedError
 
-    def state_dict(self) -> Dict[str, Any]:
-        raise NotImplementedError
-
-class Crop(Transform):
+@dataclass
+class Crop(Transform, DataContainer):
     """Crop transform. Crops a frame according to a region of interest.
 
     Attributes:
         roi : Region of interest. Comprised of four elements `[y_min, y_max,
             x_min, x_max]`.
     """
-    def __init__(self, roi: Union[List[int], Tuple[int, int, int, int], np.ndarray]) -> None:
-        """
-        Args:
-            roi : Region of interest. Comprised of four elements `[y_min, y_max,
-                x_min, x_max]`.
-        """
-        self.roi = roi
+    roi : Union[List[int], Tuple[int, int, int, int], np.ndarray]
 
     def __eq__(self, obj: object) -> bool:
         if isinstance(obj, Crop):
@@ -235,26 +298,14 @@ class Crop(Transform):
         """
         return x + self.roi[2], y + self.roi[0]
 
-    def state_dict(self) -> Dict[str, Any]:
-        """Returns the state of the transform as a dict.
-
-        Returns:
-            A dictionary with all the attributes.
-        """
-        return {'roi': self.roi[:]}
-
-class Downscale(Transform):
+@dataclass
+class Downscale(Transform, DataContainer):
     """Downscale the image by a integer ratio.
 
     Attributes:
         scale : Downscaling integer ratio.
     """
-    def __init__(self, scale: int) -> None:
-        """
-        Args:
-            scale : Downscaling integer ratio.
-        """
-        self.scale = scale
+    scale : int
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return (ss_idxs[::self.scale, ::self.scale], fs_idxs[::self.scale, ::self.scale])
@@ -282,28 +333,15 @@ class Downscale(Transform):
         """
         return x * self.scale, y * self.scale
 
-    def state_dict(self) -> Dict[str, Any]:
-        """Returns the state of the transform as a dict.
-
-        Returns:
-            A dictionary with all the attributes.
-        """
-        return {'scale': self.scale}
-
-class Mirror(Transform):
+@dataclass
+class Mirror(Transform, DataContainer):
     """Mirror the data around an axis.
 
     Attributes:
         axis : Axis of reflection.
     """
-    def __init__(self, axis: int, shape: Tuple[int, int]) -> None:
-        """
-        Args:
-            axis : Axis of reflection.
-        """
-        if axis not in [0, 1]:
-            raise ValueError('Axis must equal to 0 or 1')
-        self.axis, self.shape = axis, shape
+    axis: int
+    shape: Tuple[int, int]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if self.axis == 0:
@@ -336,14 +374,7 @@ class Mirror(Transform):
         """
         return self.forward_points(x, y)
 
-    def state_dict(self) -> Dict[str, Any]:
-        """Returns the state of the transform as a dict.
-
-        Returns:
-            A dictionary with all the attributes.
-        """
-        return {'axis': self.axis, 'shape': self.shape}
-
+@dataclass
 class ComposeTransforms(Transform):
     """Composes several transforms together.
 
@@ -352,18 +383,11 @@ class ComposeTransforms(Transform):
     """
     transforms : List[Transform]
 
-    def __init__(self, transforms: List[Transform]) -> None:
-        """
-        Args:
-            transforms: List of transforms.
-        """
-        if len(transforms) < 2:
+    def __post_init__(self) -> None:
+        if len(self.transforms) < 2:
             raise ValueError('Two or more transforms are needed to compose')
 
-        self.transforms = []
-        for transform in transforms:
-            pdict = transform.state_dict()
-            self.transforms.append(type(transform)(**pdict))
+        self.transforms = [transform.replace() for transform in self.transforms]
 
     def __iter__(self) -> Iterator[Transform]:
         return self.transforms.__iter__()
@@ -401,11 +425,3 @@ class ComposeTransforms(Transform):
         for transform in list(self)[::-1]:
             x, y = transform.backward_points(x, y)
         return x, y
-
-    def state_dict(self) -> Dict[str, Any]:
-        """Returns the state of the transform as a dict.
-
-        Returns:
-            A dictionary with all the attributes.
-        """
-        return {'transforms': self.transforms[:]}

@@ -10,17 +10,19 @@ Generate the default built-in log protocol:
 'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', '...': '...'}}
 """
 from __future__ import annotations
+from dataclasses import dataclass
 import os
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 import numpy as np
-from .ini_parser import ROOT_PATH, INIParser
+from .data_container import INIContainer
 from .cxi_protocol import CXIStore
 from .data_processing import CrystData
 
-LOG_PROTOCOL = os.path.join(ROOT_PATH, 'config/log_protocol.ini')
+LOG_PROTOCOL = os.path.join(os.path.dirname(__file__), 'config/log_protocol.ini')
 
-class LogProtocol(INIParser):
+@dataclass
+class LogProtocol(INIContainer):
     """Log file protocol class. Contains log file keys to retrieve
     and the data types of the corresponding values.
 
@@ -31,13 +33,18 @@ class LogProtocol(INIParser):
         part_keys : Dictionary with the part names inside the log file
             where the attributes are stored.
     """
-    attr_dict = {'datatypes': ('ALL',), 'log_keys': ('ALL',), 'part_keys': ('ALL',)}
-    fmt_dict = {'datatypes': 'str', 'log_keys': 'str', 'part_keys': 'str'}
-    unit_dict = {'percent': 1e-2, 'mm,mdeg': 1e-3, 'µm,um,udeg,µdeg': 1e-6,
-                 'nm,ndeg': 1e-9, 'pm,pdeg': 1e-12}
+    __ini_fields__ = {'datatypes': 'datatypes', 'log_keys': 'log_keys', 'part_keys': 'part_keys'}
 
-    def __init__(self, datatypes: Dict[str, str], log_keys: Dict[str, List[str]],
-                 part_keys: Dict[str, str]) -> None:
+    datatypes : Dict[str, str]
+    log_keys : Dict[str, List[str]]
+    part_keys : Dict[str, str]
+
+    known_types: ClassVar[Dict[str, Any]] = {'int': int, 'bool': bool, 'float': float, 'str': str}
+    unit_dict: ClassVar[Dict[str, float]] = {'percent': 1e-2, 'mm,mdeg': 1e-3,
+                                             'µm,um,udeg,µdeg': 1e-6,
+                                             'nm,ndeg': 1e-9, 'pm,pdeg': 1e-12}
+
+    def __post_init__(self):
         """
         Args:
             datatypes : Dictionary with attributes' datatypes. 'float', 'int',
@@ -46,15 +53,11 @@ class LogProtocol(INIParser):
             part_keys : Dictionary with the part names inside the log file
                 where the attributes are stored.
         """
-        log_keys = {attr: val for attr, val in log_keys.items() if attr in datatypes}
-        datatypes = {attr: val for attr, val in datatypes.items() if attr in log_keys}
-        super(LogProtocol, self).__init__(datatypes=datatypes, log_keys=log_keys,
-                                          part_keys=part_keys)
+        self.log_keys = {attr: self.str_to_list(val) for attr, val in self.log_keys.items() if attr in self.datatypes}
+        self.part_keys = {attr: val for attr, val in self.part_keys.items() if attr in self.datatypes}
 
     @classmethod
-    def import_default(cls, datatypes: Optional[Dict[str, str]]=None,
-                       log_keys: Optional[Dict[str, List[str]]]=None,
-                       part_keys: Optional[Dict[str, str]]=None) -> LogProtocol:
+    def import_default(cls) -> LogProtocol:
         """Return the default :class:`LogProtocol` object. Extra arguments
         override the default values if provided.
 
@@ -68,38 +71,7 @@ class LogProtocol(INIParser):
         Returns:
             A :class:`LogProtocol` object with the default parameters.
         """
-        return cls.import_ini(LOG_PROTOCOL, datatypes, log_keys, part_keys)
-
-    @classmethod
-    def import_ini(cls, ini_file: str, datatypes: Optional[Dict[str, str]]=None,
-                   log_keys: Optional[Dict[str, List[str]]]=None,
-                   part_keys: Optional[Dict[str, str]]=None) -> LogProtocol:
-        """Initialize a :class:`LogProtocol` object class with an
-        ini file.
-
-        Args:
-            ini_file : Path to the ini file. Load the default log protocol if None.
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
-                or 'bool' are allowed. Initialized with `ini_file` if None.
-            log_keys : Dictionary with attributes' log file keys. Initialized with
-                `ini_file` if None.
-            part_keys : Dictionary with the part names inside the log file
-                where the attributes are stored. Initialized with `ini_file`
-                if None.
-
-        Returns:
-            A :class:`LogProtocol` object with all the attributes imported
-            from the ini file.
-        """
-        kwargs = cls._import_ini(ini_file)
-        if not datatypes is None:
-            kwargs['datatypes'].update(**datatypes)
-        if not log_keys is None:
-            kwargs['log_keys'].update(**log_keys)
-        if not part_keys is None:
-            kwargs['part_keys'].update(**part_keys)
-        return cls(datatypes=kwargs['datatypes'], log_keys=kwargs['log_keys'],
-                   part_keys=kwargs['part_keys'])
+        return cls.import_ini(LOG_PROTOCOL)
 
     @classmethod
     def _get_unit(cls, key: str) -> float:
@@ -118,6 +90,23 @@ class LogProtocol(INIParser):
             for unit in units:
                 has_unit |= (unit in key)
         return has_unit
+
+    @staticmethod
+    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
+        """Convert `strings` to a list of strings.
+
+        Args:
+            strings : String or a list of strings
+
+        Returns:
+            List of strings.
+        """
+        if isinstance(strings, (str, list)):
+            if isinstance(strings, str):
+                return [strings,]
+            return strings
+
+        raise ValueError('strings must be a string or a list of strings')
 
     def load_attributes(self, path: str) -> Dict[str, Any]:
         """Return attributes' values from a log file at
@@ -273,41 +262,41 @@ class LogProtocol(INIParser):
 
 def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=None,
                     **attributes: Any) -> CrystData:
-    log_prt = LogProtocol.import_default()
+    # log_prt = LogProtocol.import_default()
 
     h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
-    log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
+    # log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
     h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
                        if path.endswith(('LambdaFar.nxs', '.h5'))])
 
     input_file = CXIStore(h5_files, mode='r')
 
-    log_attrs = log_prt.load_attributes(log_path)
-    log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
+    # log_attrs = log_prt.load_attributes(log_path)
+    # log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
 
-    n_frames = idxs.size
-    if n_frames:
-        x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
-        y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
-        z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
-        r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-        translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
-        tilts = r_sample * np.ones(n_frames)
-        for data_key, log_dset in log_data.items():
-            for log_key in log_prt.log_keys['x_sample']:
-                if log_key in data_key:
-                    translations[:log_dset.size, 0] = log_dset
-            for log_key in log_prt.log_keys['y_sample']:
-                if log_key in data_key:
-                    translations[:log_dset.size, 1] = log_dset
-            for log_key in log_prt.log_keys['z_sample']:
-                if log_key in data_key:
-                    translations[:log_dset.size, 2] = log_dset
-            for log_key in log_prt.log_keys['r_sample']:
-                if log_key in data_key:
-                    tilts[:log_dset.size] = log_dset
+    # n_frames = idxs.size
+    # if n_frames:
+    #     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
+    #     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
+    #     z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
+    #     r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
+    #     translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
+    #     tilts = r_sample * np.ones(n_frames)
+    #     for data_key, log_dset in log_data.items():
+    #         for log_key in log_prt.log_keys['x_sample']:
+    #             if log_key in data_key:
+    #                 translations[:log_dset.size, 0] = log_dset
+    #         for log_key in log_prt.log_keys['y_sample']:
+    #             if log_key in data_key:
+    #                 translations[:log_dset.size, 1] = log_dset
+    #         for log_key in log_prt.log_keys['z_sample']:
+    #             if log_key in data_key:
+    #                 translations[:log_dset.size, 2] = log_dset
+    #         for log_key in log_prt.log_keys['r_sample']:
+    #             if log_key in data_key:
+    #                 tilts[:log_dset.size] = log_dset
 
-        return CrystData(input_file=input_file, translations=translations,
-                         tilts=tilts, **attributes)
+    #     return CrystData(input_file=input_file, translations=translations,
+    #                      tilts=tilts, **attributes)
 
     return CrystData(input_file=input_file, **attributes)

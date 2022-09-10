@@ -28,7 +28,6 @@ class CrystData(DataContainer):
     whitefield:     np.ndarray = None
     cor_data:       np.ndarray = None
     background:     np.ndarray = None
-    streak_data:    np.ndarray = None
 
     _no_data_exc: ClassVar[ValueError] = ValueError('No data in the container')
     _no_whitefield_exc: ClassVar[ValueError] = ValueError('No whitefield in the container')
@@ -105,7 +104,7 @@ class CrystData(DataContainer):
 
             if idxs is None:
                 idxs = self.input_file.indices()
-            data_dict = {'frames' :np.asarray(idxs)}
+            data_dict = {'frames': np.asarray(idxs)}
 
             for attr in attributes:
                 if attr not in self.input_file.keys():
@@ -226,16 +225,16 @@ class CrystData(DataContainer):
 
         return self.replace(**data_dict)
 
-    def mask_frames(self: C, good_frames: Optional[Iterable[int]]=None) -> C:
+    def mask_frames(self: C, frames: Optional[Iterable[int]]=None) -> C:
         """Return a new :class:`CrystData` object with the updated
         good frames mask. Mask empty frames by default.
 
         Args:
-            good_frames : List of good frames' indices. Masks empty
+            frames : List of good frames' indices. Masks empty
                 frames if not provided.
 
         Returns:
-            New :class:`CrystData` object with the updated `good_frames`
+            New :class:`CrystData` object with the updated `frames`
             and `whitefield`.
         """
         raise self._no_data_exc
@@ -355,9 +354,6 @@ class CrystData(DataContainer):
         """
         raise self._no_whitefield_exc
 
-    def import_streaks(self, detector: StreakDetector) -> None:
-        raise self._no_whitefield_exc
-
     def update_background(self: C, method: str='median', size: int=11,
                           effs: Optional[np.ndarray]=None) -> C:
         """Return a new :class:`CrystData` object with a new set of flatfields.
@@ -416,7 +412,6 @@ class CrystDataPart(CrystData):
     whitefield:     np.ndarray = None
     cor_data:       np.ndarray = None
     background:     np.ndarray = None
-    streak_data:    np.ndarray = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -425,10 +420,10 @@ class CrystDataPart(CrystData):
         if self.mask is None:
             self.mask = np.ones(self.shape, dtype=bool)
 
-    def mask_frames(self: C, good_frames: Optional[Iterable[int]]=None) -> C:
-        if good_frames is None:
-            good_frames = np.where(self.data.sum(axis=(1, 2)) > 0)[0]
-        return self.replace(good_frames=np.asarray(good_frames))
+    def mask_frames(self: C, frames: Optional[Iterable[int]]=None) -> C:
+        if frames is None:
+            frames = np.where(self.data.sum(axis=(1, 2)) > 0)[0]
+        return self.replace(good_frames=np.asarray(frames))
 
     def mask_region(self: C, roi: Iterable[int]) -> C:
         mask = self.mask.copy()
@@ -467,6 +462,11 @@ class CrystDataPart(CrystData):
 
     def update_mask(self, method: str='perc-bad', pmin: float=0., pmax: float=99.99,
                     vmin: int=0, vmax: int=65535, update: str='reset') -> C:
+        if vmin >= vmax:
+            raise ValueError('vmin must be less than vmax')
+        if pmin >= pmax:
+            raise ValueError('pmin must be less than pmax')
+
         if update == 'reset':
             data = self.data
         elif update == 'multiply':
@@ -518,7 +518,6 @@ class CrystDataFull(CrystDataPart):
     whitefield:     np.ndarray = None
     cor_data:       np.ndarray = None
     background:     np.ndarray = None
-    streak_data:    np.ndarray = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -564,13 +563,6 @@ class CrystDataFull(CrystDataPart):
         effs = np.tensordot(eig_vecs, self.cor_data, axes=((0,), (0,)))
         return dict(zip(eig_vals / eig_vals.sum(), effs))
 
-    def import_streaks(self, detector: StreakDetector) -> None:
-        if detector.parent() is not self:
-            raise ValueError("'detector' wasn't derived from this data container")
-
-        self.streak_data = np.zeros(self.shape, dtype=detector.streak_data.dtype)
-        self.streak_data[self.good_frames] = detector.streak_data
-
     def update_background(self, method: str='median', size: int=11,
                           effs: Optional[np.ndarray]=None) -> CrystDataFull:
         bgd = self.background.copy()
@@ -614,7 +606,7 @@ class Streaks(DataContainer):
         return pd.DataFrame(dict(self))
 
     def to_numpy(self) -> np.ndarray:
-        return np.stack((self[attr] for attr in self.contents()), axis=1)
+        return np.stack([self[attr] for attr in self.contents()], axis=1)
 
     def pattern_dataframe(self, shape: Tuple[int, int], dp: float=1.0, dilation: float=0.0,
                           profile: str='tophat') -> pd.DataFrame:
@@ -658,12 +650,12 @@ class StreakDetector(DataContainer):
     lsd_obj:            LSD = None
     indices:            Dict[int, int] = None
     streak_data:        np.ndarray = None
-
     streaks:            Dict[int, Streaks] = None
     streak_width:       float = None
     streak_mask:        np.ndarray = None
     bgd_dilation :      float = None
     bgd_mask :          np.ndarray = None
+
 
     footprint: ClassVar[np.ndarray] = np.array([[[False, False,  True, False, False],
                                                  [False,  True,  True,  True, False],
@@ -693,19 +685,6 @@ class StreakDetector(DataContainer):
     def shape(self) -> Tuple[int, ...]:
         return self.data.shape
 
-    def generate_streak_data(self: S, vmin: float, vmax: float,
-                             size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> S:
-        streak_data = median_filter(self.data, size=size, num_threads=self.num_threads)
-        streak_data = np.divide(np.clip(streak_data, vmin, vmax) - vmin, vmax - vmin)
-        return self.replace(streak_data=streak_data)
-
-    def update_lsd(self: S, scale: float=0.9, sigma_scale: float=0.9,
-                   log_eps: float=0., ang_th: float=60.0, density_th: float=0.5,
-                   quant: float=2e-2) -> S:
-        return self.replace(lsd_obj=LSD(scale=scale, sigma_scale=sigma_scale,
-                                        log_eps=log_eps, ang_th=ang_th,
-                                        density_th=density_th, quant=quant))
-
     def detect(self, cutoff: float, filter_threshold: float, group_threshold: float=0.7,
                dilation: float=0.0, n_group: int=2) -> StreakDetectorFull:
         if self.streak_data is None:
@@ -717,8 +696,37 @@ class StreakDetector(DataContainer):
                                        n_group=n_group, dilation=dilation,
                                        num_threads=self.num_threads)
         streaks = {self.frames[idx]: Streaks(*np.around(lines[:, :5], 2).T)
-                   for idx, lines in out_dict['lines'].items()}
-        return StreakDetectorFull(**dict(self, streaks=streaks))
+                   for idx, lines in out_dict['lines'].items() if lines.size}
+        frames = [idx for idx, lines in out_dict['lines'].items() if lines.size]
+        return StreakDetectorFull(**dict(self.mask_frames(frames), streaks=streaks))
+
+    def generate_streak_data(self: S, vmin: float, vmax: float,
+                             size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> S:
+        if vmin >= vmax:
+            raise ValueError('vmin must be less than vmax')
+        streak_data = median_filter(self.data, size=size, num_threads=self.num_threads)
+        streak_data = np.divide(np.clip(streak_data, vmin, vmax) - vmin, vmax - vmin)
+        return self.replace(streak_data=streak_data)
+
+    def mask_frames(self: S, frames: Iterable[int]) -> S:
+        if not set(frames).issubset(set(self.frames)):
+            raise ValueError("Invalid argument 'frames', must be a subset "\
+                             "of the frames defined in the container")
+
+        data_dict = {'frames': {frame: self.frames[frame] for frame in frames}}
+        for attr in self.contents():
+            if isinstance(self[attr], np.ndarray):
+                data_dict[attr] = self[attr][frames]
+        if self.streaks is not None:
+            data_dict['streaks'] = {frame: self.streaks[frame] for frame in frames}
+        return self.replace(**data_dict)
+
+    def update_lsd(self: S, scale: float=0.9, sigma_scale: float=0.9,
+                   log_eps: float=0., ang_th: float=60.0, density_th: float=0.5,
+                   quant: float=2e-2) -> S:
+        return self.replace(lsd_obj=LSD(scale=scale, sigma_scale=sigma_scale,
+                                        log_eps=log_eps, ang_th=ang_th,
+                                        density_th=density_th, quant=quant))
 
     def draw(self, max_val: int=1, dilation: float=0.0) -> np.ndarray:
         raise self._no_streaks_exc

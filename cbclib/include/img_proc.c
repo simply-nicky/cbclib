@@ -127,7 +127,7 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
     wd = 0.5f * (wd + 1.0f);
 
     /* define line bounds */
-    int wi = wd;
+    int wi = roundf(wd);
     rect bnd = (rect)malloc(sizeof(struct rect_s));
 
     if (rt->x0 < rt->x1)
@@ -289,7 +289,7 @@ static void create_line_image_pair(unsigned int **out, rect orect, size_t Y, siz
     rt1->x0 = roundf(ln1[0]); rt1->y0 = roundf(ln1[1]);
     rt1->x1 = roundf(ln1[2]); rt1->y1 = roundf(ln1[3]);
 
-    int wi = MAX(ln0[4], ln1[4]);
+    int wi = roundf(MAX(ln0[4], ln1[4]));
 
     /* Find the outer bounds 'orect' */
     if (rt0->x0 < rt0->x1) {orect->x0 = rt0->x0; orect->x1 = rt0->x1; }
@@ -335,7 +335,7 @@ static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X
     rt->x0 = roundf(ln[0]); rt->y0 = roundf(ln[1]);
     rt->x1 = roundf(ln[2]); rt->y1 = roundf(ln[3]);
 
-    int wi = ln[4];
+    int wi = roundf(ln[4]);
 
     if (rt->x0 < rt->x1) {orect->x0 = rt->x0; orect->x1 = rt->x1; }
     else {orect->x0 = rt->x1; orect->x1 = rt->x0; }
@@ -361,7 +361,7 @@ static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X
     DEALLOC(rt); free_array(oarr);
 }
 
-static void collapse_pair(float *oln, unsigned int *img, rect img_rt, float *data, size_t Y, size_t X,
+static float collapse_pair(float *oln, unsigned int *img, rect img_rt, float *data, size_t Y, size_t X,
     float *ln0, float *ln1, size_t lsize)
 {
     int j, k;
@@ -414,6 +414,8 @@ static void collapse_pair(float *oln, unsigned int *img, rect img_rt, float *dat
 
         for (j = 4; j < (int)lsize; j++) oln[j] = 0.5f * (ln0[j] + ln1[j]);
     }
+
+    return M0;
 }
 
 static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect rt1)
@@ -509,7 +511,7 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
 
     int i, j, n_pairs = 0;
-    float dist, corr;
+    float dist, corr, M0;
     float *ln0, *ln1;
 
     /* Find the closest line */
@@ -548,6 +550,9 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
         }
     }
 
+    /* Exit if no pairs have been found */
+    if (!n_pairs) {DEALLOC(pairs); DEALLOC(ds); return 0;}
+
     size_t *inds = MALLOC(size_t, n_pairs);
     for (i = 0; i < n_pairs; i++) inds[i] = i;
 
@@ -573,23 +578,27 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
             create_line_image_pair(&img_pair, rt_pair, Y, X, 1, ln0, ln1, dilation);
             
             /* Collapse a pair of lines */
-            collapse_pair(oln, img_pair, rt_pair, data, Y, X, ln0, ln1, ldims[1]);
+            M0 = collapse_pair(oln, img_pair, rt_pair, data, Y, X, ln0, ln1, ldims[1]);
 
-            /* Create an image of oln */
-            create_line_image(&img_oln, ort, Y, X, 1, oln, dilation);
-
-            /* Find overlap between imp_pair and imp_oln */
-            corr = find_overlap(img_pair, rt_pair, img_oln, ort);
-
-            if (corr > threshold)
+            if (M0)
             {
-                memcpy(ln0, oln, ldims[1] * sizeof(float));
-                memset(ln1, 0, ldims[1] * sizeof(float));
-                proc[pairs[2 * inds[i] + 1]] = 0;
+                /* Create an image of oln */
+                create_line_image(&img_oln, ort, Y, X, 1, oln, dilation);
+
+                /* Find overlap between imp_pair and imp_oln */
+                corr = find_overlap(img_pair, rt_pair, img_oln, ort);
+
+                if (corr > threshold)
+                {
+                    memcpy(ln0, oln, ldims[1] * sizeof(float));
+                    memset(ln1, 0, ldims[1] * sizeof(float));
+                    proc[pairs[2 * inds[i] + 1]] = 0;
+                }
+
+                DEALLOC(img_oln);
             }
 
             DEALLOC(img_pair);
-            DEALLOC(img_oln);
         }
     }
 
@@ -606,7 +615,7 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
 /*----------------------------------------------------------------------------*/
 /*  Euler angles with Bunge convention
 
-        eul = [phi1, Phi, phi2]
+        ang = [phi1, Phi, phi2]
         phi1 \el [0, 2 * M_PI)
         Phi  \el [0, M_PI)
         phi2 \el [0, 2 * M_PI)
@@ -615,49 +624,49 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
     http://eecs.qmul.ac.uk/~gslabaugh/publications/euler.pdf
  */
 
-static void rotmat_to_euler(double *eul, double *rm)
+static void rotmat_to_euler(double *ang, double *rm)
 {
-    eul[1] = acos(rm[8]);
-    if (eul[1] < 1e-8) {eul[0] = atan2(-rm[3], rm[0]); eul[2] = 0.0; }
-    else if (M_PI - eul[1] < TOL)
-    {eul[0] = atan2(rm[3], rm[0]); eul[2] = 0.0; }
-    else {eul[0] = atan2(rm[6], -rm[7]); eul[2] = atan2(rm[2], rm[5]); }
-    if (eul[0] < 0.0) eul[0] += M_2__PI;
-    if (eul[2] < 0.0) eul[2] += M_2__PI;
+    ang[1] = acos(rm[8]);
+    if (ang[1] < 1e-8) {ang[0] = atan2(-rm[3], rm[0]); ang[2] = 0.0; }
+    else if (M_PI - ang[1] < TOL)
+    {ang[0] = atan2(rm[3], rm[0]); ang[2] = 0.0; }
+    else {ang[0] = atan2(rm[6], -rm[7]); ang[2] = atan2(rm[2], rm[5]); }
+    if (ang[0] < 0.0) ang[0] += M_2__PI;
+    if (ang[2] < 0.0) ang[2] += M_2__PI;
 }
 
-int compute_euler_angles(double *eulers, double *rot_mats, size_t n_mats)
+int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats)
 {
     /* check parameters */
-    if (!eulers || !rot_mats) {ERROR("compute_euler_angles: one of the arguments is NULL."); return -1;}
+    if (!angles || !rot_mats) {ERROR("compute_euler_angles: one of the arguments is NULL."); return -1;}
     if (!n_mats) {ERROR("compute_euler_angles: number of matrices must be positive."); return -1;}   
 
     size_t rm_dims[2] = {n_mats, 9};
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 
-    size_t e_dims[2] = {n_mats, 3};
-    array e_arr = new_array(2, e_dims, sizeof(double), eulers);
-    line e_ln = init_line(e_arr, 1);
+    size_t a_dims[2] = {n_mats, 3};
+    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
+    line ang_ln = init_line(ang_arr, 1);
 
     for (int i = 0; i < (int)n_mats; i++)
     {
         UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(e_ln, i);
+        UPDATE_LINE(ang_ln, i);
 
-        rotmat_to_euler(e_ln->data, rm_ln->data);
+        rotmat_to_euler(ang_ln->data, rm_ln->data);
     }
 
-    DEALLOC(e_ln); DEALLOC(rm_ln);
-    free_array(e_arr); free_array(rm_arr);
+    DEALLOC(ang_ln); DEALLOC(rm_ln);
+    free_array(ang_arr); free_array(rm_arr);
 
     return 0;
 }
 
-static void euler_to_rotmat(double *rm, double *eul)
+static void euler_to_rotmat(double *rm, double *ang)
 {
-    double c0 = cos(eul[0]), c1 = cos(eul[1]), c2 = cos(eul[2]);
-    double s0 = sin(eul[0]), s1 = sin(eul[1]), s2 = sin(eul[2]);
+    double c0 = cos(ang[0]), c1 = cos(ang[1]), c2 = cos(ang[2]);
+    double s0 = sin(ang[0]), s1 = sin(ang[1]), s2 = sin(ang[2]);
 
     rm[0] = c0 * c2 - s0 * s2 * c1;
     rm[1] = s0 * c2 + c0 * s2 * c1;
@@ -670,61 +679,100 @@ static void euler_to_rotmat(double *rm, double *eul)
     rm[8] = c1;
 }
 
-int compute_euler_matrix(double *rot_mats, double *eulers, size_t n_mats)
+int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats)
 {
     /* check parameters */
-    if (!eulers || !rot_mats) {ERROR("compute_euler_matrix: one of the arguments is NULL."); return -1;}
+    if (!angles || !rot_mats) {ERROR("compute_euler_matrix: one of the arguments is NULL."); return -1;}
     if (!n_mats) {ERROR("compute_euler_matrix: number of matrices must be positive."); return -1;}   
 
     size_t rm_dims[2] = {n_mats, 9};
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 
-    size_t e_dims[2] = {n_mats, 3};
-    array e_arr = new_array(2, e_dims, sizeof(double), eulers);
-    line e_ln = init_line(e_arr, 1);
+    size_t a_dims[2] = {n_mats, 3};
+    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
+    line ang_ln = init_line(ang_arr, 1);
 
     for (int i = 0; i < (int)n_mats; i++)
     {
         UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(e_ln, i);
+        UPDATE_LINE(ang_ln, i);
 
-        euler_to_rotmat(rm_ln->data, e_ln->data);
+        euler_to_rotmat(rm_ln->data, ang_ln->data);
     }
 
-    DEALLOC(e_ln); DEALLOC(rm_ln);
-    free_array(e_arr); free_array(rm_arr);
+    DEALLOC(ang_ln); DEALLOC(rm_ln);
+    free_array(ang_arr); free_array(rm_arr);
 
     return 0;
 }
 
-/*-------------------------------------------------------------------------------*/
-/** Calculate the matrix of a rotation by angle theta around the axis defined with
-    spherical angles (alpha, beta)
+/*----------------------------------------------------------------------------*/
+/*  Tilt around an axis
 
-    @param rm       Output rotation matrix.
-    @param alpha    Angle between the rotation axis and OZ.
-    @param beta     The polar angle of the ratation axis.
-    @param theta    Angle of rotation.
+        ang = [theta, alpha, beta]
+        theta \el [0, 2 * M_PI)         Angle of rotation
+        alpha  \el [0, M_PI)            Angle between the axis of rotation and 0Z
+        phi \el [0, 2 * M_PI)           Polar angle of the axis of rotation
  */
-static void tilt_to_rotmat(double *rm, double theta, double alpha, double beta)
+
+static void rotmat_to_tilt(double *ang, double *rm)
 {
-    float a = cos(0.5 * theta), b = -sin(alpha) * cos(beta) * sin(0.5 * theta);
-    float c = -sin(alpha) * sin(beta) * sin(0.5 * theta), d = -cos(alpha) * sin(0.5 * theta);
+    double a0 = rm[7] - rm[5];
+    double a1 = rm[2] - rm[6];
+    double a2 = rm[3] - rm[1];
+    double l = sqrt(SQ(a0) + SQ(a1) + SQ(a2));
+    ang[0] = asin(0.5 * l);
+    ang[1] = acos(a2 / l);
+    ang[2] = atan2(a1, a0);
+}
+
+int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats)
+{
+    /* check parameters */
+    if (!angles || !rot_mats) {ERROR("compute_tilt_angles: one of the arguments is NULL."); return -1;}
+    if (!n_mats) {ERROR("compute_tilt_angles: number of matrices must be positive."); return -1;}   
+
+    size_t rm_dims[2] = {n_mats, 9};
+    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
+    line rm_ln = init_line(rm_arr, 1);
+
+    size_t a_dims[2] = {n_mats, 3};
+    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
+    line ang_ln = init_line(ang_arr, 1);
+
+    for (int i = 0; i < (int)n_mats; i++)
+    {
+        UPDATE_LINE(rm_ln, i);
+        UPDATE_LINE(ang_ln, i);
+
+        rotmat_to_tilt(ang_ln->data, rm_ln->data);
+    }
+
+    DEALLOC(ang_ln); DEALLOC(rm_ln);
+    free_array(ang_arr); free_array(rm_arr);
+
+    return 0;
+}
+
+
+static void tilt_to_rotmat(double *rm, double *ang)
+{
+    float a = cos(0.5 * ang[0]), b = -sin(ang[1]) * cos(ang[2]) * sin(0.5 * ang[0]);
+    float c = -sin(ang[1]) * sin(ang[2]) * sin(0.5 * ang[0]), d = -cos(ang[1]) * sin(0.5 * ang[0]);
 
     rm[0] = a * a + b * b - c * c - d * d;
-    rm[1] = 2 * (b * c + a * d);
-    rm[2] = 2 * (b * d - a * c);
-    rm[3] = 2 * (b * c - a * d);
+    rm[1] = 2.0 * (b * c + a * d);
+    rm[2] = 2.0 * (b * d - a * c);
+    rm[3] = 2.0 * (b * c - a * d);
     rm[4] = a * a + c * c - b * b - d * d;
-    rm[5] = 2 * (c * d + a * b);
-    rm[6] = 2 * (b * d + a * c);
-    rm[7] = 2 * (c * d - a * b);
+    rm[5] = 2.0 * (c * d + a * b);
+    rm[6] = 2.0 * (b * d + a * c);
+    rm[7] = 2.0 * (c * d - a * b);
     rm[8] = a * a + d * d - b * b - c * c;
 }
 
-int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double a0, double a1,
-    double a2)
+int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats)
 {
     /* check parameters */
     if (!angles || !rot_mats) {ERROR("compute_tilt_matrix: one of the arguments is NULL."); return -1;}
@@ -734,17 +782,20 @@ int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats, double 
     array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
     line rm_ln = init_line(rm_arr, 1);
 
-    double l = sqrt(SQ(a0) + SQ(a1) + SQ(a2));
-    double alpha = acos(a2 / l), beta = atan2(a1, a0);
+    size_t a_dims[2] = {n_mats, 3};
+    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
+    line ang_ln = init_line(ang_arr, 1);
 
     for (int i = 0; i < (int)n_mats; i++)
     {
         UPDATE_LINE(rm_ln, i);
+        UPDATE_LINE(ang_ln, i);
 
-        tilt_to_rotmat(rm_ln->data, angles[i], alpha, beta);
+        tilt_to_rotmat(rm_ln->data, ang_ln->data);
     }
 
-    DEALLOC(rm_ln); free_array(rm_arr);
+    DEALLOC(ang_ln); DEALLOC(rm_ln);
+    free_array(ang_arr); free_array(rm_arr);
 
     return 0;
 }
