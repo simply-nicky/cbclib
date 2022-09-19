@@ -480,4 +480,4 @@ def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, in
     with nogil:
         for i in range(n):
             entropy -= p[i] * log(<double>(q[x[i]]) / q_max + epsilon)
-    return entropy
+    return entropy / n

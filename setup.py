@@ -50,7 +50,7 @@ with open('README.md', 'r') as readme:
     long_description = readme.read()
 
 setup(name='cbclib',
-      version='0.3.3',
+      version='0.4.0',
       author='Nikolay Ivanov',
       author_email="nikolay.ivanov@desy.de",
       long_description=long_description,

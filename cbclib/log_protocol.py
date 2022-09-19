@@ -10,16 +10,16 @@ Generate the default built-in log protocol:
 'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', '...': '...'}}
 """
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple, TypeVar
 import numpy as np
-from .data_container import INIContainer
-from .cxi_protocol import CXIStore
-from .data_processing import CrystData
+from .data_container import DataContainer, INIContainer
+from .cbc_setup import Sample, ScanSamples, ScanSetup
 
 LOG_PROTOCOL = os.path.join(os.path.dirname(__file__), 'config/log_protocol.ini')
+L = TypeVar('L', bound='LogContainer')
 
 @dataclass
 class LogProtocol(INIContainer):
@@ -40,9 +40,11 @@ class LogProtocol(INIContainer):
     part_keys : Dict[str, str]
 
     known_types: ClassVar[Dict[str, Any]] = {'int': int, 'bool': bool, 'float': float, 'str': str}
-    unit_dict: ClassVar[Dict[str, float]] = {'percent': 1e-2, 'mm,mdeg': 1e-3,
-                                             'µm,um,udeg,µdeg': 1e-6,
-                                             'nm,ndeg': 1e-9, 'pm,pdeg': 1e-12}
+    unit_dict: ClassVar[Dict[str, float]] = {'mm': 1e-3, 'mdeg': 1.7453292519943296e-05,
+                                             'µm,um': 1e-6, 'udeg,µdeg': 1.7453292519943296e-08,
+                                             'nm': 1e-9, 'ndeg': 1.7453292519943296e-11,
+                                             'pm': 1e-12, 'pdeg': 1.7453292519943296e-14,
+                                             'percent': 1e-2}
 
     def __post_init__(self):
         """
@@ -91,24 +93,7 @@ class LogProtocol(INIContainer):
                 has_unit |= (unit in key)
         return has_unit
 
-    @staticmethod
-    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
-        """Convert `strings` to a list of strings.
-
-        Args:
-            strings : String or a list of strings
-
-        Returns:
-            List of strings.
-        """
-        if isinstance(strings, (str, list)):
-            if isinstance(strings, str):
-                return [strings,]
-            return strings
-
-        raise ValueError('strings must be a string or a list of strings')
-
-    def load_attributes(self, path: str) -> Dict[str, Any]:
+    def load_attributes(self, path: str) -> Dict[str, Dict[str, Any]]:
         """Return attributes' values from a log file at
         the given `path`.
 
@@ -260,43 +245,167 @@ class LogProtocol(INIContainer):
             return txt_dict, idxs
         return txt_dict
 
-def converter_petra(dir_path: str, scan_num: int, idxs: Optional[Iterable[int]]=None,
-                    **attributes: Any) -> CrystData:
-    # log_prt = LogProtocol.import_default()
+@dataclass
+class LogContainer(DataContainer):
+    protocol        : LogProtocol = field(default_factory=LogProtocol.import_default)
 
-    h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
-    # log_path = os.path.join(dir_path, f'server_log/Scan_logs/Scan_{scan_num:d}.log')
-    h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
-                       if path.endswith(('LambdaFar.nxs', '.h5'))])
+    log_attr        : Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    log_data        : Dict[str, Any] = field(default_factory=dict)
+    idxs            : Optional[np.ndarray] = None
+    translations    : Optional[np.ndarray] = None
 
-    input_file = CXIStore(h5_files, mode='r')
+    _no_data_exc    : ClassVar[ValueError] = ValueError('No log data in the container')
 
-    # log_attrs = log_prt.load_attributes(log_path)
-    # log_data, idxs = log_prt.load_data(log_path, idxs=idxs, return_idxs=True)
+    def __len__(self) -> int:
+        return 0 if self.idxs is None else self.idxs.size
 
-    # n_frames = idxs.size
-    # if n_frames:
-    #     x_sample = log_attrs['Session logged attributes'].get('x_sample', 0.0)
-    #     y_sample = log_attrs['Session logged attributes'].get('y_sample', 0.0)
-    #     z_sample = log_attrs['Session logged attributes'].get('z_sample', 0.0)
-    #     r_sample = log_attrs['Session logged attributes'].get('r_sample', 0.0)
-    #     translations = np.tile([[x_sample, y_sample, z_sample]], (n_frames, 1))
-    #     tilts = r_sample * np.ones(n_frames)
-    #     for data_key, log_dset in log_data.items():
-    #         for log_key in log_prt.log_keys['x_sample']:
-    #             if log_key in data_key:
-    #                 translations[:log_dset.size, 0] = log_dset
-    #         for log_key in log_prt.log_keys['y_sample']:
-    #             if log_key in data_key:
-    #                 translations[:log_dset.size, 1] = log_dset
-    #         for log_key in log_prt.log_keys['z_sample']:
-    #             if log_key in data_key:
-    #                 translations[:log_dset.size, 2] = log_dset
-    #         for log_key in log_prt.log_keys['r_sample']:
-    #             if log_key in data_key:
-    #                 tilts[:log_dset.size] = log_dset
+    def read_logs(self: L, log_path: str, idxs: Optional[Iterable[int]]=None) -> L:
+        """Read a log file under the path `log_path`. Read out only the frame indices
+        defined by `idxs`. If `idxs` is None, read the whole log file.
 
-    #     return CrystData(input_file=input_file, translations=translations,
-    #                      tilts=tilts, **attributes)
+        Args:
+            log_path : Path to the log file.
+            idxs : List of indices to read. Read the whole log file if None.
 
-    return CrystData(input_file=input_file, **attributes)
+        Returns:
+            A new :class:`KamzikConverter` object with `log_attr`, `log_data`, and `idxs`
+            updated.
+        """
+        log_attr = self.protocol.load_attributes(log_path)
+        log_data, idxs = self.protocol.load_data(log_path, idxs=idxs, return_idxs=True)
+        return LogContainerFull(**dict(self, log_attr=log_attr, log_data=log_data, idxs=idxs))
+
+    def find_log_part_key(self, attr: str) -> Optional[str]:
+        """Find a name of the log dictionary corresponding to an attribute
+        name `attr`.
+
+        Args:
+            attr : A name of the attribute to find.
+
+        Returns:
+            A name of the log dictionary, corresponding to the given attribute
+            name `attr`.
+        """
+        log_keys = self.protocol.log_keys.get(attr, [])
+        for part in self.log_attr:
+            for log_key in log_keys:
+                if log_key in part:
+                    return part
+        return None
+
+    def find_log_attribute(self, attr: str, part_key: Optional[str]=None) -> Optional[Any]:
+        """Find a value in the log attributes corresponding to an
+        attribute name `attr`.
+
+        Args:
+            attr : A name of the attribute to find.
+            part_key : Search in the given part of the log dictionary if provided.
+
+        Returns:
+            Value of the log attribute. Returns None if nothing is found.
+        """
+        if part_key is None:
+            part_key = self.protocol.part_keys.get(attr, '')
+        part_dict = self.log_attr.get(part_key, {})
+        value = part_dict.get(attr, None)
+        return value
+
+    def find_log_dataset(self, attr: str) -> Optional[np.ndarray]:
+        """Find a dataset in the log data corresponding to an
+        attribute name `attr`.
+
+        Args:
+            attr : A name of the attribute to find.
+
+        Returns:
+            Dataset for the given attribute. Returns None if nothing is found.
+        """
+        log_keys = self.protocol.log_keys.get(attr, [])
+        for data_key, log_dset in self.log_data.items():
+            for log_key in log_keys:
+                if log_key in data_key:
+                    return log_dset
+        return None
+
+    def simulate_translations(self: L) -> L:
+        raise self._no_data_exc
+
+    def read_translations(self: L) -> L:
+        raise self._no_data_exc
+
+@dataclass
+class LogContainerFull(LogContainer):
+    protocol        : LogProtocol
+
+    log_attr        : Dict[str, Dict[str, Any]]
+    log_data        : Dict[str, Any]
+    idxs            : Optional[np.ndarray] = None
+    translations    : Optional[np.ndarray] = None
+
+    def _is_log_translations(self) -> bool:
+        return (self.find_log_attribute('x_sample') is not None and
+                self.find_log_attribute('y_sample') is not None and
+                self.find_log_attribute('z_sample') is not None and
+                self.find_log_attribute('r_sample') is not None and
+                (self.find_log_dataset('x_sample') is not None or
+                 self.find_log_dataset('y_sample') is not None or
+                 self.find_log_dataset('z_sample') is not None or
+                 self.find_log_dataset('r_sample') is not None))
+
+    def _is_sim_translations(self) -> bool:
+        return (self.find_log_attribute('x_sample') is not None and
+                self.find_log_attribute('y_sample') is not None and
+                self.find_log_attribute('z_sample') is not None and
+                self.find_log_attribute('r_sample') is not None and
+                (self.find_log_part_key('x_sample') is not None or
+                 self.find_log_part_key('y_sample') is not None or
+                 self.find_log_part_key('z_sample') is not None or
+                 self.find_log_part_key('r_sample') is not None))
+
+    def simulate_translations(self) -> LogContainerFull:
+        if not self._is_sim_translations():
+            raise ValueError('The necessary data is not found')
+
+        translations = np.tile((self.find_log_attribute('x_sample'),
+                                self.find_log_attribute('y_sample'),
+                                self.find_log_attribute('z_sample'),
+                                self.find_log_attribute('r_sample')), (len(self), 1))
+        translations = np.nan_to_num(translations)
+
+        step_sizes, n_steps = [], []
+        for scan_motor, unit_vec in zip(['x_sample', 'y_sample',
+                                         'z_sample', 'r_sample'], np.eye(4, 4)):
+            part_key = self.find_log_part_key(scan_motor)
+            if part_key is not None:
+                step_sizes.append(self.log_attr[part_key].get('step_size') * unit_vec)
+                n_steps.append(self.log_attr[part_key].get('n_points'))
+
+        steps = np.tensordot(np.stack(np.mgrid[[slice(0, n) for n in n_steps]], axis=0),
+                             np.stack(step_sizes, axis=0), (0, 0)).reshape(-1, 4)
+        return self.replace(translations=translations + steps)
+
+    def read_translations(self) -> LogContainerFull:
+        if not self._is_log_translations():
+            raise ValueError('The necessary data is not found')
+
+        translations = np.tile((self.find_log_attribute('x_sample'),
+                                self.find_log_attribute('y_sample'),
+                                self.find_log_attribute('z_sample'),
+                                self.find_log_attribute('r_sample')), (len(self), 1))
+        translations = np.nan_to_num(translations)
+
+        for idx, scan_motor in enumerate(['x_sample', 'y_sample', 'z_sample', 'r_sample']):
+            dset = self.find_log_dataset(scan_motor)
+            if dset is not None:
+                translations[:dset.size, idx] = dset
+        return self.replace(translations=translations)
+
+    def generate_samples(self, pos: np.ndarray, setup: ScanSetup) -> ScanSamples:
+        if self.translations is None:
+            raise ValueError('No translations in the container')
+
+        samples = {}
+        for frame, translation in zip(self.idxs, self.translations):
+            samples[frame] = Sample(setup.tilt_rotation(translation[3] - self.translations[0, 3]),
+                                    translation[:3] - self.translations[0, :3] + pos)
+        return ScanSamples(samples)

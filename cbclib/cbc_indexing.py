@@ -1,19 +1,16 @@
 from __future__ import annotations
-from typing import (Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List,
-                    Optional, Set, Tuple, Union, ValuesView)
+from typing import (Any, ClassVar, Dict, List, Optional, Set, Tuple, Union)
 from dataclasses import InitVar, dataclass, field
 from weakref import ReferenceType, ref
 import numpy as np
 import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
-                  gaussian_grid_grad,  euler_angles, euler_matrix, tilt_angles,
-                  tilt_matrix, cross_entropy, calc_source_lines)
-from .data_container import Crop, DataContainer, ScanSetup, Basis
-from .data_processing import Streaks
+                  gaussian_grid_grad, cross_entropy, calc_source_lines)
+from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup
 from .cxi_protocol import Indices
-
-IntArray = Union[List[int], Tuple[int, ...], np.ndarray]
+from .data_container import Crop
+from .data_processing import Streaks
 
 @dataclass
 class ScanStreaks():
@@ -94,9 +91,9 @@ class ScanStreaks():
         return pattern
 
     def refine_indexing(self, frame: int, tol: Tuple[float, float, float], basis: Basis, sample: Sample,
-                        q_abs: float, width: float) -> IndexProblem:
+                        q_abs: float, width: float, alpha: float=0.0) -> IndexProblem:
         return IndexProblem(parent=ref(self), tol=tol, basis=basis, sample=sample, q_abs=q_abs,
-                            width=width, pattern=self.pattern_dict(frame))
+                            width=width, pattern=self.pattern_dict(frame), alpha=alpha)
 
     def reset_index(self):
         self.dataframe.reset_index(drop=True, inplace=True)
@@ -240,70 +237,6 @@ class Map3D():
         return Map3D(self.val - val, self.x, self.y, self.z)
 
 @dataclass
-class Rotation(DataContainer):
-    matrix : np.ndarray = np.eye(3, 3)
-
-    def __post_init__(self):
-        self.matrix = self.matrix.reshape((3, 3))
-
-    @classmethod
-    def import_euler(cls, alpha: float, beta: float, gamma: float) -> Rotation:
-        return Rotation(euler_matrix(np.array([alpha, beta, gamma])))
-
-    @classmethod
-    def import_tilt(cls, theta: float, alpha: float, beta: float) -> Rotation:
-        return Rotation(tilt_matrix(np.array([theta, alpha, beta])))
-
-    def __call__(self, inp: np.ndarray) -> np.ndarray:
-        return inp.dot(self.matrix.T)
-
-    def __mul__(self, obj: Any) -> Rotation:
-        if isinstance(obj, Rotation):
-            return Rotation(self.matrix.dot(obj.matrix))
-        return NotImplemented
-
-    def reciprocate(self) -> Rotation:
-        return Rotation(self.matrix.T)
-
-    def to_euler(self) -> np.ndarray:
-        return euler_angles(self.matrix)
-
-    def to_tilt(self) -> np.ndarray:
-        if np.allclose(self.matrix, self.matrix.T):
-            eigw, eigv = np.linalg.eigh(self.matrix)
-            axis = eigv[np.isclose(eigw, 1.0)]
-            theta = np.arccos(0.5 * (np.trace(self.matrix) - 1.0))
-            return np.array([theta, np.arccos(axis[0, 2]), np.arctan2(axis[0, 1], axis[0, 0])])
-        return tilt_angles(self.matrix)
-
-@dataclass
-class Sample():
-    rotation : Rotation
-    pos : np.ndarray
-    mat_columns : ClassVar[Tuple[str]] = ('Rxx', 'Rxy', 'Rxz',
-                                          'Ryx', 'Ryy', 'Ryz',
-                                          'Rzx', 'Rzy', 'Rzz')
-    pos_columns : ClassVar[Tuple[str]] = ('x' , 'y' , 'z' )
-
-    @classmethod
-    def import_dataframe(cls, dataframe: pd.Series) -> Sample:
-        return cls(rotation=Rotation(dataframe[list(cls.mat_columns)].to_numpy()),
-                   pos=dataframe[list(cls.pos_columns)].to_numpy())
-
-    def rotate(self, basis: Basis) -> Basis:
-        return Basis.import_matrix(self.rotation(basis.mat))
-
-    def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup) -> np.ndarray:
-        return setup.detector_to_kout(x, y, self.pos)
-
-    def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup) -> Tuple[np.ndarray, np.ndarray]:
-        return setup.kout_to_detector(kout, self.pos)
-
-    def to_dataframe(self) -> pd.Series:
-        return pd.Series(np.concatenate((self.rotation.matrix.ravel(), self.pos)),
-                         index=self.mat_columns + self.pos_columns)
-
-@dataclass
 class CBDModel():
     basis   : Basis
     sample  : Sample
@@ -354,7 +287,7 @@ class CBDModel():
         return streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
 
 @dataclass
-class IndexProblem:
+class IndexProblem():
     parent    : ReferenceType[ScanStreaks]
     tol       : InitVar[Tuple[float, float]]
     basis     : Basis
@@ -362,6 +295,7 @@ class IndexProblem:
     q_abs     : InitVar[float]
     width     : float
     pattern   : InitVar[Dict[str, np.ndarray]]
+    alpha     : float = field(default=0.0)
 
     crop      : Crop = field(init=False)
     hkl       : np.ndarray = field(init=False)
@@ -397,16 +331,17 @@ class IndexProblem:
             _rbounds += [tol[0],] * 3
             self._slices[0] = slice(len(_lbounds) - 3, len(_lbounds))
         if tol[1]:
-            _lbounds += [1.0 - tol[0],] * 3
-            _rbounds += [1.0 + tol[0],] * 3
+            _lbounds += [1.0 - tol[1],] * 3
+            _rbounds += [1.0 + tol[1],] * 3
             self._slices[1] = slice(len(_lbounds) - 3, len(_lbounds))
         if tol[2]:
-            _lbounds += [1.0 - tol[0],] * 2
-            _rbounds += [1.0 + tol[0],] * 2
+            _lbounds += [1.0 - tol[2],] * 2
+            _rbounds += [1.0 + tol[2],] * 2
             self._slices[2] = slice(len(_lbounds) - 2, len(_lbounds))
 
         self._bounds = (_lbounds, _rbounds)
         self.x0 = np.mean(self._bounds, axis=0)
+        self.alpha = self.alpha / (np.asarray(self._bounds[1]) - self.x0)
         self.update_hkl(self.x0, q_abs)
 
     def _get_slice(self, x: np.ndarray, i: int) -> np.ndarray:
@@ -449,8 +384,9 @@ class IndexProblem:
         return streaks.pattern_dict(self.shape, dp=1.0 / self.q_max, profile='linear')
 
     def fitness(self, x: np.ndarray) -> List[float]:
-        return [cross_entropy(x=self._ij, p=self._p, q=self.pattern_mask(x).ravel(),
-                              q_max=self.q_max, epsilon=self.epsilon),]
+        criterion = cross_entropy(x=self._ij, p=self._p, q=self.pattern_mask(x).ravel(),
+                                  q_max=self.q_max, epsilon=self.epsilon)
+        return [criterion + np.sum(self.alpha * np.abs(x - self.x0)),]
 
     def get_bounds(self) -> Tuple[List[float], List[float]]:
         return self._bounds
@@ -482,64 +418,3 @@ class IndexProblem:
         ij_sim = np.where(labels.ravel())[0]
         df_idxs = df_frame.index[df_frame['ij'].searchsorted(ij_sim)]
         self.parent().dataframe.loc[df_idxs, ['h', 'k', 'l']] = self.hkl[labels.ravel()[ij_sim], :]
-
-MapSamples = Union[Iterable[Tuple[int, Sample]], Dict[int, Sample]]
-
-class ScanSamples:
-    def __init__(self, items: MapSamples=list()):
-        self._dct = dict(items)
-
-    @classmethod
-    def import_dataframe(cls, df: pd.DataFrame) -> ScanSamples:
-        frames = df.index
-        samples = df.apply(Sample.import_dataframe, axis=1)
-        return cls(zip(frames, samples))
-
-    def __getitem__(self, frame: int) -> Sample:
-        return self._dct.__getitem__(frame)
-
-    def __setitem__(self, frame: int, smp: Sample):
-        self._dct.__setitem__(frame, smp)
-
-    def __iter__(self) -> Iterator[int]:
-        return self._dct.__iter__()
-
-    def __contains__(self, frame: int) -> bool:
-        return self._dct.__contains__(frame)
-
-    def __str__(self) -> str:
-        return self._dct.__str__()
-
-    def __repr__(self) -> str:
-        return self._dct.__repr__()
-
-    def keys(self) -> KeysView[str]:
-        return self._dct.keys()
-
-    def values(self) -> ValuesView[Sample]:
-        return self._dct.values()
-
-    def items(self) -> ItemsView[str, Sample]:
-        return self._dct.items()
-
-    def to_dict(self) -> Dict[str, Sample]:
-        return dict(self._dct)
-
-    def to_dataframe(self) -> pd.DataFrame:
-        return pd.DataFrame((sample.to_dataframe() for sample in self.values()), index=self.keys())
-
-    def rotation(self, from_frames: Union[int, Iterable[int]], to_frames: Union[int, Iterable[int]]) -> List[Rotation]:
-        from_frames, to_frames = np.atleast_1d(from_frames), np.atleast_1d(to_frames)
-        rotations = []
-        for (f1, f2) in zip(from_frames, to_frames):
-            rotations.append(self[f2].rotation * self[f1].rotation.reciprocate())
-        return rotations
-
-    def get_positions(self, axis: int) -> np.ndarray:
-        return np.asarray([sample.pos[axis] for sample in self.values()])
-
-    def set_positions(self, positions: np.ndarray, axis: int) -> ScanSamples:
-        obj = ScanSamples(self.items())
-        for frame in obj:
-            obj[frame].pos[axis] = positions[frame]
-        return obj

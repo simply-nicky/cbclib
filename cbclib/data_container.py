@@ -8,7 +8,6 @@ import re
 from typing import (Any, Callable, Dict, ItemsView, Iterator, List, Tuple, Type, Union,
                     ValuesView, TypeVar)
 import numpy as np
-from .bin import tilt_matrix, cartesian_to_spherical, spherical_to_cartesian
 
 T = TypeVar('T', bound='DataContainer')
 
@@ -114,6 +113,23 @@ class INIContainer(DataContainer):
 
         return cls(**cls._format_dict(ini_dict))
 
+    @staticmethod
+    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
+        """Convert `strings` to a list of strings.
+
+        Args:
+            strings : String or a list of strings
+
+        Returns:
+            List of strings.
+        """
+        if isinstance(strings, (str, list)):
+            if isinstance(strings, str):
+                return [strings,]
+            return strings
+
+        raise ValueError('strings must be a string or a list of strings')
+
     def _get_string(self, attr) -> str:
         val = self.get(attr)
         if isinstance(val, np.ndarray):
@@ -138,94 +154,6 @@ class INIContainer(DataContainer):
 
         with open(ini_path, 'w') as ini_file:
             ini_parser.write(ini_file)
-
-@dataclass
-class Basis(INIContainer):
-    __ini_fields__ = {'basis': ('a_vec', 'b_vec', 'c_vec')}
-
-    a_vec : np.ndarray
-    b_vec : np.ndarray
-    c_vec : np.ndarray
-
-    def __post_init__(self):
-        self.mat = np.stack((self.a_vec, self.b_vec, self.c_vec))
-
-    @classmethod
-    def import_matrix(cls, mat: np.ndarray) -> Basis:
-        return cls(mat[0], mat[1], mat[2])
-
-    @classmethod
-    def import_spherical(cls, sph_mat: np.ndarray) -> Basis:
-        return cls.import_matrix(spherical_to_cartesian(sph_mat))
-
-    def reciprocate(self, scan_setup: ScanSetup) -> Basis:
-        a_rec = np.cross(self.b_vec, self.c_vec) / (np.cross(self.b_vec, self.c_vec).dot(self.a_vec))
-        b_rec = np.cross(self.c_vec, self.a_vec) / (np.cross(self.c_vec, self.a_vec).dot(self.b_vec))
-        c_rec = np.cross(self.a_vec, self.b_vec) / (np.cross(self.a_vec, self.b_vec).dot(self.c_vec))
-        return Basis(*(np.stack((a_rec, b_rec, c_rec)) * scan_setup.wavelength))
-
-    def to_spherical(self) -> np.ndarray:
-        return cartesian_to_spherical(self.mat)
-
-FloatArray = Union[List[float], Tuple[float, ...], np.ndarray]
-
-@dataclass
-class ScanSetup(INIContainer):
-    """
-    Detector tilt scan experimental setup class
-
-    foc_pos - focus position relative to the detector [m]
-    pix_size - detector pixel size [m]
-    rot_axis - axis of rotation
-    smp_pos - sample position relative to the detector [m]
-    """
-    __ini_fields__ = {'exp_geom': ('foc_pos', 'rot_axis', 'pupil_min', 'pupil_max',
-                                   'wavelength', 'x_pixel_size', 'y_pixel_size')}
-
-    foc_pos         : np.ndarray
-    rot_axis        : np.ndarray
-    pupil_min       : np.ndarray
-    pupil_max       : np.ndarray
-    wavelength      : float
-    x_pixel_size    : float
-    y_pixel_size    : float
-
-    def __post_init__(self):
-        self.kin_min = self.detector_to_kin(self.pupil_min[0], self.pupil_min[1])
-        self.kin_max = self.detector_to_kin(self.pupil_max[0], self.pupil_max[1])
-        self.kin_center = self.detector_to_kin(0.5 * (self.pupil_min[0] + self.pupil_max[0]),
-                                               0.5 * (self.pupil_min[1] + self.pupil_max[1]))
-
-    def _det_to_k(self, x: np.ndarray, y: np.ndarray, source: np.ndarray) -> np.ndarray:
-        delta_y = y * self.y_pixel_size - source[1]
-        delta_x = x * self.x_pixel_size - source[0]
-        phis = np.arctan2(delta_y, delta_x)
-        thetas = np.arctan(np.sqrt(delta_x**2 + delta_y**2) / source[2])
-        return np.stack((np.sin(thetas) * np.cos(phis),
-                         np.sin(thetas) * np.sin(phis),
-                         np.cos(thetas)), axis=-1)
-
-    def _k_to_det(self, karr: np.ndarray, source: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        theta = np.arccos(karr[..., 2] / np.sqrt((karr * karr).sum(axis=-1)))
-        phi = np.arctan2(karr[..., 1], karr[..., 0])
-        det_x = source[2] * np.tan(theta) * np.cos(phi) + source[0]
-        det_y = source[2] * np.tan(theta) * np.sin(phi) + source[1]
-        return det_x / self.x_pixel_size, det_y / self.y_pixel_size
-
-    def detector_to_kout(self, x: np.ndarray, y: np.ndarray, smp_pos: np.ndarray) -> np.ndarray:
-        return self._det_to_k(x, y, smp_pos)
-
-    def kout_to_detector(self, kout: np.ndarray, smp_pos: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        return self._k_to_det(kout, smp_pos)
-
-    def detector_to_kin(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
-        return self._det_to_k(x, y, self.foc_pos)
-
-    def kin_to_detector(self, kin: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        return self._k_to_det(kin, self.foc_pos)
-
-    def tilt_matrices(self, tilts: Union[float, np.ndarray]) -> np.ndarray:
-        return tilt_matrix(np.atleast_1d(tilts), self.rot_axis)
 
 class Transform():
     """Abstract transform class."""

@@ -7,6 +7,7 @@
 /cbclib/include/*.out
 /cbclib/include/*.so
 /cbclib/bin/*.c
+/scripts/*.sh
 dev.ipynb
 
 #jupyter checkpoints

@@ -1,3 +1,4 @@
+import os
 import argparse
 from multiprocessing import cpu_count
 import hdf5plugin
@@ -13,11 +14,15 @@ def read_whitefield(scan_num: int) -> np.ndarray:
 def main(scan_num: int, dir_path: str, setup_path: str,  data_path: str, table_path: str,
          roi: Tuple[int, int, int, int], frames: Tuple[int, int], mask_max: int,
          cor_range: Tuple[float, float], quant: float, cutoff: float, filter_threshold: float,
-         group_threshold: float, num_chunks: int, num_threads: int, verbose: bool):
+         group_threshold: float, num_chunks: int, num_threads: int, save_data: bool, verbose: bool):
     scan_setup = cbc.ScanSetup.import_ini(setup_path)
-    data = cbc.converter_petra(dir_path, scan_num, transform=cbc.Crop(roi),
-                               idxs=[])
-    data = data.update_output_file(cbc.CXIStore(data_path, 'a'))
+
+    h5_dir = os.path.join(dir_path, f'scan_frames/Scan_{scan_num:d}')
+    h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
+                       if path.endswith(('LambdaFar.nxs', '.h5'))])
+    data = cbc.CrystData(cbc.CXIStore(h5_files, 'r'), cbc.Crop(roi))
+    if save_data:
+        data = data.update_output_file(cbc.CXIStore(data_path, 'a'))
 
     tables = []
     for idxs in tqdm(np.array_split(data.input_file.indices()[frames[0]:frames[1]], num_chunks), total=num_chunks,
@@ -35,10 +40,12 @@ def main(scan_num: int, dir_path: str, setup_path: str,  data_path: str, table_p
         det_res = det_res.generate_bgd_mask()
         det_res = det_res.update_streak_data()
         tables.append(det_res.export_table(concatenate=True))
-        data.save(['data', 'good_frames', 'mask', 'frames', 'cor_data', 'background'],
-                  mode='insert', idxs=idxs)
+        if save_data:
+            data.save(['data', 'good_frames', 'mask', 'frames', 'cor_data', 'background'],
+                    mode='insert', idxs=idxs)
 
-    data.save('whitefield')
+    if save_data:
+        data.save('whitefield')
 
     table = pd.concat(tables)
     table.to_hdf(table_path, 'data')
@@ -62,6 +69,7 @@ if __name__ == "__main__":
     parser.add_argument('--group_threshold', default=0.7, type=float, help="Streaks grouping threshold")
     parser.add_argument('--num_chunks', default=100, type=int, help="Number of chunks")
     parser.add_argument('--num_threads', default=cpu_count(), type=int, help="Number of threads")
+    parser.add_argument('--save_data', action='store_true', help='Save detector data')
     parser.add_argument('-v', '--verbose', action='store_true', help="Set the verbosity")
 
     args = vars(parser.parse_args())

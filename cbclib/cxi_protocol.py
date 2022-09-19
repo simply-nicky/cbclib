@@ -73,23 +73,6 @@ class CXIProtocol(INIContainer):
                            if attr in self.datatypes}
         self.kinds = {attr: val for attr, val in self.kinds.items() if attr in self.datatypes}
 
-    @staticmethod
-    def str_to_list(strings: Union[str, List[str]]) -> List[str]:
-        """Convert `strings` to a list of strings.
-
-        Args:
-            strings : String or a list of strings
-
-        Returns:
-            List of strings.
-        """
-        if isinstance(strings, (str, list)):
-            if isinstance(strings, str):
-                return [strings,]
-            return strings
-
-        raise ValueError('strings must be a string or a list of strings')
-
     @classmethod
     def import_default(cls) -> CXIProtocol:
         """Return the default :class:`CXIProtocol` object. 

@@ -5,8 +5,9 @@ from dataclasses import dataclass, field
 from weakref import ref, ReferenceType
 import numpy as np
 import pandas as pd
+from .cbc_setup import ScanSetup
 from .cxi_protocol import CXIStore
-from .data_container import DataContainer, ScanSetup, Transform
+from .data_container import DataContainer, Transform
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
                   maximum_filter, normalize_streak_data, draw_lines, draw_lines_stack,
                   draw_line_indices)
@@ -16,25 +17,21 @@ C = TypeVar('C', bound='CrystData')
 @dataclass
 class CrystData(DataContainer):
     input_file:     CXIStore
-    transform:      Transform = None
-    num_threads:    int = None
-    output_file:    CXIStore = None
+    transform:      Optional[Transform] = None
+    num_threads:    int = field(default=np.clip(1, 64, cpu_count()))
+    output_file:    Optional[CXIStore] = None
 
-    data:           np.ndarray = None
-    good_frames:    np.ndarray = None
-    mask:           np.ndarray = None
-    frames:         np.ndarray = None
+    data:           Optional[np.ndarray] = None
+    good_frames:    Optional[np.ndarray] = None
+    mask:           Optional[np.ndarray] = None
+    frames:         Optional[np.ndarray] = None
 
-    whitefield:     np.ndarray = None
-    cor_data:       np.ndarray = None
-    background:     np.ndarray = None
+    whitefield:     Optional[np.ndarray] = None
+    cor_data:       Optional[np.ndarray] = None
+    background:     Optional[np.ndarray] = None
 
     _no_data_exc: ClassVar[ValueError] = ValueError('No data in the container')
     _no_whitefield_exc: ClassVar[ValueError] = ValueError('No whitefield in the container')
-
-    def __post_init__(self):
-        if self.num_threads is None:
-            self.num_threads = np.clip(1, 64, cpu_count())
 
     @property
     def shape(self) -> Tuple[int, int, int]:
@@ -400,21 +397,20 @@ class CrystData(DataContainer):
 @dataclass
 class CrystDataPart(CrystData):
     input_file:     CXIStore
-    transform:      Transform = None
-    num_threads:    int = None
+    transform:      Optional[Transform] = None
+    num_threads:    int = field(default=np.clip(1, 64, cpu_count()))
     output_file:    CXIStore = None
 
-    data:           np.ndarray = None
-    good_frames:    np.ndarray = None
-    mask:           np.ndarray = None
-    frames:         np.ndarray = None
+    data:           np.ndarray
+    good_frames:    Optional[np.ndarray] = None
+    mask:           Optional[np.ndarray] = None
+    frames:         Optional[np.ndarray] = None
 
-    whitefield:     np.ndarray = None
-    cor_data:       np.ndarray = None
-    background:     np.ndarray = None
+    whitefield:     Optional[np.ndarray] = None
+    cor_data:       Optional[np.ndarray] = None
+    background:     Optional[np.ndarray] = None
 
     def __post_init__(self):
-        super().__post_init__()
         if self.good_frames is None:
             self.good_frames = np.arange(self.shape[0])
         if self.mask is None:
@@ -506,18 +502,18 @@ class CrystDataPart(CrystData):
 @dataclass
 class CrystDataFull(CrystDataPart):
     input_file:     CXIStore
-    transform:      Transform = None
-    num_threads:    int = None
+    transform:      Optional[Transform] = None
+    num_threads:    int = field(default=np.clip(1, 64, cpu_count()))
     output_file:    CXIStore = None
 
-    data:           np.ndarray = None
-    good_frames:    np.ndarray = None
-    mask:           np.ndarray = None
-    frames:         np.ndarray = None
+    data:           np.ndarray
+    good_frames:    Optional[np.ndarray] = None
+    mask:           Optional[np.ndarray] = None
+    frames:         Optional[np.ndarray] = None
 
-    whitefield:     np.ndarray = None
-    cor_data:       np.ndarray = None
-    background:     np.ndarray = None
+    whitefield:     np.ndarray
+    cor_data:       Optional[np.ndarray] = None
+    background:     Optional[np.ndarray] = None
 
     def __post_init__(self):
         super().__post_init__()
@@ -594,10 +590,10 @@ class Streaks(DataContainer):
     y1          : np.ndarray
     width       : np.ndarray
     length      : np.ndarray = field(init=False)
-    h           : np.ndarray = None
-    k           : np.ndarray = None
-    l           : np.ndarray = None
-    hkl_index   : np.ndarray = None
+    h           : Optional[np.ndarray] = None
+    k           : Optional[np.ndarray] = None
+    l           : Optional[np.ndarray] = None
+    hkl_index   : Optional[np.ndarray] = None
 
     def __post_init__(self):
         self.length = np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
@@ -647,14 +643,15 @@ class StreakDetector(DataContainer):
     num_threads:        int
     parent:             ReferenceType[CrystData]
 
-    lsd_obj:            LSD = None
-    indices:            Dict[int, int] = None
-    streak_data:        np.ndarray = None
-    streaks:            Dict[int, Streaks] = None
-    streak_width:       float = None
-    streak_mask:        np.ndarray = None
-    bgd_dilation :      float = None
-    bgd_mask :          np.ndarray = None
+    lsd_obj:            LSD = field(default=LSD(0.9, 0.9, 0.0, 60.0, 0.5, 2e-2))
+    indices:            Dict[int, int] = field(default_factory=dict)
+    streaks:            Dict[int, Streaks] = field(default_factory=dict)
+    streak_data:        Optional[np.ndarray] = None
+
+    streak_width:       Optional[float] = None
+    streak_mask:        Optional[np.ndarray] = None
+    bgd_dilation :      Optional[float] = None
+    bgd_mask :          Optional[np.ndarray] = None
 
 
     footprint: ClassVar[np.ndarray] = np.array([[[False, False,  True, False, False],
@@ -676,9 +673,7 @@ class StreakDetector(DataContainer):
             ValueError : If an attribute specified in `attr_set` has not been
                 provided.
         """
-        if self.lsd_obj is None:
-            self.update_lsd()
-        if self.indices is None:
+        if not self.indices:
             self.indices = {frame: index for index, frame in self.frames.items()}
 
     @property
@@ -717,12 +712,12 @@ class StreakDetector(DataContainer):
         for attr in self.contents():
             if isinstance(self[attr], np.ndarray):
                 data_dict[attr] = self[attr][frames]
-        if self.streaks is not None:
+        if self.streaks:
             data_dict['streaks'] = {frame: self.streaks[frame] for frame in frames}
         return self.replace(**data_dict)
 
     def update_lsd(self: S, scale: float=0.9, sigma_scale: float=0.9,
-                   log_eps: float=0., ang_th: float=60.0, density_th: float=0.5,
+                   log_eps: float=0.0, ang_th: float=60.0, density_th: float=0.5,
                    quant: float=2e-2) -> S:
         return self.replace(lsd_obj=LSD(scale=scale, sigma_scale=sigma_scale,
                                         log_eps=log_eps, ang_th=ang_th,
@@ -750,15 +745,15 @@ class StreakDetectorFull(StreakDetector):
     num_threads:        int
     parent:             ReferenceType[CrystData]
 
-    lsd_obj:            LSD = None
-    indices:            Dict[int, int] = None
-    streak_data:        np.ndarray = None
+    lsd_obj:            LSD = field(default=LSD(0.9, 0.9, 0.0, 60.0, 0.5, 2e-2))
+    indices:            Dict[int, int] = field(default_factory=dict)
+    streaks:            Dict[int, Streaks] = field(default_factory=dict)
+    streak_data:        Optional[np.ndarray] = None
 
-    streaks:            Dict[int, Streaks] = None
-    streak_width:       float = None
-    streak_mask:        np.ndarray = None
-    bgd_dilation :      float = None
-    bgd_mask :          np.ndarray = None
+    streak_width:       Optional[float] = None
+    streak_mask:        Optional[np.ndarray] = None
+    bgd_dilation :      Optional[float] = None
+    bgd_mask :          Optional[np.ndarray] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()

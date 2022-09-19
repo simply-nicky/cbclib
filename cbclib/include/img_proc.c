@@ -722,7 +722,7 @@ static void rotmat_to_tilt(double *ang, double *rm)
     double a1 = rm[2] - rm[6];
     double a2 = rm[3] - rm[1];
     double l = sqrt(SQ(a0) + SQ(a1) + SQ(a2));
-    ang[0] = asin(0.5 * l);
+    ang[0] = acos(0.5 * (rm[0] + rm[4] + rm[8] - 1.0));
     ang[1] = acos(a2 / l);
     ang[2] = atan2(a1, a0);
 }
