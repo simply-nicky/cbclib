@@ -1,6 +1,7 @@
 #cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False, cdivision=True, embedsignature=True
 import numpy as np
 import cython
+from libc.string cimport memcmp
 from libc.math cimport ceil, exp, sqrt, atan2, acos, fabs, sin, cos, log
 from libc.float cimport DBL_EPSILON
 from cython.parallel import parallel, prange
@@ -9,39 +10,42 @@ from cython.parallel import parallel, prange
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
 
-def kernel_regression(np.ndarray y not None, np.ndarray x not None, np.ndarray x_hat, double sigma, double cutoff,
-                      double epsilon=1e-12, unsigned int num_threads=1):
-    y = check_array(y, np.NPY_FLOAT64)
-    x = check_array(x, np.NPY_FLOAT64)
-    x_hat = check_array(x_hat, np.NPY_FLOAT64)
+DEF N_BINS = 1024
+DEF LINE_SIZE = 7
 
-    cdef int fail = 0
-    cdef np.npy_intp ndim = x.shape[x.ndim - 1]
-    cdef np.npy_intp npts = x.size / ndim, nhat = x_hat.size / ndim
+cdef line_profile profiles[3]
+cdef void build_profiles():
+    profiles[0] = linear_profile
+    profiles[1] = quad_profile
+    profiles[2] = tophat_profile
 
-    if x.shape[x.ndim - 1] != x_hat.shape[x_hat.ndim - 1]:
-        raise ValueError('`x` and `x_hat` have incompatible shapes')
-    if npts != y.size:
-        raise ValueError('`x` and `y` have incompatible shapes')
+cdef dict profile_scheme
+profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2}
 
-    cdef np.ndarray y_hat = <np.ndarray>np.PyArray_SimpleNew(x_hat.ndim - 1, x_hat.shape, np.NPY_FLOAT64)
-    cdef double *_y_hat = <double *>np.PyArray_DATA(y_hat)
-    cdef double *_y = <double *>np.PyArray_DATA(y)
-    cdef double *_x = <double *>np.PyArray_DATA(x)
-    cdef double *_x_hat = <double *>np.PyArray_DATA(x_hat)
+build_profiles()
+
+def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=255, double dilation=0.0, str profile='tophat'):
+    inp = check_array(inp, np.NPY_UINT32)
+    lines = check_array(lines, np.NPY_FLOAT32)
+
+    if inp.ndim != 2:
+        raise ValueError("Input array must be two-dimensional")
+    if lines.ndim != 2 or lines.shape[1] < 5:
+        raise ValueError("lines array has an incompatible shape")
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+
+    cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
+    cdef unsigned long _Y = inp.shape[0]
+    cdef unsigned long _X = inp.shape[1]
+    cdef float *_lines = <float *>np.PyArray_DATA(lines)
+    cdef unsigned long *_ldims = <unsigned long *>lines.shape
+
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+    cdef int fail
 
     with nogil:
-        fail = predict_kerreg(_y, _x, npts, ndim, _y_hat, _x_hat, nhat, rbf, sigma, cutoff, epsilon, num_threads)
-
+        fail = draw_lines_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
-        raise RuntimeError('C backend exited with error.')
-
-    return y_hat
-
-def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, int q_max, double epsilon): 
-    cdef double entropy = 0.0
-    cdef int i, n = x.size
-    with nogil:
-        for i in range(n):
-            entropy -= p[i] * log(<double>(q[x[i]]) / q_max + epsilon)
-    return entropy
+        raise RuntimeError('C backend exited with error.')    
+    return inp

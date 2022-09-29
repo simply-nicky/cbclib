@@ -1,7 +1,6 @@
-"""CXI protocol (:class:`pyrost.CXIProtocol`) is a helper class for a :class:`pyrost.STData`
-data container, which tells it where to look for the necessary data fields in a CXI
-file. The class is fully customizable so you can tailor it to your particular data
-structure of CXI file.
+"""CXI protocol (:class:`cbclib.CXIProtocol`) is a helper class for a :class:`cbclib.CrystData`
+data container, which tells it where to look for the necessary data fields in a CXI file. The
+class is fully customizable so you can tailor it to your particular data structure of CXI file.
 
 Examples:
     Generate the default built-in CXI protocol as follows:
@@ -32,19 +31,28 @@ Indices = Union[int, slice, np.ndarray, List[int], Tuple[int]]
 
 @dataclass
 class CXIProtocol(INIContainer):
-    """CXI protocol class. Contains a CXI file tree path with
-    the paths written to all the data attributes necessary for
-    the Speckle Tracking algorithm, corresponding attributes'
-    data types, and floating point precision.
+    """CXI protocol class. Contains a CXI file tree path with the paths written to all the data
+    attributes necessary for the :class:`cbclib.CrystData` detector data container, their
+    corresponding attributes' data types, and data structure.
 
     Attributes:
-        config : Protocol configuration.
-        datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
-            or 'bool' are allowed.
-        is_data : Dictionary with the flags if the attribute is of data type.
-            Data type is 2- or 3-dimensional and has the same data shape
-            as `data`.
+        datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint', or 'bool' are
+            allowed.
         load_paths : Dictionary with attributes' CXI default file paths.
+        kinds : The attribute's kind, that specifies data dimensionality. The following keywords
+            are allowed:
+
+            * `scalar` : Data is either 0D, 1D, or 2D. The data is saved and loaded plainly
+              without any transforms or indexing.
+            * `sequence` : A time sequence array. Data is either 1D, 2D, or 3D. The data is
+              indexed, so the first dimension of the data array must be a time dimension. The
+              data points for the given index are not transformed.
+            * `frame` : Frame array. Data must be 2D, it may be transformed with any of
+              :class:`cbclib.Transform` objects. The data shape is identical to the detector
+              pixel grid.
+            * `stack` : A time sequnce of frame arrays. The data must be 3D. It's indexed in the
+              same way as `sequence` attributes. Each frame array may be transformed with any of
+              :class:`cbclib.Transform` objects.
     """
     __ini_fields__ = {'datatypes': 'datatypes', 'load_paths': 'load_paths', 'kinds': 'kinds'}
 
@@ -60,22 +68,13 @@ class CXIProtocol(INIContainer):
                                                          'sequence': (1, 2, 3), 'scalar': (0, 1, 2)}
 
     def __post_init__(self):
-        """
-        Args:
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint',
-                or 'bool' are allowed.
-            load_paths : Dictionary with attributes path in the CXI file.
-            kinds : Dictionary with the flags if the attribute is of data type.
-                Data type is 2- or 3-dimensional and has the same data shape
-                as `data`.
-        """
         self.load_paths = {attr: self.str_to_list(val) for attr, val in self.load_paths.items()
                            if attr in self.datatypes}
         self.kinds = {attr: val for attr, val in self.kinds.items() if attr in self.datatypes}
 
     @classmethod
     def import_default(cls) -> CXIProtocol:
-        """Return the default :class:`CXIProtocol` object. 
+        """Return the default :class:`CXIProtocol` object.
 
         Returns:
             A :class:`CXIProtocol` object with the default parameters.
@@ -90,8 +89,8 @@ class CXIProtocol(INIContainer):
             cxi_file : :class:`h5py.File` object of the CXI file.
 
         Returns:
-            Atrribute's path in the CXI file, returns an empty
-            string if the attribute is not found.
+            Attribute's path in the CXI file, returns an empty string if the attribute is not
+            found.
         """
         paths = self.get_load_paths(attr, list())
         for path in paths:
@@ -106,8 +105,8 @@ class CXIProtocol(INIContainer):
         return attr in self.datatypes
 
     def get_load_paths(self, attr: str, value: Optional[List[str]]=None) -> List[str]:
-        """Return the atrribute's default path in the CXI file.
-        Return `value` if `attr` is not found.
+        """Return the attribute's default path in the CXI file. Return ``value`` if ``attr`` is not
+        found.
 
         Args:
             attr : The attribute to look for.
@@ -119,13 +118,12 @@ class CXIProtocol(INIContainer):
         return self.load_paths.get(attr, value)
 
     def get_dtype(self, attr: str, dtype: Optional[np.dtype]=None) -> type:
-        """Return the attribute's data type. Return `dtype` if the attribute's
-        data type is not found.
+        """Return the attribute's data type. Return ``dtype`` if the attribute's data type is not
+        found.
 
         Args:
             attr : The data attribute.
-            dtype : Data type which is returned if the attribute's data type
-                is not found.
+            dtype : Data type which is returned if the attribute's data type is not found.
 
         Returns:
             Attribute's data type.
@@ -139,25 +137,37 @@ class CXIProtocol(INIContainer):
         return self.default_types.get(self.datatypes.get(attr))
 
     def get_kind(self, attr: str, value: str='scalar') -> str:
-        """Return if the attribute is of data type. Data type is 2- or
-        3-dimensional and has the same data shape as `data`.
+        """Return the attribute's kind, that specifies data dimensionality. Return ``value`` if the
+        attribute is not found.
 
         Args:
             attr : The data attribute.
-            value : value which is returned if the `attr` is not found.
+            value : value which is returned if the ``attr`` is not found.
 
         Returns:
-            True if `attr` is of data type.
+            The attribute's kind, that specifies data dimensionality. The following keywords are
+            allowed:
+
+            * `scalar` : Data is either 0D, 1D, or 2D. The data is saved and loaded plainly without
+              any transforms or indexing.
+            * `sequence` : A time sequence array. Data is either 1D, 2D, or 3D. The data is indexed,
+              so the first dimension of the data array must be a time dimension. The data points
+              for the given index are not transformed.
+            * `frame` : Frame array. Data must be 2D, it may be transformed with any of
+              :class:`cbclib.Transform` objects. The data shape is identical to the detector pixel
+              grid.
+            * `stack` : A time sequnce of frame arrays. The data must be 3D. It's indexed in the
+              same way as `sequence` attributes. Each frame array may be transformed with any of
+              :class:`cbclib.Transform` objects.
         """
         return self.kinds.get(attr, value)
 
     def get_ndim(self, attr: str, value: int=0) -> Tuple[int, ...]:
-        """Return the acceptable number of dimenstions that the attribute's data
-        may have.
+        """Return the acceptable number of dimensions that the attribute's data may have.
 
         Args:
             attr : The data attribute.
-            value : value which is returned if the `attr` is not found.
+            value : value which is returned if the ``attr`` is not found.
 
         Returns:
             Number of dimensions acceptable for the attribute.
@@ -178,15 +188,15 @@ class CXIProtocol(INIContainer):
 
     @staticmethod
     def read_dataset_shapes(cxi_path: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
-        """Visit recursively all the underlying datasets and return
-        their names and shapes.
+        """Visit recursively all the underlying datasets and return their names and shapes.
 
         Args:
-            cxi_path : Path of the HDF5 group.
-            cxi_obj: Group object.
+            cxi_path : Path of the dataset inside the ``cxi_file``.
+            cxi_file : HDF5 file handler.
 
         Returns:
-            List of all the datasets and their shapes inside `cxi_obj`.
+            List of all the datasets and their shapes under the ``cxi_path`` of the ``cxi_file``
+            HDF5 file.
         """
         shapes = {}
 
@@ -206,29 +216,28 @@ class CXIProtocol(INIContainer):
         return shapes
 
     def read_attribute_shapes(self, attr: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
-        """Return a shape of the dataset containing the attribute's data inside
-        a file.
+        """Return a shape of the dataset containing the attribute's data inside a file.
 
         Args:
             attr : Attribute's name.
             cxi_file : HDF5 file object.
 
         Returns:
-            List of all the datasets and their shapes inside `cxi_file`.
+            List of all the datasets and their shapes inside ``cxi_file``.
         """
         cxi_path = self.find_path(attr, cxi_file)
         return self.read_dataset_shapes(cxi_path, cxi_file)
 
     def read_attribute_indices(self, attr: str, cxi_files: List[h5py.File]) -> np.ndarray:
-        """Return a set of indices of the dataset containing the attribute's data
-        inside a set of files.
+        """Return a set of indices of the dataset containing the attribute's data inside a set
+        of files.
 
         Args:
             attr : Attribute's name.
             cxi_files : A list of HDF5 file objects.
 
         Returns:
-            Dataset indices of the data pertined to the attribute `attr`.
+            Dataset indices of the data pertined to the attribute ``attr``.
         """
         files, cxi_paths, fidxs = [], [], []
         kind = self.get_kind(attr)
@@ -261,15 +270,14 @@ def read_frame(index: np.ndarray) -> np.ndarray:
     return worker(index)
 
 class CXIStore():
-    """File handler class for HDF5 and CXI files. Provides an interface to
-    save and load data attributes to a file. Support multiple files. The handler
-    saves data to the first file.
+    """File handler class for HDF5 and CXI files. Provides an interface to save and load data
+    attributes to a file. Support multiple files. The handler saves data to the first file.
 
     Attributes:
         file_dict : Dictionary of paths to the files and their file
             objects.
         file : :class:`h5py.File` object of the first file.
-        protocol : :class:`pyrost.CXIProtocol` protocol object.
+        protocol : :class:`cbclib.CXIProtocol` protocol object.
         mode : File mode. Valid modes are:
 
             * 'r' : Readonly, file must exist (default).
@@ -278,8 +286,6 @@ class CXIStore():
             * 'w-' or 'x' : Create file, fail if exists.
             * 'a' : Read/write if exists, create otherwise.
     """
-
-    file_dict : Dict[str, h5py.File]
 
     def __init__(self, names: Union[str, List[str]], mode: str='r',
                  protocol: CXIProtocol=CXIProtocol.import_default()) -> None:
@@ -293,7 +299,7 @@ class CXIStore():
             raise ValueError(f'Wrong file mode: {mode}')
         names = protocol.str_to_list(names)
 
-        self.file_dict = {data_file: None for data_file in names}
+        self.file_dict: Dict[str, Optional[h5py.File]] = {data_file: None for data_file in names}
         self.protocol = protocol
         self.mode = mode
 
@@ -311,6 +317,9 @@ class CXIStore():
 
     def __iter__(self) -> Iterator:
         return self._indices.__iter__()
+
+    def __len__(self) -> int:
+        return len(self._indices)
 
     def __repr__(self) -> str:
         return self._indices.__repr__()
@@ -351,7 +360,7 @@ class CXIStore():
 
     def open(self) -> None:
         """Open the files."""
-        if not self:
+        if not self.__bool__():
             for data_file in self.file_dict:
                 self.file_dict[data_file] = h5py.File(data_file, mode=self.mode)
 
@@ -377,8 +386,7 @@ class CXIStore():
         return list(self.file_dict.values())
 
     def indices(self) -> np.ndarray:
-        """Return a list of frame indices of the data contained in the
-        files.
+        """Return a list of frame indices of the data contained in the files.
 
         Returns:
             A list of frame indices of the data in the files.
@@ -402,15 +410,23 @@ class CXIStore():
         return self._indices.values()
 
     def items(self) -> ItemsView:
-        """Return a set of `(name, index)` pairs. `name` is the attribute's name
-        contained in the files, and `index` it's corresponding set of indices.
+        """Return a set of ``(name, index)`` pairs. ``name`` is the attribute's name contained in
+        the files, and ``index`` it's corresponding set of indices.
 
         Returns:
-            A set of `(name, index)` pairs of the data attributes in the files.
+            A set of ``(name, index)`` pairs of the data attributes in the files.
         """
         return self._indices.items()
 
     def read_shape(self) -> Tuple[int, int]:
+        """Read the input files and return a shape of the `frame` type data attribute.
+
+        Raises:
+            RuntimeError : If the files are not opened.
+
+        Returns:
+            The shape of the 2D `frame`-like data attribute.
+        """
         if self:
             for attr, indices in self._indices.items():
                 kind = self.protocol.get_kind(attr)
@@ -419,7 +435,7 @@ class CXIStore():
 
             return (0, 0)
 
-        raise ValueError('Invalid file objects: the file is closed')
+        raise RuntimeError('Invalid file objects: the file is closed')
 
     @staticmethod
     def _read_worker_sequence(index: np.ndarray) -> np.ndarray:
@@ -459,7 +475,8 @@ class CXIStore():
         return self.protocol.cast(attr, np.array(sequence))
 
     def load_attribute(self, attr: str, idxs: Optional[Indices]=None, processes: int=1,
-                       ss_idxs: Indices=slice(None), fs_idxs: Indices=slice(None), verbose: bool=True) -> np.ndarray:
+                       ss_idxs: Indices=slice(None), fs_idxs: Indices=slice(None),
+                       verbose: bool=True) -> np.ndarray:
         """Load a data attribute from the files.
 
         Args:
@@ -470,13 +487,14 @@ class CXIStore():
 
         Raises:
             ValueError : If the attribute's kind is invalid.
+            RuntimeError : If the files are not opened.
 
         Returns:
             Attribute's data array.
         """
         kind = self.protocol.get_kind(attr)
 
-        if kind not in ['stack', 'frame', 'scalar', 'sequence']:
+        if kind not in ('stack', 'frame', 'scalar', 'sequence'):
             raise ValueError(f'Invalid kind: {kind:s}')
 
         if self:
@@ -490,11 +508,11 @@ class CXIStore():
             if kind == 'sequence':
                 return self._load_sequence(attr=attr, idxs=idxs)
 
-        raise ValueError('Invalid file objects: the file is closed')
+        raise RuntimeError('Invalid file objects: the file is closed')
 
     def find_dataset(self, attr: str) -> str:
-        """Return the path to the attribute from the first file. Return the default
-        path if the attribute is not found inside the first file.
+        """Return the path to the attribute from the first file. Return the default path if the
+        attribute is not found inside the first file.
 
         Args:
             attr : Attribute's name.
@@ -557,14 +575,15 @@ class CXIStore():
             mode : Writing mode:
 
                 * `append` : Append the data array to already existing dataset.
-                * `insert` : Insert the data under the given indices `idxs`.
+                * `insert` : Insert the data under the given indices ``idxs``.
                 * `overwrite` : Overwrite the existing dataset.
 
-            idxs : Indices where the data is saved. Used only if `mode` is set to
-                'insert'.
+            idxs : Indices where the data is saved. Used only if ``mode`` is set to 'insert'.
 
         Raises:
             ValueError : If the attribute's kind is invalid.
+            ValueError : If the file is opened in read-only mode.
+            RuntimeError : If the file is not opened.
         """
         if self.mode == 'r':
             raise ValueError('File is open in read-only mode')
@@ -579,4 +598,4 @@ class CXIStore():
 
             raise ValueError(f'Invalid kind: {kind:s}')
 
-        raise ValueError('Invalid file objects: the file is closed')
+        raise RuntimeError('Invalid file objects: the file is closed')

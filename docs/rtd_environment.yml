@@ -1,0 +1,24 @@
+name: cbc
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - cython
+  - gcc_linux-64
+  - fftw
+  - furo
+  - h5py
+  - hdf5plugin
+  - llvm-openmp
+  - mock
+  - numpy
+  - pillow
+  - pandas
+  - pygmo
+  - pytables
+  - python=3.7
+  - scikit-learn
+  - scipy
+  - sphinx
+  - sphinx-autodoc-typehints
+  - tqdm

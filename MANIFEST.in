@@ -1,0 +1,12 @@
+graft tests
+graft cbclib/config
+graft cbclib/bin
+graft cbclib/include
+exclude dev.pyx
+exclude cbclib/include/Makefile
+include pytest.ini
+include LICENSE
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude cbclib/bin/*.html
+global-exclude cbclib/bin/*.c

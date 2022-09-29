@@ -481,3 +481,43 @@ def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, in
         for i in range(n):
             entropy -= p[i] * log(<double>(q[x[i]]) / q_max + epsilon)
     return entropy / n
+
+def filter_hkl(np.ndarray sgn not None, np.ndarray bgd not None, np.ndarray df_xy not None,
+               np.ndarray df_p not None, np.ndarray df_hkl not None, np.ndarray hkl_idxs not None,
+               double threshold, unsigned int threads=1):
+    sgn = check_array(sgn, np.NPY_FLOAT32)
+    bgd = check_array(bgd, np.NPY_FLOAT32)
+    df_xy = check_array(df_xy, np.NPY_UINT32)
+    df_p = check_array(df_p, np.NPY_FLOAT64)
+    df_hkl = check_array(df_hkl, np.NPY_INT64)
+    hkl_idxs = check_array(hkl_idxs, np.NPY_INT64)
+
+    cdef int i, n, n_max = hkl_idxs.size
+    cdef double I_sgn, I_bgd
+
+    cdef np.float32_t[:, ::1] _sgn = sgn
+    cdef np.float32_t[:, ::1] _bgd = bgd
+    cdef np.uint32_t[:, ::1] _df_xy = df_xy
+    cdef np.float64_t[::1] _df_p = df_p
+    cdef np.int64_t[::1] _df_hkl = df_hkl
+    cdef np.int64_t[::1] _hkl_idxs = hkl_idxs
+
+    cdef np.ndarray idxs = np.PyArray_SearchSorted(df_hkl, hkl_idxs, np.NPY_SEARCHLEFT, NULL)
+    cdef np.npy_intp *dims = [n_max + 1]
+    cdef np.PyArray_Dims *new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+    new_shape[0].ptr = dims; new_shape[0].len = 1
+    np.PyArray_Resize(idxs, new_shape, 1, np.NPY_CORDER)
+    idxs[n_max] = df_hkl.size
+    cdef np.int64_t[::1] _idxs = idxs
+
+    cdef np.ndarray out = np.PyArray_SimpleNew(1, hkl_idxs.shape, np.NPY_BOOL)
+    cdef np.npy_bool[::1] _out = out
+
+    for n in prange(n_max, schedule='guided', num_threads=threads, nogil=True):
+        I_sgn = 0.0; I_bgd = 0.0
+        for i in range(_idxs[n], _idxs[n + 1]):
+            I_sgn = I_sgn + fabs(_sgn[_df_xy[i, 1], _df_xy[i, 0]]) * _df_p[i]
+            I_bgd = I_bgd + sqrt(_bgd[_df_xy[i, 1], _df_xy[i, 0]]) * _df_p[i]
+        _out[n] = I_sgn > threshold * I_bgd
+
+    return out

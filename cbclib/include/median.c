@@ -130,13 +130,15 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, size_t *dims, si
     int (*compar)(const void*, const void*), unsigned threads)
 {
     /* check parameters */
-    if (!out || !inp || !mask || !dims) {ERROR("median: one of the arguments is NULL."); return -1;}
+    if (!out || !inp || !mask || !dims || !compar) {ERROR("median: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("median: ndim must be positive."); return -1;}
     if (axis < 0 || axis >= ndim) {ERROR("median: invalid axis."); return -1;}
     if (threads == 0) {ERROR("median: threads must be positive."); return -1;}
 
     array iarr = new_array(ndim, dims, item_size, inp);
     array marr = new_array(ndim, dims, 1, mask);
+
+    if (!iarr->size) {free_array(iarr); free_array(marr); return 0;}
 
     int repeats = iarr->size / iarr->dims[axis];
     threads = (threads > (unsigned)repeats) ? (unsigned)repeats : threads;
@@ -185,13 +187,16 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
     unsigned threads)
 {
     /* check parameters */
-    if (!out || !inp || !fsize || !cval)
+    if (!out || !inp || !fsize || !cval || !compar)
     {ERROR("median_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("median_filter: ndim must be positive."); return -1;}
     if (threads == 0) {ERROR("median_filter: threads must be positive."); return -1;}
 
     array iarr = new_array(ndim, dims, item_size, inp);
     array imarr = new_array(ndim, dims, 1, imask);
+
+    if (!iarr->size) {free_array(iarr); free_array(imarr); return 0;}
+
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
@@ -232,13 +237,16 @@ int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *ima
     unsigned threads)
 {
     /* check parameters */
-    if (!out || !inp || !fsize || !cval)
+    if (!out || !inp || !fsize || !cval || !compar)
     {ERROR("maximum_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("maximum_filter: ndim must be positive."); return -1;}
     if (threads == 0) {ERROR("maximum_filter: threads must be positive."); return -1;}
 
     array iarr = new_array(ndim, dims, item_size, inp);
     array marr = new_array(ndim, dims, 1, imask);
+
+    if (!iarr->size) {free_array(iarr); free_array(marr); return 0;}
+
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)

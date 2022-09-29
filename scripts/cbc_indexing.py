@@ -7,13 +7,15 @@ from scipy.optimize import differential_evolution
 from tqdm.auto import tqdm
 import cbclib as cbc
 
-def index_pygmo(samples_path: str, data_path: str, setup_path: str, basis_path: str, tilt_tol: float, smp_tol: float,
-                q_abs: float, width: float, alpha: float, num_gen: int, pop_size: int, num_threads: int, verbose: bool):
+def index_pygmo(out_path: str, samples_path: str, data_path: str, setup_path: str, basis_path: str,
+                tilt_tol: float, smp_tol: float, q_abs: float, width: float, alpha: float, num_gen: int,
+                pop_size: int, num_threads: int, verbose: bool):
     streaks = cbc.ScanStreaks.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
     samples = cbc.ScanSamples.import_dataframe(pd.read_hdf(samples_path, 'data'))
     basis = cbc.Basis.import_ini(basis_path)
-    frames = streaks.dataframe['frames'].unique()
+    frames = streaks.table['frames'].unique()
 
+    patterns = []
     for frame in tqdm(frames, total=frames.size, disable=not verbose, desc='Run CBC indexing refinement'):
         problem = streaks.refine_indexing(frame=frame, tol=(tilt_tol, smp_tol, 0.0), basis=basis,
                                           sample=samples[frame], q_abs=q_abs, width=width, alpha=alpha)
@@ -30,41 +32,45 @@ def index_pygmo(samples_path: str, data_path: str, setup_path: str, basis_path: 
         archi.wait()
 
         champion = archi.get_champions_x()[np.argmin(archi.get_champions_f())]
-        problem.index_frame(champion, frame=frame, num_threads=num_threads)
+        patterns.append(problem.index_frame(champion, frame=frame, num_threads=num_threads))
         samples[frame] = problem.generate_sample(champion)
 
-    streaks.dataframe.to_hdf(data_path, 'data')
+    pd.concat(patterns).to_hdf(out_path, 'data')
     samples.to_dataframe().to_hdf(samples_path, 'data')
 
 def criterion(x: np.ndarray, problem: cbc.IndexProblem) -> float:
     return problem.fitness(x)[0]
 
-def index_scipy(samples_path: str, data_path: str, setup_path: str, basis_path: str, tilt_tol: float, smp_tol: float,
-                q_abs: float, alpha: float, width: float, num_gen: int, pop_size: int, num_threads: int, verbose: bool):
+def index_scipy(out_path: str, samples_path: str, data_path: str, setup_path: str, basis_path: str,
+                tilt_tol: float, smp_tol: float, q_abs: float, alpha: float, width: float, num_gen: int,
+                pop_size: int, num_threads: int, verbose: bool):
     streaks = cbc.ScanStreaks.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
     samples = cbc.ScanSamples.import_dataframe(pd.read_hdf(samples_path, 'data'))
     basis = cbc.Basis.import_ini(basis_path)
-    frames = streaks.dataframe['frames'].unique()
+    frames = streaks.table['frames'].unique()
 
+    patterns = []
     for frame in tqdm(frames, total=frames.size, disable=not verbose, desc='Run CBC indexing refinement'):
         problem = streaks.refine_indexing(frame=frame, tol=(tilt_tol, smp_tol, 0.0), basis=basis,
                                           sample=samples[frame], q_abs=q_abs, width=width, alpha=alpha)
 
-        res = differential_evolution(criterion, bounds=np.stack(problem.get_bounds()).T, args=(problem,),
-                                     maxiter=num_gen, popsize=pop_size, workers=num_threads, updating='deferred')
+        res = differential_evolution(criterion, bounds=np.stack(problem.get_bounds()).T,
+                                     args=(problem,), maxiter=num_gen, popsize=pop_size,
+                                     workers=num_threads, updating='deferred')
 
         champion = res.x
-        problem.index_frame(champion, frame=frame, num_threads=num_threads)
+        patterns.append(problem.index_frame(champion, frame=frame, num_threads=num_threads))
         samples[frame] = problem.generate_sample(champion)
 
-    streaks.dataframe.to_hdf(data_path, 'data')
+    pd.concat(patterns).to_hdf(out_path, 'data')
     samples.to_dataframe().to_hdf(samples_path, 'data')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run CBC indexing refinement.")
     parser.add_argument('backend', type=str, choices=['pygmo', 'scipy'], help="Choose the back-end for DE refinement")
-    parser.add_argument('samples_path', type=str, help="Path to the input Pandas samples table")
-    parser.add_argument('data_path', type=str, help="Path to the input Pandas data table")
+    parser.add_argument('out_path', type=str, help="Path to the output CBC table")
+    parser.add_argument('samples_path', type=str, help="Path to the input samples table")
+    parser.add_argument('data_path', type=str, help="Path to the input CBC table")
     parser.add_argument('setup_path', type=str, help="Path to the experimental setup config file")
     parser.add_argument('basis_path', type=str, help="Path to the lattice basis config file")
     parser.add_argument('--tilt_tol', default=0.02, type=float, help="Sample tilting tolerance")

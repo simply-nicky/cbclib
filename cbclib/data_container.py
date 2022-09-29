@@ -1,4 +1,7 @@
-""":class:`DataContainer` class implementation.
+"""Transforms are common image transformations. They can be chained together using
+:class:`cbclib.ComposeTransforms`. You pass a :class:`cbclib.Transform` instance to a data
+container :class:`cbclib.CrystData`. All transform classes are inherited from the abstract
+:class:`cbclib.Transform` class.
 """
 from __future__ import annotations
 from configparser import ConfigParser
@@ -12,33 +15,76 @@ import numpy as np
 T = TypeVar('T', bound='DataContainer')
 
 class DataContainer:
+    """Abstract data container class based on :class:`dataclass`. Has :class:`dict` intefrace,
+    and :func:`DataContainer.replace` to create a new obj with a set of data attributes replaced.
+    """
     def __getitem__(self, attr: str) -> Any:
         return self.__getattribute__(attr)
 
     def contents(self) -> List[str]:
+        """Return a list of the attributes stored in the container that are initialised.
+
+        Returns:
+            List of the attributes stored in the container.
+        """
         return [attr for attr in self.keys() if self.get(attr) is not None]
 
     def get(self, attr: str, val: Any=None) -> Any:
+        """Retrieve a dataset, return ``value`` if the attribute is not found.
+
+        Args:
+            attr : Data attribute.
+            value : Data which is returned if the attribute is not found.
+
+        Returns:
+            Attribute's data stored in the container, ``value`` if ``attr`` is not found.
+        """
         if attr in self.keys():
             return self[attr]
         return val
 
     def keys(self) -> List[str]:
+        """Return a list of the attributes available in the container.
+
+        Returns:
+            List of the attributes available in the container.
+        """
         return [attr for attr in self.__dataclass_fields__.keys()
                 if getattr(type(self), attr, None) is None]
 
     def values(self) -> ValuesView:
+        """Return the attributes' data stored in the container.
+
+        Returns:
+            List of data stored in the container.
+        """
         return dict(self).values()
 
     def items(self) -> ItemsView:
+        """Return (key, value) pairs of the datasets stored in the container.
+
+        Returns:
+            (key, value) pairs of the datasets stored in the container.
+        """
         return dict(self).items()
 
     def replace(self, **kwargs: Any) -> T:
+        """Return a new container object with a set of attributes replaced.
+
+        Args:
+            kwargs : A set of attributes and the values to to replace.
+
+        Returns:
+            A new container object with updated attributes.
+        """
         return type(self)(**dict(self, **kwargs))
 
 I = TypeVar('I', bound='INIContainer')
 
 class INIContainer(DataContainer):
+    """Abstract data container class based on :class:`dataclass` with an interface to read from
+    and write to INI files.
+    """
     __ini_fields__ : Dict[str, Union[str, Tuple[str]]]
 
     @classmethod
@@ -96,6 +142,14 @@ class INIContainer(DataContainer):
 
     @classmethod
     def import_ini(cls: Type[I], ini_file: str) -> I:
+        """Initialize the container object with an INI file ``ini_file``.
+
+        Args:
+            ini_file : Path to the ini file.
+
+        Returns:
+            A new container with all the attributes imported from the ini file.
+        """
         if not os.path.isfile(ini_file):
             raise ValueError(f"File {ini_file} doesn't exist")
         ini_parser = ConfigParser()
@@ -147,21 +201,34 @@ class INIContainer(DataContainer):
                 ini_dict[section] = {attr: self._get_string(attr) for attr in attrs}
         return ini_dict
 
-    def to_ini(self, ini_path: str):
+    def to_ini(self, ini_file: str):
+        """Save all the attributes stored in the container to an INI file ``ini_file``.
+
+        Args:
+            ini_file : Path to the ini file.
+        """
         ini_parser = ConfigParser()
         for section, val in self.ini_dict().items():
             ini_parser[section] = val
 
-        with open(ini_path, 'w') as ini_file:
-            ini_parser.write(ini_file)
+        with open(ini_file, 'w') as out_file:
+            ini_parser.write(out_file)
 
-class Transform():
+class Transform(DataContainer):
     """Abstract transform class."""
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         raise NotImplementedError
 
     def forward(self, inp: np.ndarray) -> np.ndarray:
+        """Return a transformed image.
+
+        Args:
+            inp : Input image.
+
+        Returns:
+            Transformed image.
+        """
         ss_idxs, fs_idxs = np.indices(inp.shape[-2:])
         ss_idxs, fs_idxs = self.index_array(ss_idxs, fs_idxs)
         return inp[..., ss_idxs, fs_idxs]
@@ -179,12 +246,11 @@ class Transform():
         raise NotImplementedError
 
 @dataclass
-class Crop(Transform, DataContainer):
+class Crop(Transform):
     """Crop transform. Crops a frame according to a region of interest.
 
     Attributes:
-        roi : Region of interest. Comprised of four elements `[y_min, y_max,
-            x_min, x_max]`.
+        roi : Region of interest. Comprised of four elements ``[y_min, y_max, x_min, x_max]``.
     """
     roi : Union[List[int], Tuple[int, int, int, int], np.ndarray]
 
@@ -201,6 +267,16 @@ class Crop(Transform, DataContainer):
         return NotImplemented
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the cropping
+        transform.
+
+        Args:
+            ss_idxs: Slow axis indices of a frame.
+            fs_idxs: Fast axis indices of a frame.
+
+        Returns:
+            A tuple of filtered frame indices ``(ss_idxs, fs_idxs)``.
+        """
         return (ss_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]],
                 fs_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]])
 
@@ -227,7 +303,7 @@ class Crop(Transform, DataContainer):
         return x + self.roi[2], y + self.roi[0]
 
 @dataclass
-class Downscale(Transform, DataContainer):
+class Downscale(Transform):
     """Downscale the image by a integer ratio.
 
     Attributes:
@@ -236,6 +312,16 @@ class Downscale(Transform, DataContainer):
     scale : int
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the downscaling
+        transform.
+
+        Args:
+            ss_idxs: Slow axis indices of a frame.
+            fs_idxs: Fast axis indices of a frame.
+
+        Returns:
+            A tuple of filtered frame indices ``(ss_idxs, fs_idxs)``.
+        """
         return (ss_idxs[::self.scale, ::self.scale], fs_idxs[::self.scale, ::self.scale])
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -262,7 +348,7 @@ class Downscale(Transform, DataContainer):
         return x * self.scale, y * self.scale
 
 @dataclass
-class Mirror(Transform, DataContainer):
+class Mirror(Transform):
     """Mirror the data around an axis.
 
     Attributes:
@@ -272,6 +358,15 @@ class Mirror(Transform, DataContainer):
     shape: Tuple[int, int]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the mirroring transform.
+
+        Args:
+            ss_idxs: Slow axis indices of a frame.
+            fs_idxs: Fast axis indices of a frame.
+
+        Returns:
+            A tuple of filtered frame indices ``(ss_idxs, fs_idxs)``.
+        """
         if self.axis == 0:
             return (ss_idxs[::-1], fs_idxs[::-1])
         if self.axis == 1:
@@ -324,6 +419,15 @@ class ComposeTransforms(Transform):
         return self.transforms[idx]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the composed transform.
+
+        Args:
+            ss_idxs: Slow axis indices of a frame.
+            fs_idxs: Fast axis indices of a frame.
+
+        Returns:
+            A tuple of filtered frame indices ``(ss_idxs, fs_idxs)``.
+        """
         for transform in self:
             ss_idxs, fs_idxs = transform.index_array(ss_idxs, fs_idxs)
         return ss_idxs, fs_idxs

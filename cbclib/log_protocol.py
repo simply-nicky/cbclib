@@ -1,13 +1,36 @@
-"""Examples
---------
-Generate the default built-in log protocol:
+"""Log protocol (:class:`cbclib.LogProtocol`) together with log container (:class:`cbclib.LogContainer`)
+provide an interface to retrieve the data from the log files, which contain the readouts from the
+motors and other instrument during the experiment.
 
->>> import cbclib as cbc
->>> cbc.LogProtocol()
-{'datatypes': {'exposure': 'float', 'n_points': 'int', 'n_steps': 'int', '...':
-'...'}, 'log_keys': {'exposure': ['Exposure'], 'n_points': ['Points count'],
-'n_steps': ['Steps count'], '...': '...'}, 'part_keys': {'exposure': 'Type: Method',
-'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', '...': '...'}}
+Examples:
+    Generate a default built-in log protocol:
+
+    >>> import cbclib as cbc
+    >>> cbc.LogProtocol()
+    LogProtocol(datatypes={'exposure': 'float', 'n_points': 'int', 'n_steps': 'int', 'scan_type':
+    'str', 'step_size': 'float', 'x_sample': 'float', 'y_sample': 'float', 'z_sample': 'float',
+    'r_sample': 'float'}, log_keys={'exposure': ['Exposure'], 'n_points': ['Points count'],
+    'n_steps': ['Steps count'], 'scan_type': ['Device'], 'step_size': ['Step size'], 'x_sample':
+    ['X-SAM', 'SAM-X', 'SCAN-X'], 'y_sample': ['Y-SAM', 'SAM-Y', 'SCAN-Y'], 'z_sample': ['Z-SAM',
+    'SAM-Z', 'SCAN-Z'], 'r_sample': ['R-SAM', 'SAM-R', 'SCAN-R']}, part_keys={'exposure':
+    'Type: Method', 'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', 'scan_type': 'Type: Scan',
+    'step_size': 'Type: Scan', 'x_sample': 'Session logged attributes', 'y_sample':
+    'Session logged attributes', 'z_sample': 'Session logged attributes', 'r_sample':
+    'Session logged attributes'})
+
+    Generate a default log data container:
+
+    >>> cbc.LogContainer()
+    LogContainer(protocol=LogProtocol(datatypes={'exposure': 'float', 'n_points': 'int', 'n_steps':
+    'int', 'scan_type': 'str', 'step_size': 'float', 'x_sample': 'float', 'y_sample': 'float',
+    'z_sample': 'float', 'r_sample': 'float'}, log_keys={'exposure': ['Exposure'], 'n_points':
+    ['Points count'], 'n_steps': ['Steps count'], 'scan_type': ['Device'], 'step_size': ['Step size'],
+    'x_sample': ['X-SAM', 'SAM-X', 'SCAN-X'], 'y_sample': ['Y-SAM', 'SAM-Y', 'SCAN-Y'], 'z_sample':
+    ['Z-SAM', 'SAM-Z', 'SCAN-Z'], 'r_sample': ['R-SAM', 'SAM-R', 'SCAN-R']}, part_keys={'exposure':
+    'Type: Method', 'n_points': 'Type: Scan', 'n_steps': 'Type: Scan', 'scan_type': 'Type: Scan',
+    'step_size': 'Type: Scan', 'x_sample': 'Session logged attributes', 'y_sample':
+    'Session logged attributes', 'z_sample': 'Session logged attributes', 'r_sample':
+    'Session logged attributes'}), log_attr={}, log_data={}, idxs=None, translations=None)
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -27,11 +50,11 @@ class LogProtocol(INIContainer):
     and the data types of the corresponding values.
 
     Attributes:
-        datatypes : Dictionary with attributes' datatypes. 'float', 'int',
-            'bool', or 'str' are allowed.
+        datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'bool', or 'str' are
+            allowed.
         log_keys : Dictionary with attributes' log file keys.
-        part_keys : Dictionary with the part names inside the log file
-            where the attributes are stored.
+        part_keys : Dictionary with the part names inside the log file where the attributes are
+            stored.
     """
     __ini_fields__ = {'datatypes': 'datatypes', 'log_keys': 'log_keys', 'part_keys': 'part_keys'}
 
@@ -49,26 +72,18 @@ class LogProtocol(INIContainer):
     def __post_init__(self):
         """
         Args:
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
-                'bool', or 'str' are allowed.
+            datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'bool', or 'str' are
+                allowed.
             log_keys : Dictionary with attributes' log file keys.
-            part_keys : Dictionary with the part names inside the log file
-                where the attributes are stored.
+            part_keys : Dictionary with the part names inside the log file where the attributes are
+                stored.
         """
         self.log_keys = {attr: self.str_to_list(val) for attr, val in self.log_keys.items() if attr in self.datatypes}
         self.part_keys = {attr: val for attr, val in self.part_keys.items() if attr in self.datatypes}
 
     @classmethod
     def import_default(cls) -> LogProtocol:
-        """Return the default :class:`LogProtocol` object. Extra arguments
-        override the default values if provided.
-
-        Args:
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int',
-                or 'bool' are allowed.
-            log_keys : Dictionary with attributes' log file keys.
-            part_keys : Dictionary with the part names inside the log file
-                where the attributes are stored.
+        """Return the default :class:`LogProtocol` object.
 
         Returns:
             A :class:`LogProtocol` object with the default parameters.
@@ -94,15 +109,13 @@ class LogProtocol(INIContainer):
         return has_unit
 
     def load_attributes(self, path: str) -> Dict[str, Dict[str, Any]]:
-        """Return attributes' values from a log file at
-        the given `path`.
+        """Return attributes' values from a log file at the given `path`.
 
         Args:
             path : Path to the log file.
 
         Returns:
-            Dictionary with the attributes retrieved from
-            the log file.
+            Dictionary with the attributes retrieved from the log file.
         """
         if not isinstance(path, str):
             raise ValueError('path must be a string')
@@ -163,12 +176,15 @@ class LogProtocol(INIContainer):
 
         Args:
             path : Path to the log file.
-            idxs : Array of data indices to load. Loads info for all
-                the frames by default.
+            idxs : Array of data indices to load. Loads info for all the frames by default.
+            return_idxs : Return an array of indices of the scan steps read from the log file
+                if True.
 
         Returns:
-            Dictionary with data fields and their names retrieved
-            from the log file.
+            A tuple of two elements:
+
+            * Dictionary with data fields and their names retrieved from the log file.
+            * An array of indices of the scan steps read from the log file.
         """
         if idxs is not None:
             idxs = np.asarray(idxs)
@@ -247,6 +263,17 @@ class LogProtocol(INIContainer):
 
 @dataclass
 class LogContainer(DataContainer):
+    """Log data container class. Takes a log protocol :class:`cbclib.LogProtocol` and provides
+    an interface to read the log files and generate a an array of sample translations and a set
+    of scan samples :class:`cbclib.ScanSamples`.
+
+    Attributes:
+        protocol : A log protocol object
+        log_attr : A dictionary of log attributes imported from a log file.
+        log_data : A dictionary of log data imported from a log file.
+        idxs : A set of indices of the scan steps imported from a log file.
+        translations : An array of sample translations.
+    """
     protocol        : LogProtocol = field(default_factory=LogProtocol.import_default)
 
     log_attr        : Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -260,31 +287,28 @@ class LogContainer(DataContainer):
         return 0 if self.idxs is None else self.idxs.size
 
     def read_logs(self: L, log_path: str, idxs: Optional[Iterable[int]]=None) -> L:
-        """Read a log file under the path `log_path`. Read out only the frame indices
-        defined by `idxs`. If `idxs` is None, read the whole log file.
+        """Read a log file under the path `log_path`. Read out only the frame indices defined by
+        ``idxs``. If ``idxs`` is None, read the whole log file.
 
         Args:
             log_path : Path to the log file.
             idxs : List of indices to read. Read the whole log file if None.
 
         Returns:
-            A new :class:`KamzikConverter` object with `log_attr`, `log_data`, and `idxs`
-            updated.
+            A new log container with ``log_attr``, ``log_data``, and ``idxs`` updated.
         """
         log_attr = self.protocol.load_attributes(log_path)
         log_data, idxs = self.protocol.load_data(log_path, idxs=idxs, return_idxs=True)
         return LogContainerFull(**dict(self, log_attr=log_attr, log_data=log_data, idxs=idxs))
 
     def find_log_part_key(self, attr: str) -> Optional[str]:
-        """Find a name of the log dictionary corresponding to an attribute
-        name `attr`.
+        """Find a name of the log dictionary corresponding to an attribute name `attr`.
 
         Args:
             attr : A name of the attribute to find.
 
         Returns:
-            A name of the log dictionary, corresponding to the given attribute
-            name `attr`.
+            A name of the log dictionary, corresponding to the given attribute name `attr`.
         """
         log_keys = self.protocol.log_keys.get(attr, [])
         for part in self.log_attr:
@@ -294,8 +318,7 @@ class LogContainer(DataContainer):
         return None
 
     def find_log_attribute(self, attr: str, part_key: Optional[str]=None) -> Optional[Any]:
-        """Find a value in the log attributes corresponding to an
-        attribute name `attr`.
+        """Find a value in the log attributes corresponding to an attribute name `attr`.
 
         Args:
             attr : A name of the attribute to find.
@@ -311,8 +334,7 @@ class LogContainer(DataContainer):
         return value
 
     def find_log_dataset(self, attr: str) -> Optional[np.ndarray]:
-        """Find a dataset in the log data corresponding to an
-        attribute name `attr`.
+        """Find a dataset in the log data corresponding to an attribute name `attr`.
 
         Args:
             attr : A name of the attribute to find.
@@ -328,9 +350,40 @@ class LogContainer(DataContainer):
         return None
 
     def simulate_translations(self: L) -> L:
+        """Simulate sample translations based on the log attributes.
+
+        Raises:
+            ValueError : If ``log_attr`` is missing.
+
+        Returns:
+            A new log container with ``translations`` updated.
+        """
         raise self._no_data_exc
 
     def read_translations(self: L) -> L:
+        """Generate sample translations based on the log data.
+
+        Raises:
+            ValueError : If ``log_data`` is missing.
+
+        Returns:
+            A new log container with ``translations`` updated.
+        """
+        raise self._no_data_exc
+
+    def generate_samples(self: L, pos: np.ndarray, setup: ScanSetup) -> L:
+        """Generate a :class:`cbclib.ScanSamples` object from the sample translations.
+
+        Args:
+            pos : Initial sample position in meters.
+            setup : Experimental setup.
+
+        Raises:
+            ValueError : If ``translations`` is missing.
+
+        Returns:
+            A scan samples object.
+        """
         raise self._no_data_exc
 
 @dataclass

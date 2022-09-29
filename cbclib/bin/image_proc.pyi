@@ -313,6 +313,11 @@ def draw_lines(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: 
 
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output array.
+        profile : Line width profiles. The following keyword values are allowed:
+
+            * `tophat` : Top-hat (rectangular) function profile.
+            * `linear` : Linear (triangular) function profile.
+            * `quad` : Quadratic (parabola) function profile.
 
     Raises:
         ValueError : If `inp` is not a 2-dimensional array.
@@ -327,8 +332,8 @@ def draw_lines(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: 
     """
     ...
 
-def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int=1, dilation: float=0.0,
-                     profile: str='tophat', num_threads: int=1) -> np.ndarray:
+def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int=1,
+                     dilation: float=0.0, profile: str='tophat', num_threads: int=1) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -345,6 +350,13 @@ def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: in
 
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output array.
+        profile : Line width profiles. The following keyword values are allowed:
+
+            * `tophat` : Top-hat (rectangular) function profile.
+            * `linear` : Linear (triangular) function profile.
+            * `quad` : Quadratic (parabola) function profile.
+
+        num_threads : Number of threads used in the calculations.
 
     Raises:
         ValueError : If `inp` number of dimensions is less than 3.
@@ -359,7 +371,7 @@ def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: in
     """
     ...
 
-def draw_line_indices(lines: np.ndarray, shape: Iterable[int], max_val: int=255,
+def draw_line_indices(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: int=255,
                       dilation: float=0.0, profile: str='tophat') -> np.ndarray:
     """Return an array of rasterized thick lines indices and their corresponding pixel values.
     The lines are drawn with variable thickness and the antialiasing applied. The lines must
@@ -377,9 +389,14 @@ def draw_line_indices(lines: np.ndarray, shape: Iterable[int], max_val: int=255,
             over 180 degree.
             * `-log10(NFA)` : Number of false alarms.
 
-        shape : Shape of the image.
+        shape : Shape of the image. All the lines outside the shape will be discarded.
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output image.
+        profile : Line width profiles. The following keyword values are allowed:
+
+            * `tophat` : Top-hat (rectangular) function profile.
+            * `linear` : Linear (triangular) function profile.
+            * `quad` : Quadratic (parabola) function profile.
 
     Raises:
         ValueError : If `lines` has an incompatible shape.
@@ -393,12 +410,44 @@ def draw_line_indices(lines: np.ndarray, shape: Iterable[int], max_val: int=255,
     """
     ...
 
-def project_effs(inp: np.ndarray, mask: np.ndarray, effs: np.ndarray, out: Optional[np.ndarray]=None,
-                 num_threads: int=1) -> np.ndarray:
+def project_effs(inp: np.ndarray, mask: np.ndarray, effs: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Calculate a projection of eigen flat-fields ``effs`` on a set of 2D arrays ``inp``.
+
+    Args:
+        inp : A set of 2D arrays.
+        mask : A set of 2D masks.
+        effs : A set of eigen flat-fields.
+        num_threads : A number of threads used in the computations.
+
+    Returns:
+        An output projection of eigen flat-fields.
+    """
     ...
 
 def subtract_background(inp: np.ndarray, mask: np.ndarray, bgd: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Subtract background from a set of 2D arrays ``inp``.
+
+    Args:
+        inp : A set of 2D arrays.
+        mask : A set of 2D masks.
+        bgd : A set of background arrays.
+        num_threads : A number of threads used in the computations.
+
+    Returns:
+        An output projection of eigen flat-fields.
+    """
     ...
 
-def normalize_streak_data(inp: np.ndarray, bgd: np.ndarray, divisor: np.ndarray, num_threads: int=1) -> np.ndarray:
+def normalise_pattern(inp: np.ndarray, bgd: np.ndarray, divisor: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Normalise a set of experimental patterns.
+
+    Args:
+        inp : A set of input 2D patterns.
+        bgd : A set of background arrays.
+        divisor : A set of divisor arrays.
+        num_threads : A number of threads used in the computations.
+
+    Returns:
+        A set of normalised experimental patterns.
+    """
     ...

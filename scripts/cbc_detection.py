@@ -32,14 +32,15 @@ def main(scan_num: int, dir_path: str, setup_path: str,  data_path: str, table_p
         data = data.mask_pupil(scan_setup, padding=60)
         data = data.import_whitefield(data.transform.forward(read_whitefield(scan_num)))
         data = data.blur_pupil(scan_setup, padding=80, blur=20)
-        det_obj = data.get_detector()
-        det_obj = det_obj.generate_streak_data(vmin=cor_range[0], vmax=cor_range[1], size=(1, 3, 3))
-        det_obj = det_obj.update_lsd(quant=quant)
-        det_res = det_obj.detect(cutoff=cutoff, filter_threshold=filter_threshold,
+        lsd_det = data.lsd_detector()
+        lsd_det = lsd_det.generate_pattern(vmin=cor_range[0], vmax=cor_range[1], size=(1, 3, 3))
+        lsd_det = lsd_det.update_lsd(quant=quant)
+        lsd_det = lsd_det.detect(cutoff=cutoff, filter_threshold=filter_threshold,
                                  group_threshold=group_threshold)
-        det_res = det_res.generate_bgd_mask()
-        det_res = det_res.update_streak_data()
-        tables.append(det_res.export_table(concatenate=True))
+        lsd_det = lsd_det.draw_streaks()
+        lsd_det = lsd_det.draw_background()
+        lsd_det = lsd_det.update_pattern()
+        tables.append(lsd_det.export_table(concatenate=True))
         if save_data:
             data.save(['data', 'good_frames', 'mask', 'frames', 'cor_data', 'background'],
                     mode='insert', idxs=idxs)

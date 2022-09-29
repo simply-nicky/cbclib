@@ -6,26 +6,41 @@ import numpy as np
 import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
-                  gaussian_grid_grad, cross_entropy, calc_source_lines)
-from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup
+                  gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl)
+from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks
 from .cxi_protocol import Indices
-from .data_container import Crop
-from .data_processing import Streaks
+from .data_container import Transform, Crop
 
 @dataclass
 class ScanStreaks():
+    """Convergent beam crystallography tabular data. The data is stored in :class:`pandas.DataFrame`
+    table. A table must contain the following columns:
+
+    * `frames` : Frame index.
+    * `x`, `y` : x and y pixel coordinate.
+    * `p` : Normalised pattern value. The value lies in (0.0 - 1.0) interval.
+    * `I_raw` : Raw photon count.
+    * `sgn` : Background subtracted intensity.
+    * `bgd` : Background intensity.
+    * `h`, `k`, `l` : Miller indices.
+
+    Attributes:
+        table : CBC tabular data.
+        setup : Experimental setup.
+        crop : Detector region of interest.
+    """
     columns         : ClassVar[Set[str]] = {'frames', 'x', 'y', 'p', 'I_raw', 'sgn', 'bgd'}
     hkl_columns     : ClassVar[Set[str]] = {'h', 'k', 'l'}
-    dataframe       : pd.DataFrame
+    table           : pd.DataFrame
     setup           : ScanSetup
     crop            : Optional[Crop] = None
 
     def __post_init__(self):
-        if not self.columns.issubset(self.dataframe.columns):
+        if not self.columns.issubset(self.table.columns):
             raise ValueError(f'Dataframe must contain the following columns: {self.columns}')
         for col in self.hkl_columns:
-            if col not in self.dataframe.columns:
-                self.dataframe[col] = np.nan
+            if col not in self.table.columns:
+                self.table[col] = np.nan
         if self.crop is None:
             self.crop = self.get_crop()
         if not self.isunique():
@@ -41,20 +56,19 @@ class ScanStreaks():
 
     @property
     def dtype(self) -> np.dtype:
-        return self.dataframe.dtypes['sgn']
+        return self.table.dtypes['sgn']
 
     def _repr_html_(self) -> Optional[str]:
-        return self.dataframe._repr_html_()
+        return self.table._repr_html_()
 
     def create_qmap(self, samples: ScanSamples, qx_arr: np.ndarray, qy_arr: np.ndarray,
                     qz_arr: np.ndarray) -> Map3D:
         q_map = np.zeros((qx_arr.size, qy_arr.size, qz_arr.size), dtype=self.dtype)
-        first_frame = self.dataframe['frames'].min()
 
-        for frame, df_frame in self.dataframe.groupby('frames'):
+        for frame, df_frame in self.table.groupby('frames'):
             kout = samples[frame].detector_to_kout(df_frame['x'], df_frame['y'], self.setup)
             q_frame = kout - self.setup.kin_center
-            q_frame = q_frame.dot(samples.rotation(frame, first_frame)[0])
+            q_frame = samples[frame].rotation(q_frame)
             x_idxs = np.searchsorted(qx_arr, q_frame[:, 0])
             y_idxs = np.searchsorted(qy_arr, q_frame[:, 1])
             z_idxs = np.searchsorted(qz_arr, q_frame[:, 2])
@@ -63,17 +77,17 @@ class ScanStreaks():
         return Map3D(q_map, qx_arr, qy_arr, qz_arr)
 
     def drop_duplicates(self) -> pd.DataFrame:
-        return ScanStreaks(self.dataframe.drop_duplicates(['frames', 'x', 'y']), self.setup)
+        return ScanStreaks(self.table.drop_duplicates(['frames', 'x', 'y']), self.setup)
 
     def get_crop(self) -> Crop:
-        return Crop((self.dataframe['y'].min(), self.dataframe['y'].max(),
-                     self.dataframe['x'].min(), self.dataframe['x'].max()))
+        return Crop((self.table['y'].min(), self.table['y'].max() + 1,
+                     self.table['x'].min(), self.table['x'].max() + 1))
 
     def isunique(self) -> bool:
-        return np.unique(self.dataframe.index).size == self.dataframe.index.size
+        return np.unique(self.table.index).size == self.table.index.size
 
     def pattern_dataframe(self, frame: int) -> pd.DataFrame:
-        df_frame = self.dataframe[self.dataframe['frames'] == frame]
+        df_frame = self.table[self.table['frames'] == frame]
         mask = (self.crop.roi[0] < df_frame['y']) & (df_frame['y'] < self.crop.roi[1]) & \
                (self.crop.roi[2] < df_frame['x']) & (df_frame['x'] < self.crop.roi[3])
         df_frame = df_frame[mask]
@@ -96,7 +110,10 @@ class ScanStreaks():
                             width=width, pattern=self.pattern_dict(frame), alpha=alpha)
 
     def reset_index(self):
-        self.dataframe.reset_index(drop=True, inplace=True)
+        self.table.reset_index(drop=True, inplace=True)
+
+    def update_crop(self, crop: Optional[Crop]=None) -> ScanStreaks:
+        return ScanStreaks(self.table, self.setup, crop)
 
 @dataclass
 class Map3D():
@@ -238,17 +255,17 @@ class Map3D():
 
 @dataclass
 class CBDModel():
-    basis   : Basis
-    sample  : Sample
-    crop    : Crop
-    setup   : ScanSetup
+    basis       : Basis
+    sample      : Sample
+    setup       : ScanSetup
+    transform   : Optional[Transform]=None
+    shape       : Optional[Tuple[int, int]]=None
 
     def __post_init__(self):
         self.basis = self.sample.rotate(self.basis)
-
-    @property
-    def shape(self) -> Tuple[int, int]:
-        return (self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
+        if isinstance(self.transform, Crop):
+            self.shape = (self.transform.roi[1] - self.transform.roi[0],
+                          self.transform.roi[3] - self.transform.roi[2])
 
     def generate_hkl(self, q_abs: float) -> np.ndarray:
         lat_size = np.rint(q_abs / self.basis.to_spherical()[:, 0]).astype(int)
@@ -275,11 +292,24 @@ class CBDModel():
         kout = kin + hkl[idxs].dot(self.basis.mat)[:, None]
 
         x, y = self.sample.kout_to_detector(kout, self.setup)
-        mask = (self.crop.roi[0] < y).any(axis=1) & (y < self.crop.roi[1]).any(axis=1) & \
-               (self.crop.roi[2] < x).any(axis=1) & (x < self.crop.roi[3]).any(axis=1)
-        (x, y), idxs = self.crop.forward_points(x[mask], y[mask]), idxs[mask]
+        if self.transform:
+            x, y = self.transform.forward_points(x, y)
+
+        if self.shape:
+            mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
+                   (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
+            x, y, idxs = x[mask], y[mask], idxs[mask]
         return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1], width=width * np.ones(x.shape[0]),
                        h=hkl[idxs, 0], k=hkl[idxs, 1], l=hkl[idxs, 2], hkl_index=idxs)
+
+    def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray, width: float, 
+                       threshold: float=0.95, dp: float=1e-3, profile: str='tophat', num_threads: int=1) -> Streaks:
+        streaks = self.generate_streaks(hkl, width)
+        pattern = streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
+        mask = filter_hkl(sgn=signal, bgd=background, df_xy=pattern[['x', 'y']].to_numpy(),
+                          df_p=pattern['p'].to_numpy(), df_hkl=pattern['hkl_index'].to_numpy(),
+                          hkl_idxs=streaks.hkl_index, threshold=threshold, threads=num_threads)
+        return streaks.mask_streaks(mask)
 
     def pattern_dataframe(self, hkl: np.ndarray, width: float, dp: float=1e-3,
                           profile: str='linear') -> pd.DataFrame:
@@ -362,7 +392,8 @@ class IndexProblem():
         return self.setup.replace(foc_pos=foc_pos)
 
     def generate_model(self, x: np.ndarray) -> CBDModel:
-        return CBDModel(self.basis, self.generate_sample(x), self.crop, self.generate_setup(x))
+        return CBDModel(basis=self.basis, sample=self.generate_sample(x), transform=self.crop,
+                        setup=self.generate_setup(x))
 
     def generate_streaks(self, x: np.ndarray) -> Streaks:
         return self.generate_model(x).generate_streaks(self.hkl, self.width)
@@ -394,7 +425,7 @@ class IndexProblem():
     def update_hkl(self, x: np.ndarray, q_abs: float) -> None:
         self.hkl = self.generate_model(x).generate_hkl(q_abs)
 
-    def index_frame(self, x: np.ndarray, frame: int, iterations: int=4, num_threads: int=1):
+    def index_frame(self, x: np.ndarray, frame: int, iterations: int=4, num_threads: int=1) -> pd.DataFrame:
         if self.parent().crop != self.crop:
             raise ValueError('Parent Crop object has been changed, '\
                              'please create new IndexProblem instance.')
@@ -406,7 +437,9 @@ class IndexProblem():
         df_frame['ij'] = self._pattern_to_ij_and_q(df_frame)[0]
         df_frame = df_frame.sort_values('ij')
 
-        df = self.pattern_dataframe(x)
+        df = self.pattern_dataframe(x).sort_values('p', ascending=True)
+        df['ij'] = self._pattern_to_ij_and_q(df)[0]
+        df = df[np.in1d(df['ij'], df_frame['ij'])]
         mask = np.zeros(self.shape, dtype=bool)
         labels = np.zeros(self.shape, dtype=np.uint32)
         mask[df_frame['y'], df_frame['x']] = True
@@ -415,6 +448,13 @@ class IndexProblem():
             labels = median_filter(labels, footprint=self.footprint, inp_mask=labels,
                                    mask=mask, num_threads=num_threads)
 
+        df_diff = df_frame[~np.in1d(df_frame['ij'], df['ij'])]
         ij_sim = np.where(labels.ravel())[0]
-        df_idxs = df_frame.index[df_frame['ij'].searchsorted(ij_sim)]
-        self.parent().dataframe.loc[df_idxs, ['h', 'k', 'l']] = self.hkl[labels.ravel()[ij_sim], :]
+        ij_diff = ij_sim[~np.in1d(ij_sim, df['ij'])]
+        df_idxs = df_diff.index[df_diff['ij'].searchsorted(ij_diff)]
+        df_diff.loc[df_idxs, ['h', 'k', 'l']] = self.hkl[labels.ravel()[ij_diff], :]
+
+        df_idxs = df_frame.index[df_frame['ij'].searchsorted(df['ij'])]
+        df_inst = df_frame.loc[df_idxs]
+        df_inst.loc[:, ['h', 'k', 'l']] = df[['h', 'k', 'l']].values
+        return pd.concat((df_inst, df_diff))

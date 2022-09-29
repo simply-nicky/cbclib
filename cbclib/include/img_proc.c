@@ -3,10 +3,10 @@
 
 #define TOL 3.1425926535897937e-05
 
-#define CLIP(_coord, _min, _max)                \
+#define CLIP(c, a, b)                           \
 {                                               \
-    _coord = (_coord > _min) ? _coord : _min;   \
-    _coord = (_coord < _max) ? _coord : _max;   \
+    c = ((c) > (a)) ? (c) : (a);                \
+    c = ((c) < (b)) ? (c) : (b);                \
 }
 
 #define WRAP_DIST(_dist, _dx, _hb, _fb, _div)   \
@@ -18,8 +18,8 @@
     _dist += SQ(_dx1 / _div);                   \
 }
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 typedef struct rect_s
 {
@@ -117,6 +117,21 @@ static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned 
     add_4tuple(idxs, (unsigned int)idxs->iter, (unsigned int)x, (unsigned int)y, val > max_val ? max_val : val);
 }
 
+/*----------------------------------------------------------------------------*/
+/*-------------------------- Bresenham's Algorithm ---------------------------*/
+/*----------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------
+    Function :  kth_smallest()
+    In       :  A 2d line defined by two coordinates (x0, y0, x1, y1)
+    Out      :  A rasterized image of the line
+
+    Reference:
+        Author: Alois Zingl
+        Title: A Rasterizing Algorithm for Drawing Curves
+        pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
+        url: http://members.chello.at/~easyfilter/bresenham.html
+---------------------------------------------------------------------------*/
 static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned int max_val, set_pixel setter, line_profile profile)
 {
     /* plot an anti-aliased line of width wd */
@@ -127,7 +142,7 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
     wd = 0.5f * (wd + 1.0f);
 
     /* define line bounds */
-    int wi = roundf(wd);
+    int wi = roundf(0.5 * wd);
     rect bnd = (rect)malloc(sizeof(struct rect_s));
 
     if (rt->x0 < rt->x1)
@@ -155,12 +170,12 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
         err -= (bnd->y1 - rt->y0) * dx; rt->y0 = bnd->y1; rt->y1 = bnd->y0;
     }
 
-    while (1)
+    int cnt_max = dx + dy + 4 * wi;
+    for (int cnt = 0; cnt < cnt_max; cnt++)
     {
         /* pixel loop */
         err += derr; derr = 0;
         rt->x0 += dx0; dx0 = 0;
-        // val = max_val - fmaxf(max_val * (abs(err - dx + dy) / ed - wd + 1.0f), 0.0f);
         val = profile(max_val, (err - dx + dy) / ed, wd);
         setter(out, rt->x0, rt->y0, val, max_val);
 
@@ -171,21 +186,19 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
                  abs(e2) < ed * wd && y2 >= bnd->y0 && y2 <= bnd->y1;
                  e2 += dx, y2 += sy)
             {
-                // val = max_val - fmaxf(max_val * (abs(e2) / ed - wd + 1.0f), 0.0f);
                 val = profile(max_val, e2 / ed, wd);
                 setter(out, rt->x0, y2, val, max_val);
             }
             if (rt->x0 == rt->x1) break;
             derr -= dy; dx0 += sx;
         }
-        if (2.0f * err <= dy)
+        if (2 * err <= dy)
         {
             /* y step */
             for (e2 = err - dx, x2 = rt->x0 + sx;
                  abs(e2) < ed * wd && x2 >= bnd->x0 && x2 <= bnd->x1;
                  e2 -= dy, x2 += sx)
             {
-                // val = max_val - fmaxf(max_val * (abs(e2) / ed - wd + 1.0f), 0.0f);
                 val = profile(max_val, e2 / ed, wd);
                 setter(out, x2, rt->y0, val, max_val);
             }
@@ -197,10 +210,11 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
     DEALLOC(bnd);
 }
 
-int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims, float dilation, line_profile profile)
+int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims,
+               float dilation, line_profile profile)
 {
     /* check parameters */
-    if (!out || !lines) {ERROR("draw_lines: one of the arguments is NULL."); return -1;}
+    if (!out || !lines || !profile) {ERROR("draw_lines: one of the arguments is NULL."); return -1;}
     if (!X && !Y) {ERROR("draw_lines: image size must be positive."); return -1;}
 
     if (ldims[0] == 0) return 0;
@@ -230,10 +244,11 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, floa
     return 0;
 }
 
-int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims, float dilation, line_profile profile)
+int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
+                      float *lines, size_t *ldims, float dilation, line_profile profile)
 {
     /* check parameters */
-    if (!lines) {ERROR("draw_line_indices: lines is NULL."); return -1;}
+    if (!lines || !profile) {ERROR("draw_line_indices: lines is NULL."); return -1;}
     if (!X && !Y) {ERROR("draw_line_indices: image size must be positive."); return -1;}
 
     if (ldims[0] == 0) return 0;
@@ -255,6 +270,7 @@ int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, un
 
         rt->x0 = roundf(ln_ptr[0]); rt->y0 = roundf(ln_ptr[1]);
         rt->x1 = roundf(ln_ptr[2]); rt->y1 = roundf(ln_ptr[3]);
+
         wd = ln_ptr[4] + dilation;
         ln_area = (2 * (int)wd + abs(rt->x1 - rt->x0)) * (2 * (int)wd + abs(rt->y1 - rt->y0));
 
@@ -321,8 +337,10 @@ static void create_line_image_pair(unsigned int **out, rect orect, size_t Y, siz
     rt1->x0 -= orect->x0; rt1->y0 -= orect->y0; rt1->x1 -= orect->x0; rt1->y1 -= orect->y0;
 
     /* Plot the lines */
-    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + dilation, max_val, set_pixel_color, tophat_profile);
-    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + dilation, max_val, set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt0, ln0[4] + dilation, max_val,
+                    set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt1, ln1[4] + dilation, max_val,
+                    set_pixel_color, tophat_profile);
 
     DEALLOC(rt0); DEALLOC(rt1); free_array(oarr);
 }
@@ -356,7 +374,8 @@ static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X
     rt->x0 -= orect->x0; rt->y0 -= orect->y0; rt->x1 -= orect->x0; rt->y1 -= orect->y0;
 
     /* Plot the lines */
-    plot_line_width((void *)oarr, oarr->dims, rt, ln[4] + dilation, max_val, set_pixel_color, tophat_profile);
+    plot_line_width((void *)oarr, oarr->dims, rt, ln[4] + dilation, max_val,
+                    set_pixel_color, tophat_profile);
 
     DEALLOC(rt); free_array(oarr);
 }
@@ -378,11 +397,12 @@ static float collapse_pair(float *oln, unsigned int *img, rect img_rt, float *da
              k < img_rt->x1; k++, img_jk++, data_jk++)
         {
             val = (*data_jk) * (float)(*img_jk);
+            val = (val < 0.0f) ? 0.0f : val;
             M0 += val; MX += k * val; MY += j * val;
             MXY += k * j * val; MYY += j * j * val; MXX += k * k * val;
         }
 
-    if (M0)
+    if (M0 > 0.0f)
     {
         /* Central moments */
         mu_x = MX / M0; mu_y = MY / M0;
@@ -418,35 +438,43 @@ static float collapse_pair(float *oln, unsigned int *img, rect img_rt, float *da
     return M0;
 }
 
-static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect rt1)
+static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect rt1, float *data, size_t Y, size_t X)
 {
     /* Define overlap rectangle */
     rect rt = (rect)malloc(sizeof(struct rect_s));
-    rt->x0 = MAX(rt0->x0, rt1->x0);
-    rt->x1 = MIN(rt0->x1, rt1->x1);
-    rt->y0 = MAX(rt0->y0, rt1->y0);
-    rt->y1 = MIN(rt0->y1, rt1->y1);
+    rt->x0 = MIN(rt0->x0, rt1->x0);
+    rt->x1 = MAX(rt0->x1, rt1->x1);
+    rt->y0 = MIN(rt0->y0, rt1->y0);
+    rt->y1 = MAX(rt0->y1, rt1->y1);
 
     /* image shapes */
     size_t s0[2] = {rt0->y1 - rt0->y0, rt0->x1 - rt0->x0};
     size_t s1[2] = {rt1->y1 - rt1->y0, rt1->x1 - rt1->x0};
 
-    /* calculate overlap */
-    unsigned int cov = 0, sum0 = 0, sum1 = 0, val0, val1;
+    /* calculate overlap and union */
+    float ovl = 0.0f, unn = 0.0f;
+    int i0, j0, i1, j1;
+    unsigned int val0, val1;
     for (int i = rt->y0; i < rt->y1; i++)
     {
         for (int j = rt->x0; j < rt->x1; j++)
         {
-            val0 = img0[(i - rt0->y0) * s0[1] + j - rt0->x0];
-            val1 = img1[(i - rt1->y0) * s1[1] + j - rt1->x0];
-            cov += val0 * val1;
-            sum0 += SQ(val0); sum1 += SQ(val1);
+            i0 = i - rt0->y0; j0 = j - rt0->x0;
+            if ((i0 >= 0) && (i0 < (int)s0[0]) && (j0 >= 0) && (j0 < (int)s0[1])) val0 = img0[i0 * s0[1] + j0];
+            else val0 = 0;
+
+            i1 = i - rt1->y0; j1 = j - rt1->x0;
+            if ((i1 >= 0) && (i1 < (int)s1[0]) && (j1 >= 0) && (j1 < (int)s1[1])) val1 = img1[i1 * s1[1] + j1];
+            else val1 = 0;
+
+            if (val0 && val1) ovl += data[i * X + j];
+            if (val0 || val1) unn += data[i * X + j];
         }
     }
 
     DEALLOC(rt);
 
-    if (sum0 && sum1) return cov / sqrtf(sum0) / sqrtf(sum1);
+    if (unn) return ovl / unn;
     return 0.0f;
 }
 
@@ -461,7 +489,7 @@ int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
 
     int i, j, k;
-    float M0;
+    float M0, val;
     float *ln, *data_j, *data_jk;
     unsigned int *img, *img_j, *img_jk;
     rect rt = (rect)malloc(sizeof(struct rect_s));
@@ -482,7 +510,8 @@ int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size
             for (k = rt->x0, img_jk = img_j, data_jk = data_j;
                 k < rt->x1; k++, img_jk++, data_jk++)
             {
-                M0 += (*data_jk) * (float)(*img_jk);
+                val = (*data_jk) * (float)(*img_jk);
+                M0 += (val < 0.0f) ? 0.0f : val;
             }
 
         /* Delete the line if M0 is too small */
@@ -580,13 +609,13 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
             /* Collapse a pair of lines */
             M0 = collapse_pair(oln, img_pair, rt_pair, data, Y, X, ln0, ln1, ldims[1]);
 
-            if (M0)
+            if (M0 > 0.0f)
             {
                 /* Create an image of oln */
                 create_line_image(&img_oln, ort, Y, X, 1, oln, dilation);
 
                 /* Find overlap between imp_pair and imp_oln */
-                corr = find_overlap(img_pair, rt_pair, img_oln, ort);
+                corr = find_overlap(img_pair, rt_pair, img_oln, ort, data, Y, X);
 
                 if (corr > threshold)
                 {

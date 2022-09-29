@@ -6,8 +6,8 @@ def make_ext(modname, pyxfilename):
     import sys
     import Cython.Compiler.Options
     Cython.Compiler.Options.annotate = True
-    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/smoothers.c",
-                                          "cbclib/include/array.c", "cbclib/include/median.c"],
+    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/smoothers.c", "cbclib/include/img_proc.c",
+                                          "cbclib/include/array.c", "cbclib/include/median.c", "cbclib/include/lsd.c"],
                      language="c",
                      extra_compile_args=['-fopenmp', '-std=c99'],
                      libraries=['fftw3', 'fftw3_omp', 'gomp'],

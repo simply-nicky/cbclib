@@ -46,8 +46,8 @@ cdef class LSD:
             self.quant = quant
 
     def detect(self, np.ndarray image not None, float cutoff, float filter_threshold=0.0,
-               float group_threshold=0.6, bint filter=True, bint group=True, int n_group=2,
-               float dilation=6.0, bint return_labels=False, unsigned int num_threads=1):
+               float group_threshold=0.6, int n_group=2, bint filter=True, bint group=True, 
+               float dilation=0.0, bint return_labels=False, unsigned int num_threads=1):
         if image.ndim < 2:
             raise ValueError('Image must be a 2D array.')
         image = check_array(image, np.NPY_FLOAT32)
@@ -100,14 +100,14 @@ cdef class LSD:
 
             for i in prange(repeats, schedule='guided'):
                 fail |= LineSegmentDetection(&_outs[i], &_ns[i], _img + i * _Y * _X, _Y, _X,
-                                            self.scale, self.sigma_scale, self.quant,
-                                            self.ang_th, self.log_eps, self.density_th, N_BINS,
-                                            &_regs[i], &_reg_ys[i], &_reg_xs[i])
+                                             self.scale, self.sigma_scale, self.quant,
+                                             self.ang_th, self.log_eps, self.density_th, N_BINS,
+                                             &_regs[i], &_reg_ys[i], &_reg_xs[i])
 
                 _masks[i] = <unsigned char *>calloc(_ns[i], sizeof(unsigned char))
                 memset(_masks[i], 1, _ns[i] * sizeof(unsigned char))
                 ldims[0] = _ns[i]
-                
+
                 if group:
                     for j in range(n_group):
                         fail |= group_lines(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],

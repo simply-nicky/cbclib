@@ -2,7 +2,7 @@ import numpy as np
 import cython
 from libc.math cimport log, sqrt, pi
 from libc.string cimport memcmp
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport calloc, malloc, free
 from cython.parallel import prange
 from .line_detector cimport ArrayWrapper
 
@@ -423,14 +423,18 @@ def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=2
     if inp.ndim != 2:
         raise ValueError("Input array must be two-dimensional")
     if lines.ndim != 2 or lines.shape[1] < 5:
-        raise ValueError(f"lines array has an incompatible shape")
+        raise ValueError("lines array has an incompatible shape")
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
 
     cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
     cdef unsigned long _Y = inp.shape[0]
     cdef unsigned long _X = inp.shape[1]
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
+
     cdef line_profile _prof = profiles[profile_scheme[profile]]
+    cdef int fail
 
     with nogil:
         fail = draw_lines_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
@@ -444,6 +448,9 @@ def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1
         raise ValueError('Input array must be >=2D array.')
     inp = check_array(inp, np.NPY_UINT32)
 
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+
     cdef int ndim = inp.ndim
     cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
     cdef int _X = <int>inp.shape[ndim - 1]
@@ -452,35 +459,47 @@ def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1
 
     cdef int i, N = len(lines)
     cdef list frames = list(lines)
-    cdef float **_lines = <float **>malloc(N * sizeof(float *))
+    cdef dict _lines = {}
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
     cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
-    cdef np.ndarray _larr
     for i in range(N):
-        _larr = lines[frames[i]]
-        _lines[i] = <float *>np.PyArray_DATA(_larr)
-        _ldims[i] = <unsigned long *>_larr.shape
+        _lines[i] = check_array(lines[frames[i]], np.NPY_FLOAT32)
+        _lptrs[i] = <float *>np.PyArray_DATA(_lines[i])
+        _ldims[i] = <unsigned long *>(<np.ndarray>_lines[i]).shape
 
     cdef line_profile _prof = profiles[profile_scheme[profile]]
 
     if N < repeats:
         repeats = N
-    num_threads = repeats if <int>num_threads > repeats else <int>num_threads        
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    cdef int *fail = <int *>calloc(num_threads, sizeof(int))
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        draw_lines_c(_inp + i * _Y * _X, _Y, _X, max_val, _lines[i], _ldims[i], <float>dilation, _prof)
+        fail[i] = fail[i] + draw_lines_c(_inp + i * _Y * _X, _Y, _X, max_val, _lptrs[i], _ldims[i], <float>dilation, _prof)
 
-    free(_lines); free(_ldims)
+    for i in range(<int>num_threads):
+        if fail[i]:
+            raise RuntimeError('C backend exited with error.')
+
+    free(_lptrs); free(_ldims); free(fail)
 
     return inp
 
-def draw_line_indices(np.ndarray lines not None, object shape not None, int max_val=255, double dilation=0.0,
+def draw_line_indices(np.ndarray lines not None, object shape=None, int max_val=255, double dilation=0.0,
                       str profile='tophat'):
     lines = check_array(lines, np.NPY_FLOAT32)
 
     if lines.ndim != 2 or lines.shape[1] < 5:
         raise ValueError(f"lines array has an incompatible shape")
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
 
-    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef np.ndarray _shape
+    if shape is None:
+        _shape = np.PyArray_Max(lines, 0, <np.ndarray>NULL)
+        _shape[0] += 1; _shape[1] += 1
+    else:
+        _shape = normalize_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long _Y = _shape[0]
     cdef unsigned long _X = _shape[1]
 
@@ -488,7 +507,9 @@ def draw_line_indices(np.ndarray lines not None, object shape not None, int max_
     cdef unsigned long _n_idxs
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
+
     cdef line_profile _prof = profiles[profile_scheme[profile]]
+    cdef int fail = 0
 
     with nogil:
         fail = draw_line_indices_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
@@ -501,16 +522,15 @@ def draw_line_indices(np.ndarray lines not None, object shape not None, int max_
     return idxs
 
 def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray effs not None,
-                 np.ndarray out=None, int num_threads=1):
+                 int num_threads=1):
     inp = check_array(inp, np.NPY_FLOAT32)
     mask = check_array(mask, np.NPY_BOOL)
     effs = check_array(effs, np.NPY_FLOAT32)
 
-    cdef int i, j, k, ii
-    cdef np.float32_t w1, w0
+    cdef int i, j, k, ii, n
+    cdef double w1, w0, slope, intercept
 
-    if out is None:
-        out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
 
     cdef np.float32_t[:, :, ::1] _inp = inp
     cdef np.npy_bool[:, :, ::1] _mask = mask
@@ -527,10 +547,18 @@ def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray e
                     if _mask[i, j, k]:
                         w1 = w1 + _inp[i, j, k] * _effs[ii, j, k]
                         w0 = w0 + _effs[ii, j, k] * _effs[ii, j, k]
-            w1 = w1 / w0 if w0 > 0.0 else 1.0
+            slope = w1 / w0 if w0 > 0.0 else 1.0
+            intercept = 0.0; n = 0
             for j in range(_inp.shape[1]):
                 for k in range(_inp.shape[2]):
-                    _out[i, j, k] = _out[i, j, k] + _effs[ii, j, k] * w1
+                    if _mask[i, j, k]:
+                        intercept = intercept + _inp[i, j, k] - slope * _effs[ii, j, k]
+                        n = n + 1
+            intercept = intercept / n
+            for j in range(_inp.shape[1]):
+                for k in range(_inp.shape[2]):
+                    if _effs[ii, j, k]:
+                        _out[i, j, k] = _effs[ii, j, k] * slope + intercept
 
     return out
 
@@ -557,22 +585,21 @@ def subtract_background(np.ndarray inp not None, np.ndarray mask not None, np.nd
         for j in range(_inp.shape[1]):
             for k in range(_inp.shape[2]):
                 if _mask[i, j, k]:
-                    res = <float>_inp[i, j, k] - _bgd[i, j, k]
-                    _out[i, j, k] = res if res > 0.0 else 0.0
+                    _out[i, j, k] = <float>_inp[i, j, k] - _bgd[i, j, k]
                 else:
                     _out[i, j, k] = 0.0
 
     return out
 
-def normalize_streak_data(np.ndarray inp not None, np.ndarray bgd not None, np.ndarray divisor not None,
-                          int num_threads=1):
+def normalise_pattern(np.ndarray inp not None, np.ndarray bgd not None, np.ndarray divisor not None,
+                      int num_threads=1):
     inp = check_array(inp, np.NPY_FLOAT32)
     bgd = check_array(bgd, np.NPY_FLOAT32)
     divisor = check_array(divisor, np.NPY_FLOAT32)
 
     cdef int i, j, k
     cdef float w, I
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(inp.ndim, inp.shape, np.NPY_FLOAT32)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
 
     cdef np.float32_t[:, :, ::1] _inp = inp
     cdef np.float32_t[:, :, ::1] _bgd = bgd
@@ -587,13 +614,6 @@ def normalize_streak_data(np.ndarray inp not None, np.ndarray bgd not None, np.n
                 if _div[i, j, k]:
                     w = _div[i, j, k] - _bgd[i, j, k]
                     I = _inp[i, j, k] - _bgd[i, j, k]
-                    if w <= 0.0 or I <= 0.0:
-                        _out[i, j, k] = 0.0
-                    else:
-                        _out[i, j, k] = I / w
-                else:
-                    _out[i, j, k] = 0.0
+                    if w > 0.0 and I > 0.0:
+                        _out[i, j, k] = I / w if I <= w else 1.0
     return out
-
-def lowess(np.ndarray y, np.ndarray x, np.ndarray x_pred, double sigma):
-    pass

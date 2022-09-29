@@ -321,7 +321,7 @@ int gauss_filter_r(double *out, double *inp, int ndim, size_t *dims, double *sig
     rconvolve_func fft_convolve)
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma || !order)
+    if (!out || !inp || !dims || !sigma || !order || !fft_convolve)
     {ERROR("gauss_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_filter: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_filter: threads must be positive."); return -1;}
@@ -364,7 +364,7 @@ int gauss_filter_c(double complex *out, double complex *inp, int ndim, size_t *d
     cconvolve_func fft_convolve)
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma || !order)
+    if (!out || !inp || !dims || !sigma || !order || !fft_convolve)
     {ERROR("gauss_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_filter: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_filter: threads must be positive."); return -1;}
@@ -407,7 +407,7 @@ int gauss_grad_mag_r(double *out, double *inp, int ndim, size_t *dims, double *s
     rconvolve_func fft_convolve)
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma)
+    if (!out || !inp || !dims || !sigma || !fft_convolve)
     {ERROR("gauss_grad_mag: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_grad_mag: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_grad_mag: threads must be positive."); return -1;}
@@ -442,7 +442,7 @@ int gauss_grad_mag_c(double *out, double complex *inp, int ndim, size_t *dims, d
     cconvolve_func fft_convolve)
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma)
+    if (!out || !inp || !dims || !sigma || !fft_convolve)
     {ERROR("gauss_grad_mag: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_grad_mag: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_grad_mag: threads must be positive."); return -1;}
