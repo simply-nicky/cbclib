@@ -4,19 +4,12 @@
 #define TOL 3.1425926535897937e-05
 
 #define CLIP(c, a, b)                           \
-{                                               \
-    c = ((c) > (a)) ? (c) : (a);                \
-    c = ((c) < (b)) ? (c) : (b);                \
-}
+    do {(c) = ((c) > (a)) ? (c) : (a); (c) = ((c) < (b)) ? (c) : (b); } while (0)
 
-#define WRAP_DIST(_dist, _dx, _hb, _fb, _div)   \
-{                                               \
-    float _dx1;                                 \
-    if (_dx < -_hb) _dx1 = _dx + _fb;           \
-    else if (_dx > _hb) _dx1 = _dx - _fb;       \
-    else _dx1 = _dx;                            \
-    _dist += SQ(_dx1 / _div);                   \
-}
+#define WRAP_DIST(_dist, _dx, _hb, _fb, _div)                   \
+    do {float _dx1; if ((_dx) < -(_hb)) _dx1 = (_dx) + (_fb);   \
+        else if ((_dx) > (_hb)) _dx1 = (_dx) - (_fb);           \
+        else _dx1 = (_dx); (_dist) += SQ(_dx1 / _div); } while (0)
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
@@ -210,12 +203,13 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
     DEALLOC(bnd);
 }
 
-int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims,
+int draw_line(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims,
                float dilation, line_profile profile)
 {
     /* check parameters */
-    if (!out || !lines || !profile) {ERROR("draw_lines: one of the arguments is NULL."); return -1;}
-    if (!X && !Y) {ERROR("draw_lines: image size must be positive."); return -1;}
+    if (!out || !lines || !profile) {ERROR("draw_line: one of the arguments is NULL."); return -1;}
+    if (!X && !Y) {ERROR("draw_line: image size must be positive."); return -1;}
+    if (dilation < 0.0) {ERROR("draw_line: dilation must be a positive number"); return -1;}
 
     if (ldims[0] == 0) return 0;
 
@@ -244,12 +238,13 @@ int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, floa
     return 0;
 }
 
-int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
+int draw_line_index(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
                       float *lines, size_t *ldims, float dilation, line_profile profile)
 {
     /* check parameters */
-    if (!lines || !profile) {ERROR("draw_line_indices: lines is NULL."); return -1;}
-    if (!X && !Y) {ERROR("draw_line_indices: image size must be positive."); return -1;}
+    if (!lines || !profile) {ERROR("draw_line_index: lines is NULL."); return -1;}
+    if (!X && !Y) {ERROR("draw_line_index: image size must be positive."); return -1;}
+    if (dilation < 0.0) {ERROR("draw_line: dilation must be a positive number"); return -1;}
 
     if (ldims[0] == 0) return 0;
 
@@ -478,12 +473,12 @@ static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect
     return 0.0f;
 }
 
-int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
+int filter_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
     size_t *ldims, float threshold, float dilation)
 {
     /* Check parameters */
-    if (!olines|| !proc || !ilines) {ERROR("filter_lines: one of the arguments is NULL."); return -1;}
-    if (!X && !Y) {ERROR("filter_lines: data array must have a positive size."); return -1;}
+    if (!olines|| !proc || !ilines) {ERROR("filter_line: one of the arguments is NULL."); return -1;}
+    if (!X && !Y) {ERROR("filter_line: data array must have a positive size."); return -1;}
 
     if (ldims[0] == 0) return 0;
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
@@ -529,12 +524,12 @@ int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size
     return 0;
 }
 
-int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines, size_t *ldims,
+int group_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines, size_t *ldims,
     float cutoff, float threshold, float dilation)
 {
     /* Check parameters */
-    if (!olines|| !data || !ilines) {ERROR("group_lines: one of the arguments is NULL."); return -1;}
-    if (!X && !Y) {ERROR("group_lines: data array must have a positive size."); return -1;}
+    if (!olines|| !data || !ilines) {ERROR("group_line: one of the arguments is NULL."); return -1;}
+    if (!X && !Y) {ERROR("group_line: data array must have a positive size."); return -1;}
     
     if (ldims[0] == 0) return 0;
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
@@ -586,7 +581,7 @@ int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_
     for (i = 0; i < n_pairs; i++) inds[i] = i;
 
     /* Sort the pairs based on the distance */
-    qsort_r(inds, n_pairs, sizeof(size_t), indirect_compare_float, ds);
+    POSIX_QSORT_R(inds, n_pairs, sizeof(size_t), indirect_compare_float, (void *)ds);
     DEALLOC(ds);
 
     float *oln = MALLOC(float, ldims[1]);

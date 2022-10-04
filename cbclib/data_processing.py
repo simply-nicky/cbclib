@@ -12,18 +12,17 @@ Examples:
 """
 from __future__ import annotations
 from multiprocessing import cpu_count
-from pyexpat import model
 from typing import Any, ClassVar, Dict, List, Optional, Tuple, TypeVar, Union
 from dataclasses import dataclass, field
-from weakref import ref, ReferenceType
+from weakref import ref
 import numpy as np
 import pandas as pd
 from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks
 from .cbc_indexing import CBDModel
 from .cxi_protocol import CXIStore, Indices
-from .data_container import DataContainer, Transform
+from .data_container import DataContainer, Transform, ReferenceType
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  maximum_filter, normalise_pattern, draw_lines_stack)
+                  maximum_filter, normalise_pattern, draw_line_stack)
 
 C = TypeVar('C', bound='CrystData')
 
@@ -35,7 +34,7 @@ class CrystData(DataContainer):
     attributes. The data frames can be tranformed using any of the :class:`cbclib.Transform`
     classes.
 
-    Attributes:
+    Args:
         input_file : Input file :class:`cbclib.CXIStore` file handler.
         transform : An image transform object.
         num_threads : Number of threads used in the calculations.
@@ -172,8 +171,9 @@ class CrystData(DataContainer):
                 if self.transform and shape[0] * shape[1]:
                     ss_idxs, fs_idxs = np.indices(shape)
                     ss_idxs, fs_idxs = self.transform.index_array(ss_idxs, fs_idxs)
-                    data = self.input_file.load_attribute(attr, idxs=idxs, ss_idxs=ss_idxs, fs_idxs=fs_idxs,
-                                                          processes=processes, verbose=verbose)
+                    data = self.input_file.load_attribute(attr, idxs=idxs, ss_idxs=ss_idxs,
+                                                          fs_idxs=fs_idxs, processes=processes,
+                                                          verbose=verbose)
                 else:
                     data = self.input_file.load_attribute(attr, idxs=idxs, processes=processes,
                                                           verbose=verbose)
@@ -196,7 +196,7 @@ class CrystData(DataContainer):
                 * `insert` : Insert the data under the given indices `idxs`.
                 * `overwrite` : Overwrite the existing dataset.
 
-            verbose : Set the verbosity of the loading process.
+            idxs : Indices where the data is saved. Used only if ``mode`` is set to 'insert'.
 
         Raises:
             ValueError : If the ``output_file`` is not defined inside the container.
@@ -344,7 +344,7 @@ class CrystData(DataContainer):
         """
         raise self._no_data_exc
 
-    def import_whitefield(self, whitefield: np.ndarray) -> CrystData:
+    def import_whitefield(self: C, whitefield: np.ndarray) -> C:
         """Return a new :class:`CrystData` object with the new
         whitefield.
 
@@ -428,14 +428,6 @@ class CrystData(DataContainer):
         """
         raise self._no_whitefield_exc
 
-    def lsd_detector(self) -> LSDetector:
-        """Return a new :class:`cbclib.LSDetector` object based on ``cor_data`` attribute.
-
-        Raises:
-            ValueError : If there is no ``whitefield`` inside the container.
-        """
-        raise self._no_whitefield_exc
-
     def get_pca(self) -> Dict[float, np.ndarray]:
         """Perform the Principal Component Analysis [PCA]_ of the measured data and return a
         set of eigen flat-fields (EFF).
@@ -455,6 +447,49 @@ class CrystData(DataContainer):
                     Mancini, Federica Marone, and Jan Sijbers, "Dynamic intensity
                     normalization using eigen flat fields in X-ray imaging," Opt. Express
                     23, 27975-27989 (2015).
+        """
+        raise self._no_whitefield_exc
+
+    def import_patterns(self: C, table: pd.DataFrame) -> C:
+        """Import a streak mask from a CBC table.
+
+        Args:
+            table : CBC table in :class:`pandas.DataFrame` format.
+
+        Returns:
+            New container with updated ``streak_mask``.
+
+        See Also:
+            cbclib.CBCTable : More info about the CBC table.
+        """
+        raise self._no_whitefield_exc
+
+    def lsd_detector(self) -> LSDetector:
+        """Return a new :class:`cbclib.LSDetector` object based on ``cor_data`` attribute.
+
+        Raises:
+            ValueError : If there is no ``whitefield`` inside the container.
+
+        Returns:
+            A CBC pattern detector based on :class:`cbclib.bin.LSD` Line Segment Detection [LSD]_
+            algorithm.
+        """
+        raise self._no_whitefield_exc
+
+    def model_detector(self, basis: Basis, samples: ScanSamples, setup: ScanSetup) -> ModelDetector:
+        """Return a new :class:`cbclib.ModelDetector` object based on ``cor_data`` attribute and
+        the solution of sample and indexing refinement.
+
+        Args:
+            basis : Indexing solution.
+            samples : Sample refinement solution.
+            setup : Experimental setup.
+
+        Raises:
+            ValueError : If there is no ``whitefield`` inside the container.
+
+        Returns:
+            A CBC pattern detector based on :class:`cbclib.CBDModel` CBD pattern prediction model.
         """
         raise self._no_whitefield_exc
 
@@ -496,7 +531,7 @@ class CrystDataPart(CrystData):
     num_threads : int = field(default=np.clip(1, 64, cpu_count()))
     output_file : Optional[CXIStore] = None
 
-    data        : np.ndarray
+    data        : Optional[np.ndarray] = None
     good_frames : Optional[np.ndarray] = None
     mask        : Optional[np.ndarray] = None
     frames      : Optional[np.ndarray] = None
@@ -540,9 +575,9 @@ class CrystDataPart(CrystData):
                              f'{mask.shape:s} != {self.shape[1:]:s}')
 
         if update == 'reset':
-            return self.replace(mask=mask, cor_data=None)
+            return self.replace(mask=mask)
         if update == 'multiply':
-            return self.replace(mask=mask * self.mask, cor_data=None)
+            return self.replace(mask=mask * self.mask)
 
         raise ValueError(f'Invalid update keyword: {update:s}')
 
@@ -550,7 +585,7 @@ class CrystDataPart(CrystData):
         if sum(self.shape[1:]) and whitefield.shape != self.shape[1:]:
             raise ValueError('whitefield and data have incompatible shapes: '\
                              f'{whitefield.shape} != {self.shape[1:]}')
-        return self.replace(whitefield=whitefield, cor_data=None)
+        return CrystDataFull(**dict(self, whitefield=whitefield))
 
     def update_mask(self, method: str='perc-bad', pmin: float=0., pmax: float=99.99,
                     vmin: int=0, vmax: int=65535, update: str='reset') -> C:
@@ -579,9 +614,9 @@ class CrystDataPart(CrystData):
             ValueError('invalid method argument')
 
         if update == 'reset':
-            return self.replace(mask=mask, cor_data=None)
+            return self.replace(mask=mask)
         if update == 'multiply':
-            return self.replace(mask=mask * self.mask, cor_data=None)
+            return self.replace(mask=mask * self.mask)
         raise ValueError(f'Invalid update keyword: {update:s}')
 
     def update_whitefield(self, method: str='median', num_medians: int=5) -> CrystDataFull:
@@ -598,7 +633,7 @@ class CrystDataPart(CrystData):
         else:
             raise ValueError('Invalid method argument')
 
-        return self.replace(whitefield=whitefield, cor_data=None)
+        return CrystDataFull(**dict(self, whitefield=whitefield))
 
 @dataclass
 class CrystDataFull(CrystDataPart):
@@ -607,12 +642,12 @@ class CrystDataFull(CrystDataPart):
     num_threads : int = field(default=np.clip(1, 64, cpu_count()))
     output_file : Optional[CXIStore] = None
 
-    data        : np.ndarray
+    data        : Optional[np.ndarray] = None
     good_frames : Optional[np.ndarray] = None
     mask        : Optional[np.ndarray] = None
     frames      : Optional[np.ndarray] = None
 
-    whitefield  : np.ndarray
+    whitefield  : Optional[np.ndarray] = None
     cor_data    : Optional[np.ndarray] = None
     background  : Optional[np.ndarray] = None
     streak_mask : Optional[np.ndarray] = None
@@ -642,7 +677,7 @@ class CrystDataFull(CrystDataPart):
                          np.tanh((y1 + padding - i) / blur, dtype=dtype)) * \
                         (np.tanh((j - x0 + padding) / blur, dtype=dtype) + \
                          np.tanh((x1 + padding - j) / blur, dtype=dtype))
-        return self.replace(cor_data=self.cor_data * (1.0 - window))
+        return CrystDataFull(**dict(self, cor_data=self.cor_data * (1.0 - window)))
 
     def get_pca(self) -> Dict[float, np.ndarray]:
         mat_svd = np.tensordot(self.cor_data, self.cor_data, axes=((1, 2), (1, 2)))
@@ -659,7 +694,7 @@ class CrystDataFull(CrystDataPart):
                    (0 < pattern['x']) & (pattern['x'] < self.shape[2])
             pattern = pattern[mask]
             streak_mask[index, pattern['y'], pattern['x']] = True
-        return self.replace(streak_mask=streak_mask, background=None, cor_data=None)
+        return CrystDataFull(**dict(self, streak_mask=streak_mask))
 
     def lsd_detector(self) -> LSDetector:
         if not self.good_frames.size:
@@ -681,10 +716,10 @@ class CrystDataFull(CrystDataPart):
                              frames=frames, models=models, num_threads=self.num_threads)
 
     def update_background(self, effs: np.ndarray) -> CrystDataFull:
-        return self.replace(background=None, cor_data=None)
+        return CrystDataFull(**dict(self, background=None, cor_data=None))
 
     def update_cor_data(self) -> CrystDataFull:
-        return self.replace(cor_data=None)
+        return CrystDataFull(**dict(self, cor_data=None))
 
 D = TypeVar('D', bound='Detector')
 
@@ -752,7 +787,7 @@ class Detector(DataContainer):
         """
         raise self._no_streaks_exc
 
-    def draw_streaks(self, dilation: float=0.0) -> np.ndarray:
+    def draw_streaks(self: D, dilation: float=0.0) -> D:
         """Return a new detector object with updated ``streak_mask``.
 
         Args:
@@ -794,6 +829,13 @@ class Detector(DataContainer):
         """Export normalised pattern into a :class:`pandas.DataFrame` table.
 
         Args:
+            dilation : Line mask dilation in pixels.
+            profile : Line width profiles. The following keyword values are allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+
             concatenate : Concatenate sets of patterns for each frame into a single table if
                 True.
 
@@ -857,14 +899,14 @@ class DetectorFull(Detector):
     def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
         streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
         mask = np.zeros(self.shape, dtype=np.uint32)
-        return draw_lines_stack(mask, lines=streaks, max_val=max_val, dilation=dilation,
-                                profile=profile, num_threads=self.num_threads)
+        return draw_line_stack(mask, lines=streaks, max_val=max_val, dilation=dilation,
+                               profile=profile, num_threads=self.num_threads)
 
-    def draw_background(self, dilation: float=8.0) -> LSDetectorFull:
+    def draw_background(self: D, dilation: float=8.0) -> D:
         bgd_mask = self.draw(dilation=dilation)
         return self.replace(bgd_dilation=dilation, bgd_mask=bgd_mask)
 
-    def draw_streaks(self, dilation: float=0.0) -> LSDetectorFull:
+    def draw_streaks(self: D, dilation: float=0.0) -> D:
         streak_mask = self.draw(dilation=dilation)
         return self.replace(streak_dilation=dilation, streak_mask=streak_mask)
 
@@ -904,7 +946,7 @@ class DetectorFull(Detector):
             return pd.concat(dataframes)
         return dataframes
 
-    def update_pattern(self) -> LSDetectorFull:
+    def update_pattern(self: D) -> D:
         if self.streak_mask is None:
             raise ValueError('No streak_mask in the container')
 
@@ -948,16 +990,16 @@ class LSDetector(Detector):
     """A streak detector class. A class wrapper for streak detection based on Line Segment
     Detector [LSD]_ algorithm. Provides an interface to generate an indexing tabular data.
 
-    Attributes:
+    Args:
         data : Background corrected detector data.
         frames : Frame indices of the detector images.
         num_threads : Number of threads used in the calculations.
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         lsd_obj : a Line Segment Detector object.
-        indices : A dictionary of image indices.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
         pattern : Normalized diffraction patterns.
         streak_width : Average width of detected streaks.
+        streak_dilation : A streak mask dilation in pixels.
         streak_mask : A set of streak masks.
         bgd_dilation : A background mask dilation in pixels.
         bgd_mask : A set of background masks.
@@ -1013,7 +1055,7 @@ class LSDetector(Detector):
 
     def update_lsd(self: D, scale: float=0.9, sigma_scale: float=0.9, log_eps: float=0.0,
                    ang_th: float=60.0, density_th: float=0.5, quant: float=2e-2) -> D:
-        """Return a new :class:`LSDetector` object with updated :class:`cbclib.LSD` detector.
+        """Return a new :class:`LSDetector` object with updated :class:`cbclib.bin.LSD` detector.
 
         Args:
             scale : When different from 1.0, LSD will scale the input image by 'scale' factor
@@ -1083,6 +1125,25 @@ class LSDetectorFull(DetectorFull, LSDetector):
 
 @dataclass
 class ModelDetector(Detector):
+    """A streak detector class based on the CBD pattern prediction. Uses :class:`cbclib.CBDModel` to
+    predict a pattern and filters out all the predicted streaks, that correspond to the measured
+    intensities above the certain threshold. Provides an interface to generate an indexing tabular
+    data.
+
+    Args:
+        data : Background corrected detector data.
+        frames : Frame indices of the detector images.
+        num_threads : Number of threads used in the calculations.
+        parent : A reference to the parent :class:`cbclib.CrystData` container.
+        models : A dictionary of CBD models.
+        streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
+        pattern : Normalized diffraction patterns.
+        streak_width : Average width of detected streaks.
+        streak_dilation : A streak mask dilation in pixels.
+        streak_mask : A set of streak masks.
+        bgd_dilation : A background mask dilation in pixels.
+        bgd_mask : A set of background masks.
+    """
     data            : np.ndarray
     frames          : np.ndarray
     num_threads     : int
@@ -1097,7 +1158,21 @@ class ModelDetector(Detector):
     bgd_dilation    : Optional[float] = None
     bgd_mask        : Optional[np.ndarray] = None
 
-    def detect(self, q_abs: float=0.3, width: float=4.0, threshold: float=0.95, dp: float=1e-3):
+    def detect(self, q_abs: float=0.3, width: float=4.0, threshold: float=0.95,
+               dp: float=1e-3) -> ModelDetectorFull:
+        """Perform the streak detection based on prediction. Generate a predicted pattern and
+        filter out all the streaks, which signal-to-noise ratio is below the ``threshold``.
+
+        Args:
+            q_abs : The size of reciprocal space to use in prediction. The reciprocal vectors
+                are normalised and span in [0.0 - 1.0] interval.
+            width : Difrraction streak width in pixels of a predicted pattern.
+            threshold : SNR threshold.
+            dp : The quantisation step of a predicted pattern.
+
+        Returns:
+            New :class:`cbclib.ModelDetector` streak detector with updated ``streaks``.
+        """
         if self.parent() is None:
             raise ValueError('Invalid parent: the parent data container was deleted')
 

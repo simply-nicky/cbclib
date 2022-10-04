@@ -20,5 +20,6 @@ dependencies:
   - scikit-learn
   - scipy
   - sphinx
-  - sphinx-autodoc-typehints
+  - sphinx-autoapi
+  - sphinx-toolbox
   - tqdm

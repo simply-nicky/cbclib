@@ -10,14 +10,14 @@ import cbclib as cbc
 def index_pygmo(out_path: str, samples_path: str, data_path: str, setup_path: str, basis_path: str,
                 tilt_tol: float, smp_tol: float, q_abs: float, width: float, alpha: float, num_gen: int,
                 pop_size: int, num_threads: int, verbose: bool):
-    streaks = cbc.ScanStreaks.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
+    streaks = cbc.CBCTable.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
     samples = cbc.ScanSamples.import_dataframe(pd.read_hdf(samples_path, 'data'))
     basis = cbc.Basis.import_ini(basis_path)
     frames = streaks.table['frames'].unique()
 
     patterns = []
     for frame in tqdm(frames, total=frames.size, disable=not verbose, desc='Run CBC indexing refinement'):
-        problem = streaks.refine_indexing(frame=frame, tol=(tilt_tol, smp_tol, 0.0), basis=basis,
+        problem = streaks.refine_indexing(frame=frame, bounds=(tilt_tol, smp_tol, 0.0), basis=basis,
                                           sample=samples[frame], q_abs=q_abs, width=width, alpha=alpha)
 
         uda = pygmo.de(gen=num_gen)
@@ -38,20 +38,20 @@ def index_pygmo(out_path: str, samples_path: str, data_path: str, setup_path: st
     pd.concat(patterns).to_hdf(out_path, 'data')
     samples.to_dataframe().to_hdf(samples_path, 'data')
 
-def criterion(x: np.ndarray, problem: cbc.IndexProblem) -> float:
+def criterion(x: np.ndarray, problem: cbc.SampleProblem) -> float:
     return problem.fitness(x)[0]
 
 def index_scipy(out_path: str, samples_path: str, data_path: str, setup_path: str, basis_path: str,
                 tilt_tol: float, smp_tol: float, q_abs: float, alpha: float, width: float, num_gen: int,
                 pop_size: int, num_threads: int, verbose: bool):
-    streaks = cbc.ScanStreaks.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
+    streaks = cbc.CBCTable.import_hdf(data_path, 'data', cbc.ScanSetup.import_ini(setup_path))
     samples = cbc.ScanSamples.import_dataframe(pd.read_hdf(samples_path, 'data'))
     basis = cbc.Basis.import_ini(basis_path)
     frames = streaks.table['frames'].unique()
 
     patterns = []
     for frame in tqdm(frames, total=frames.size, disable=not verbose, desc='Run CBC indexing refinement'):
-        problem = streaks.refine_indexing(frame=frame, tol=(tilt_tol, smp_tol, 0.0), basis=basis,
+        problem = streaks.refine_indexing(frame=frame, bounds=(tilt_tol, smp_tol, 0.0), basis=basis,
                                           sample=samples[frame], q_abs=q_abs, width=width, alpha=alpha)
 
         res = differential_evolution(criterion, bounds=np.stack(problem.get_bounds()).T,

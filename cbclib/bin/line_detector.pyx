@@ -110,11 +110,11 @@ cdef class LSD:
 
                 if group:
                     for j in range(n_group):
-                        fail |= group_lines(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
+                        fail |= group_line(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
                                             ldims, cutoff, group_threshold, dilation)
 
                 if filter:
-                    fail |= filter_lines(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
+                    fail |= filter_line(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
                                          ldims, filter_threshold, dilation)
 
             free(ldims)

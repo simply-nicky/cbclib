@@ -31,7 +31,7 @@ def generate_data(models: List[cbc.CBDModel], shape: Tuple[int, int, int],
                 scope='session')
 def basis(request: pytest.FixtureRequest) -> cbc.Basis:
     mat = np.eye(3) * np.array(request.param['lengths'])
-    rotation = cbc.Rotation.import_euler(*request.param['angles'])
+    rotation = cbc.Rotation.import_euler(request.param['angles'])
     return cbc.Basis.import_matrix(rotation(mat))
 
 @pytest.fixture(params=[{'shape': (500, 500), 'det_dist': 0.1, 'pupil_size': 25,
@@ -110,7 +110,7 @@ def test_cxi_store(data: np.ndarray, cxi_protocol: cbc.CXIProtocol, temp_dir: st
         h5_file.save_attribute('data', data, mode='insert', idxs=np.arange(data.shape[0]))
         h5_file.save_attribute('data', data, mode='append')
     with cbc.CXIStore(path, mode='r', protocol=cxi_protocol) as h5_file:
-        file_shape = (len(h5_file),) + h5_file.read_shape()
+        file_shape = (len(h5_file.indices()),) + h5_file.read_shape()
         new_data = h5_file.load_attribute('data', idxs=np.arange(data.shape[0], 2 * data.shape[0]))
     data_shape = (2 * data.shape[0], data.shape[1], data.shape[2])
     assert file_shape == data_shape

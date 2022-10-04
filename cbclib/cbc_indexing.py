@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import (Any, ClassVar, Dict, List, Optional, Set, Tuple, Union)
 from dataclasses import InitVar, dataclass, field
-from weakref import ReferenceType, ref
+from weakref import ref
 import numpy as np
 import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
@@ -9,10 +9,10 @@ from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_
                   gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl)
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks
 from .cxi_protocol import Indices
-from .data_container import Transform, Crop
+from .data_container import Transform, Crop, ReferenceType
 
 @dataclass
-class ScanStreaks():
+class CBCTable():
     """Convergent beam crystallography tabular data. The data is stored in :class:`pandas.DataFrame`
     table. A table must contain the following columns:
 
@@ -24,7 +24,7 @@ class ScanStreaks():
     * `bgd` : Background intensity.
     * `h`, `k`, `l` : Miller indices.
 
-    Attributes:
+    Args:
         table : CBC tabular data.
         setup : Experimental setup.
         crop : Detector region of interest.
@@ -47,11 +47,31 @@ class ScanStreaks():
             self.reset_index()
 
     @classmethod
-    def import_csv(cls, path: str, setup: ScanSetup) -> ScanStreaks:
+    def import_csv(cls, path: str, setup: ScanSetup) -> CBCTable:
+        """Initialize a CBC table with a CSV file ``path`` and an experimental geometry object
+        ``setup``.
+
+        Args:
+            path : Path to the CSV file.
+            setup : Experimental geometry.
+
+        Returns:
+            A new CBC table object.
+        """
         return cls(pd.read_csv(path, usecols=cls.columns), setup)
 
     @classmethod
-    def import_hdf(cls, path: str, key: str, setup: ScanSetup) -> ScanStreaks:
+    def import_hdf(cls, path: str, key: str, setup: ScanSetup) -> CBCTable:
+        """Initialize a CBC table with data saved in a HDF5 file ``path`` at a ``key`` key inside
+        the file and an experimental geometry object ``setup``.
+
+        Args:
+            path : Path to the CSV file.
+            setup : Experimental geometry.
+
+        Returns:
+            A new CBC table object.
+        """
         return cls(pd.read_hdf(path, key, usecols=cls.columns), setup)
 
     @property
@@ -63,6 +83,18 @@ class ScanStreaks():
 
     def create_qmap(self, samples: ScanSamples, qx_arr: np.ndarray, qy_arr: np.ndarray,
                     qz_arr: np.ndarray) -> Map3D:
+        """Map the measured normalised intensities to the reciprocal space. Returns a
+        :class:`cbclib.Map3D` 3D data container capable of performing the auto Fourier indexing.
+
+        Args:
+            samples : Set of scan samples.
+            qx_arr : Array of reciprocal x coordinates.
+            qy_arr : Array of reciprocal y coordinates.
+            qz_arr : Array of reciprocal z coordinates.
+
+        Returns:
+            3D data container of measured normalised intensities.
+        """
         q_map = np.zeros((qx_arr.size, qy_arr.size, qz_arr.size), dtype=self.dtype)
 
         for frame, df_frame in self.table.groupby('frames'):
@@ -77,16 +109,40 @@ class ScanStreaks():
         return Map3D(q_map, qx_arr, qy_arr, qz_arr)
 
     def drop_duplicates(self) -> pd.DataFrame:
-        return ScanStreaks(self.table.drop_duplicates(['frames', 'x', 'y']), self.setup)
+        """Discard the pixel data, that has duplicate `x`, `y` coordinates.
+
+        Returns:
+            New CBC table with the duplicate data discarded.
+        """
+        return CBCTable(self.table.drop_duplicates(['frames', 'x', 'y']), self.setup)
 
     def get_crop(self) -> Crop:
+        """Return the region of interest on the detector plane.
+
+        Returns:
+            A new crop object with the ROI, inferred from the CBC table.
+        """
         return Crop((self.table['y'].min(), self.table['y'].max() + 1,
                      self.table['x'].min(), self.table['x'].max() + 1))
 
     def isunique(self) -> bool:
+        """Check if the table index is unique.
+
+        Returns:
+            True if the index is unique.
+        """
         return np.unique(self.table.index).size == self.table.index.size
 
     def pattern_dataframe(self, frame: int) -> pd.DataFrame:
+        """Return a single pattern table. The `x`, `y` coordinates are transformed by the ``crop``
+        attribute.
+
+        Args:
+            frame : Frame index.
+
+        Returns:
+            A :class:`pandas.DataFrame` table.
+        """
         df_frame = self.table[self.table['frames'] == frame]
         mask = (self.crop.roi[0] < df_frame['y']) & (df_frame['y'] < self.crop.roi[1]) & \
                (self.crop.roi[2] < df_frame['x']) & (df_frame['x'] < self.crop.roi[3])
@@ -95,28 +151,106 @@ class ScanStreaks():
         return df_frame
 
     def pattern_dict(self, frame: int) -> Dict[str, np.ndarray]:
-        return {col: np.asarray(val) for col, val in self.pattern_dataframe(frame).to_dict(orient='list').items()}
+        """Return a single pattern table in :class:`dict` format. The `x`, `y` coordinates are
+        transformed by the ``crop`` attribute.
+
+        Args:
+            frame : Frame index.
+
+        Returns:
+            A pattern table in :class:`dict` format.
+        """
+        dataframe = self.pattern_dataframe(frame).to_dict(orient='list')
+        return {col: np.asarray(val) for col, val in dataframe.items()}
 
     def pattern_image(self, frame: int) -> np.ndarray:
+        """Return a CBC pattern image array. The `x`, `y` coordinates are transformed by the
+        ``crop`` attribute.
+
+        Args:
+            frame : Frame index.
+
+        Returns:
+            A pattern image array.
+        """
         df_frame = self.pattern_dataframe(frame)
         pattern = np.zeros((self.crop.roi[1] - self.crop.roi[0],
                             self.crop.roi[3] - self.crop.roi[2]), dtype=self.dtype)
         pattern[df_frame['y'], df_frame['x']] = df_frame['p']
         return pattern
 
-    def refine_indexing(self, frame: int, tol: Tuple[float, float, float], basis: Basis, sample: Sample,
-                        q_abs: float, width: float, alpha: float=0.0) -> IndexProblem:
-        return IndexProblem(parent=ref(self), tol=tol, basis=basis, sample=sample, q_abs=q_abs,
-                            width=width, pattern=self.pattern_dict(frame), alpha=alpha)
+    def refine_indexing(self, frame: int, bounds: Tuple[float, float, float], basis: Basis,
+                        sample: Sample, q_abs: float, width: float, alpha: float=0.0) -> SampleProblem:
+        """Return a :class:`SampleProblem` problem designed to perform the sample refinement.
+        Indexing refinement yields a :class:`Sample` object, that attains the best fit between the
+        predicted pattern and the pattern from this CBC table.
+
+        Args:
+            frame : Frame index.
+            bounds : Sample refinement bounds. A tuple of three bounds (`ang_bound`, `pos_bound`,
+                `foc_bound`), where each elements is as following:
+
+                * `ang_bound` : Sample orientation bound. Sample orientation is given by a rotation
+                  matrix :class:`cbclib.Rotation` ``rotation``. To perform the orientation
+                  refinement, ``rotation`` is multiplied by another rotation matrix given by three
+                  Euler angles, that lie in interval :code:`[-ang_bound, ang_bound]`.
+                * `pos_bound` : Sample position bound. Sample position is refined in the interval
+                  of coordinates :code:`[pos * (1.0 - pos_bound), pos * (1.0 + pos_bound)]`, where
+                  `pos` is the initial sample position.
+                * `foc_bound` : Focal point bound. Focal point is refined in the interval of
+                  coordinates :code:`[foc_pos * (1.0 - foc_bound), foc_pos * (1.0 + foc_bound)]`,
+                  where `foc_pos` is the initial focal point.
+
+                Each of the terms is diregarded in the refinement process, if the corresponding
+                bound is equal to 0.
+            basis : Basis vectors of lattice unit cell.
+            sample : Sample object. The object is given by the rotation matrix and a sample
+                position.
+            q_abs : Size of the recpirocal space. Reciprocal vectors are normalised, and span in
+                [0.0 - 1.0] interval.
+            width : Diffraction streak width in pixels. The value is used to generate a predicted
+                CBC pattern.
+            alpha : Regularisation term in the loss function.
+
+        Returns:
+            A CBC sample refinement problem.
+
+        See Also:
+            cbclib.SampleProblem : CBC sample refinement problem.
+        """
+        return SampleProblem(bounds=bounds, basis=basis, sample=sample, q_abs=q_abs, width=width,
+                            parent=ref(self), pattern=self.pattern_dict(frame), alpha=alpha)
 
     def reset_index(self):
+        """Reset the table index. Advised to perform if the index is not unique. You can check it
+        with :func:`CBCTable.isunique` method.
+        """
         self.table.reset_index(drop=True, inplace=True)
 
-    def update_crop(self, crop: Optional[Crop]=None) -> ScanStreaks:
-        return ScanStreaks(self.table, self.setup, crop)
+    def update_crop(self, crop: Optional[Crop]=None) -> CBCTable:
+        """Return a new CBC table with the updated region of interest.
+
+        Args:
+            crop : A new region of interest.
+
+        Returns:
+            A new CBC table with the updated ROI.
+        """
+        return CBCTable(self.table, self.setup, crop)
 
 @dataclass
 class Map3D():
+    """3D data object designed to perform Fourier auto-indexing. Projects measured intensities to
+    the reciprocal space and provides several tools to works with a 3D data in the reciprocal
+    space. The container uses the `FFTW <https://www.fftw.org>`_ C library to perform the
+    3-dimensional Fourier transform.
+
+    Args:
+        val : 3D data array.
+        x : x coordinates.
+        y : y coordinates.
+        z : z coordinates.
+    """
     val : np.ndarray
     x   : np.ndarray
     y   : np.ndarray
@@ -194,23 +328,65 @@ class Map3D():
         return NotImplemented
 
     def clip(self, vmin: float, vmax: float) -> Map3D:
+        """Clip the 3D data in a range of values :code:`[vmin, vmax]`.
+
+        Args:
+            vmin : Lower bound.
+            vmax : Upper bound.
+
+        Returns:
+            A new 3D data object.
+        """
         return Map3D(np.clip(self.val, vmin, vmax), self.x, self.y, self.z)
 
-    def criterion(self, x: np.ndarray, Sig: float, sig: float, epsilon: float=1e-12,
+    def criterion(self, x: np.ndarray, envelope: float, sigma: float, epsilon: float=1e-12,
                   num_threads: int=1) -> Tuple[float, np.ndarray]:
-        y_hat, hkl = gaussian_grid(self.x, self.y, self.z, x[:9].reshape((3, 3)),
-                                   Sig, sig, num_threads)
-        grad = gaussian_grid_grad(self.x, self.y, self.z, x[:9].reshape((3, 3)),
-                                  hkl, Sig, sig, num_threads)
+        """Return a marginal log-likelihood, that the 3D data is represented by a given set of
+        basis vectors.
+
+        Args:
+            x : Flattened matrix of basis vectors.
+            envelope : A width of the envelope gaussian function.
+            sigma : A width of diffraction orders.
+            epsilon : Epsilon value in the log term.
+            num_threads : Number of threads used in the computations.
+        """
+        y_hat, hkl = gaussian_grid(x_arr=self.x, y_arr=self.y, z_arr=self.z,
+                                   basis=x[:9].reshape((3, 3)), envelope=envelope,
+                                   sigma=sigma, threads=num_threads)
+        grad = gaussian_grid_grad(x_arr=self.x, y_arr=self.y, z_arr=self.z,
+                                  basis=x[:9].reshape((3, 3)), hkl=hkl, envelope=envelope,
+                                  sigma=sigma, threads=num_threads)
         return (-np.sum(self.val * np.log(y_hat + epsilon)),
                 -np.sum(self.val / (y_hat + epsilon) * grad, axis=(1, 2, 3)))
 
     def gaussian_blur(self, sigma: Union[float, Tuple[float, float, float]],
                       num_threads: int=1) -> Map3D:
+        """Apply Gaussian blur to the 3D data.
+
+        Args:
+            sigma : width of the gaussian blur.
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            A new 3D data object with blurred out data.
+        """
         val = gaussian_filter(self.val, sigma, num_threads=num_threads)
         return Map3D(val, self.x, self.y, self.z)
 
     def fft(self, num_threads: int=1) -> Map3D:
+        """Perform 3D Fourier transform. `FFTW <https://www.fftw.org>`_ C library is used to
+        compute the transform.
+
+        Args:
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            A 3Ddata object with the Fourier image data.
+
+        See Also:
+            cbclib.bin.FFTW : Python wrapper of FFTW library.
+        """
         val = empty_aligned(self.shape, dtype='complex64')
         fft_obj = FFTW(self.val.astype(np.complex64), val, threads=num_threads,
                        axes=(0, 1, 2), flags=('FFTW_ESTIMATE',))
@@ -222,6 +398,17 @@ class Map3D():
         return Map3D(val, kx, ky, kz)
 
     def find_peaks(self, val: float, reduce: bool=False) -> np.ndarray:
+        """Find a set of basis vectors, that correspond to the peaks in the 3D data, that lie
+        above the threshold ``val``.
+
+        Args:
+            val : Threshold value.
+            reduce : Reduce a set of peaks to three basis vectors if True.
+
+        Returns:
+            A set of peaks above the threshold if ``reduce`` is False, a set of three basis
+            vectors otherwise.
+        """
         mask = self.val > val
         peak_lbls, peak_num = label(mask)
         index = np.arange(1, peak_num + 1)
@@ -241,20 +428,61 @@ class Map3D():
         return self.index_to_coord(peaks)
 
     def index_to_coord(self, index: np.ndarray) -> np.ndarray:
+        """Transform a set of data indices to a set of coordinates.
+
+        Args:
+            index : An array of indices.
+
+        Returns:
+            An array of coordinates.
+        """
         idx = np.rint(index).astype(int)
         crd = np.take(self.coordinate, idx)
         return crd + (index - idx) * (np.take(self.coordinate, idx + 1) - crd)
 
     def is_compatible(self, map_3d: Map3D) -> bool:
+        """Check if 3D data object has a compatible set of coordinates.
+
+        Args:
+            map_3d : 3D data object.
+
+        Returns:
+            True if the 3D data object ``map_3d`` has a compatible set of coordinates.
+        """
         return ((self.x == map_3d.x).all() and (self.y == map_3d.y).all() and
                 (self.z == map_3d.z).all())
 
     def white_tophat(self, structure: np.ndarray, num_threads: int=1) -> Map3D:
+        """Perform 3-dimensional white tophat filtering.
+
+        Args:
+            structure : Structuring element used for the filter.
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            New 3D data container with the filtered data.
+        """
         val = median_filter(self.val, footprint=structure, num_threads=num_threads)
         return Map3D(self.val - val, self.x, self.y, self.z)
 
 @dataclass
 class CBDModel():
+    """Prediction model for Convergent Beam Diffraction (CBD) pattern. The method uses the
+    geometrical schematic of CBD diffraction in the reciprocal space [CBM]_ to predict a CBD
+    pattern for the given crystalline sample.
+
+    Args:
+        basis : Unit cell basis vectors.
+        sample : Sample position and orientation.
+        setup : Experimental setup.
+        transform : Any of the image transform objects.
+        shape : Shape of the detector pixel grid.
+
+    References:
+        .. [CBM] Ho, Joseph X et al. “Convergent-beam method in macromolecular crystallography”,
+                Acta crystallographica Section D, Biological crystallography vol. 58, Pt. 12
+                (2002): 2087-95, https://doi.org/10.1107/s0907444902017511.
+    """
     basis       : Basis
     sample      : Sample
     setup       : ScanSetup
@@ -268,6 +496,16 @@ class CBDModel():
                           self.transform.roi[3] - self.transform.roi[2])
 
     def generate_hkl(self, q_abs: float) -> np.ndarray:
+        """Return a set of reciprocal lattice points inside the sphere of radius ``q_abs``,
+        that can fall into the Bragg condition.
+
+        Args:
+            q_abs : Sphere radius. Reciprocal vectors are normalised and lie in [0.0 - 1.0]
+                interval.
+
+        Returns:
+            A set of Miller indices.
+        """
         lat_size = np.rint(q_abs / self.basis.to_spherical()[:, 0]).astype(int)
         h_idxs = np.arange(-lat_size[0], lat_size[0] + 1)
         k_idxs = np.arange(-lat_size[1], lat_size[1] + 1)
@@ -279,13 +517,22 @@ class CBDModel():
         rec_vec = hkl.dot(self.basis.mat)
         rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
         rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
+        src_th = np.abs(np.sin(rec_th - np.arccos(0.5 * rec_abs)))
 
-        mask = np.abs(np.sin(rec_th - np.arccos(0.5 * rec_abs))) < np.sqrt(self.setup.kin_max[0]**2 +
-                                                                           self.setup.kin_max[1]**2)
+        mask = src_th < np.sqrt(self.setup.kin_max[0]**2 + self.setup.kin_max[1]**2)
         mask &= (rec_abs < q_abs)
         return hkl[mask]
 
     def generate_streaks(self, hkl: np.ndarray, width: float) -> Streaks:
+        """Generate a CBD pattern. Return a set of streaks in :class:`cbclib.Streaks` container.
+
+        Args:
+            hkl : Set of Miller indices.
+            width : Width of diffraction streaks in pixels.
+
+        Returns:
+            A set of streaks, that constitute the predicted CBD pattern.
+        """
         kin, mask = calc_source_lines(basis=self.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
                                       kin_max=self.setup.kin_max)
         idxs = np.arange(hkl.shape[0])[mask]
@@ -299,11 +546,36 @@ class CBDModel():
             mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
                    (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
             x, y, idxs = x[mask], y[mask], idxs[mask]
-        return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1], width=width * np.ones(x.shape[0]),
-                       h=hkl[idxs, 0], k=hkl[idxs, 1], l=hkl[idxs, 2], hkl_index=idxs)
+        return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1],
+                       h=hkl[idxs, 0], k=hkl[idxs, 1], l=hkl[idxs, 2], hkl_index=idxs,
+                       width=width * np.ones(x.shape[0]))
 
-    def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray, width: float, 
-                       threshold: float=0.95, dp: float=1e-3, profile: str='tophat', num_threads: int=1) -> Streaks:
+    def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray,
+                       width: float,  threshold: float=0.95, dp: float=1e-3, profile: str='tophat',
+                       num_threads: int=1) -> Streaks:
+        """Generate a predicted pattern and filter out all the streaks, which signal-to-noise ratio
+        is below the ``threshold``.
+
+        Args:
+            hkl : Set of reciprocal lattice point to use for prediction.
+            signal : Measured signal.
+            background : Measured background, standard deviation of the signal is the square root of
+                background.
+            width : Difrraction streak width in pixels of a predicted pattern.
+            threshold : SNR threshold.
+            dp : The quantisation step of a predicted pattern.
+            profile : Line width profiles of generated streaks. The following keyword values are
+                allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            A set of filtered out streaks, SNR of which is above the ``threshold``.
+        """
         streaks = self.generate_streaks(hkl, width)
         pattern = streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
         mask = filter_hkl(sgn=signal, bgd=background, df_xy=pattern[['x', 'y']].to_numpy(),
@@ -313,13 +585,74 @@ class CBDModel():
 
     def pattern_dataframe(self, hkl: np.ndarray, width: float, dp: float=1e-3,
                           profile: str='linear') -> pd.DataFrame:
+        """Predict a CBD pattern and return in the :class:`pandas.DataFrame` format.
+
+        Args:
+            hkl : Set of reciprocal lattice point to use for prediction.
+            width : Difrraction streak width in pixels of a predicted pattern.
+            dp : Likelihood value increment.
+            profile : Line width profiles. The following keyword values are allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+
+        Returns:
+            A pattern in :class:`pandas.DataFrame` format.
+        """
         streaks = self.generate_streaks(hkl, width)
         return streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
 
 @dataclass
-class IndexProblem():
-    parent    : ReferenceType[ScanStreaks]
-    tol       : InitVar[Tuple[float, float]]
+class SampleProblem():
+    """Sample refinement problem. It employs :class:`cbclib.CBDModel` CBD pattern prediction
+    to find sample position and alignment, that yields the best fit with the experimentally
+    measured pattern. The criterion calculates the marginal log-likelihood, that the
+    experimentally measured pattern corresponds to the predicted one.
+
+    Args:
+        parent : Reference to the parent CBC table.
+        bounds : Sample refinement bounds. A tuple of three bounds (`ang_bound`, `pos_bound`,
+            `foc_bound`), where each elements is as following:
+
+            * `ang_bound` : Sample orientation bound. Sample orientation is given by a rotation
+              matrix :class:`cbclib.Rotation` ``rotation``. To perform the orientation
+              refinement, ``rotation`` is multiplied by another rotation matrix given by three
+              Euler angles, that lie in interval :code:`[-ang_bound, ang_bound]`.
+            * `pos_bound` : Sample position bound. Sample position is refined in the interval
+              of coordinates :code:`[pos * (1.0 - pos_bound), pos * (1.0 + pos_bound)]`, where
+              `pos` is the initial sample position.
+            * `foc_bound` : Focal point bound. Focal point is refined in the interval of
+              coordinates :code:`[foc_pos * (1.0 - foc_bound), foc_pos * (1.0 + foc_bound)]`,
+              where `foc_pos` is the initial focal point.
+
+            Each of the terms is diregarded in the refinement process, if the corresponding
+            bound is equal to 0.
+        basis : Basis vectors of lattice unit cell.
+        sample : Sample object. The object is given by the rotation matrix and a sample
+            position.
+        q_abs : Size of the recpirocal space. Reciprocal vectors are normalised, and span in
+            [0.0 - 1.0] interval.
+        width : Diffraction streak width in pixels. The value is used to generate a predicted
+            CBC pattern.
+        pattern : Experimentally measured CBD pattern.
+        alpha : Regularisation term in the loss function.
+
+    Attributes:
+        alpha : Regularisation term in the loss function.
+        basis : Basis vectors of lattice unit cell.
+        crop : Detector region of interest.
+        hkl : Set of reciprocal lattice points used in the prediction.
+        parent : Reference to the parent CBC table.
+        sample : Sample object. The object is given by the rotation matrix and a sample
+            position.
+        setup : Experimental geometry.
+        width : Diffraction streak width in pixels. The value is used to generate a predicted
+            CBC pattern.
+        x0 : Initial solution.
+    """
+    parent    : ReferenceType[CBCTable]
+    bounds    : InitVar[Tuple[float, float, float]]
     basis     : Basis
     sample    : Sample
     q_abs     : InitVar[float]
@@ -348,7 +681,8 @@ class IndexProblem():
         state['parent'] = None
         return state
 
-    def __post_init__(self, tol: Tuple[float, float, float], q_abs: float, pattern: Dict[str, np.ndarray]):
+    def __post_init__(self, bounds: Tuple[float, float, float], q_abs: float,
+                      pattern: Dict[str, np.ndarray]):
         self.setup, self.crop = self.parent().setup, self.parent().crop
         self._ij, self._p = self._pattern_to_ij_and_q(pattern)
         self._idxs = np.arange(self._ij.size)
@@ -356,17 +690,17 @@ class IndexProblem():
         _lbounds, _rbounds = [], []
         self._slices = [None, None, None]
 
-        if tol[0]:
-            _lbounds += [-tol[0],] * 3
-            _rbounds += [tol[0],] * 3
+        if bounds[0]:
+            _lbounds += [-bounds[0],] * 3
+            _rbounds += [bounds[0],] * 3
             self._slices[0] = slice(len(_lbounds) - 3, len(_lbounds))
-        if tol[1]:
-            _lbounds += [1.0 - tol[1],] * 3
-            _rbounds += [1.0 + tol[1],] * 3
+        if bounds[1]:
+            _lbounds += [1.0 - bounds[1],] * 3
+            _rbounds += [1.0 + bounds[1],] * 3
             self._slices[1] = slice(len(_lbounds) - 3, len(_lbounds))
-        if tol[2]:
-            _lbounds += [1.0 - tol[2],] * 2
-            _rbounds += [1.0 + tol[2],] * 2
+        if bounds[2]:
+            _lbounds += [1.0 - bounds[2],] * 2
+            _rbounds += [1.0 + bounds[2],] * 2
             self._slices[2] = slice(len(_lbounds) - 2, len(_lbounds))
 
         self._bounds = (_lbounds, _rbounds)
@@ -383,55 +717,156 @@ class IndexProblem():
         return pattern['x'] + self.shape[1] * pattern['y'], pattern['p']
 
     def generate_sample(self, x: np.ndarray) -> Sample:
-        return Sample(Rotation.import_euler(*self._get_slice(x, 0)) * self.sample.rotation,
-                      self.sample.pos * self._get_slice(x, 1))
+        """Return a sample position and alignment.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A new sample object.
+        """
+        return Sample(Rotation.import_euler(self._get_slice(x, 0)) * self.sample.rotation,
+                      self.sample.position * self._get_slice(x, 1))
 
     def generate_setup(self, x: np.ndarray) -> ScanSetup:
+        """Return an experimental setup.
+
+        Args:
+            x : Refinementa solution.
+
+        Returns:
+            A new experimental setup.
+        """
         foc_pos = np.copy(self.setup.foc_pos)
         foc_pos[:2] *= self._get_slice(x, 2)
         return self.setup.replace(foc_pos=foc_pos)
 
     def generate_model(self, x: np.ndarray) -> CBDModel:
+        """Return a CBD pattern prediction model, that provides an interface to generate a CBD
+        pattern in different formats.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A new CBD pattern prediction model.
+        """
         return CBDModel(basis=self.basis, sample=self.generate_sample(x), transform=self.crop,
                         setup=self.generate_setup(x))
 
     def generate_streaks(self, x: np.ndarray) -> Streaks:
+        """Generate a CBD pattern and return a set of predicted diffraction streaks.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A set of predicted diffraction streaks.
+        """
         return self.generate_model(x).generate_streaks(self.hkl, self.width)
 
     def pattern_dataframe(self, x: np.ndarray) -> pd.DataFrame:
+        """Generate a CBD pattern in :class:`pandas.DataFrame` table format.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A predicted CBD pattern.
+        """
         return self.generate_model(x).pattern_dataframe(hkl=self.hkl, width=self.width,
                                                         dp=1.0 / self.q_max, profile='linear')
 
     def pattern_image(self, x: np.ndarray) -> np.ndarray:
+        """Generate a CBD pattern as an image array.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A predicted CBD pattern.
+        """
         streaks = self.generate_streaks(x)
         return streaks.pattern_image(self.shape, dp=1.0 / self.q_max, profile='linear')
 
     def pattern_mask(self, x: np.ndarray) -> np.ndarray:
+        """Generate a CBD pattern and return a mask where the streaks are located on the detector.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A predicted CBD pattern mask.
+        """
         streaks = self.generate_streaks(x)
         return streaks.pattern_mask(self.shape, max_val=self.q_max, profile='linear')
 
     def pattern_dict(self, x: np.ndarray) -> Dict[str, np.ndarray]:
+        """Generate a CBD pattern in dictionary format.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            A predicted CBD pattern.
+        """
         streaks = self.generate_streaks(x)
         return streaks.pattern_dict(self.shape, dp=1.0 / self.q_max, profile='linear')
 
     def fitness(self, x: np.ndarray) -> List[float]:
+        """Calculate the marginal log-likelihood, that the experimentally measured pattern
+        corresponds to the predicted CBD pattern.
+
+        Args:
+            x : Refinement solution.
+
+        Returns:
+            Marginal log-likelihood.
+        """
         criterion = cross_entropy(x=self._ij, p=self._p, q=self.pattern_mask(x).ravel(),
                                   q_max=self.q_max, epsilon=self.epsilon)
         return [criterion + np.sum(self.alpha * np.abs(x - self.x0)),]
 
     def get_bounds(self) -> Tuple[List[float], List[float]]:
+        """Return lower and upper sample refinement bounds.
+
+        Returns:
+            A tuple of two sets of bounds, lower and upper respectively.
+        """
         return self._bounds
 
     def update_hkl(self, x: np.ndarray, q_abs: float) -> None:
+        """Update a set of reciprocal lattice points used in the prediction. The points are
+        taken from inside the sphere of radius ``q_abs``, that fall into the Bragg condition.
+
+        Args:
+            x : Refinement solution.
+            q_abs : Sphere radius. Reciprocal vectors are normalised and lie in [0.0 - 1.0]
+                interval.
+        """
         self.hkl = self.generate_model(x).generate_hkl(q_abs)
 
-    def index_frame(self, x: np.ndarray, frame: int, iterations: int=4, num_threads: int=1) -> pd.DataFrame:
+    def index_frame(self, x: np.ndarray, frame: int, iterations: int=4,
+                    num_threads: int=1) -> pd.DataFrame:
+        """Index the parent CBC table. Add miller indices to the pixel data in the table.
+        Performs the binary dilation of the predicted CBD pattern to assign the Miller indices
+        to the pixel data, that has no match with the predicted data.
+
+        Args:
+            x : Refinement solution.
+            frame : Frame index.
+            iterations : Number of binary dilations to perform.
+            num_threads : Number of thread used in the calculations.
+
+        Returns:
+            A new CBC table of the given pattern in :class:`pandas.DataFrame` format.
+        """
         if self.parent().crop != self.crop:
             raise ValueError('Parent Crop object has been changed, '\
-                             'please create new IndexProblem instance.')
+                             'please create new SampleProblem instance.')
         if self.parent().setup != self.setup:
             raise ValueError('Parent ScanSetup object has been changed, '\
-                             'please create new IndexProblem instance.')
+                             'please create new SampleProblem instance.')
 
         df_frame = self.parent().pattern_dataframe(frame)
         df_frame['ij'] = self._pattern_to_ij_and_q(df_frame)[0]

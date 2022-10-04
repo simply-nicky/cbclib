@@ -45,7 +45,7 @@ int predict_kerreg(double *y, double *x, size_t npts, size_t ndim, double *y_hat
     size_t *idxs = MALLOC(size_t, npts);
 
     for (i = 0; i < (int)npts; i++) idxs[i] = ndim * i;
-    qsort_r(idxs, npts, sizeof(size_t), indirect_compare_double, x);
+    POSIX_QSORT_R(idxs, npts, sizeof(size_t), indirect_compare_double, (void *)x);
 
     size_t xsize[2] = {nhat, ndim};
     array xarr = new_array(2, xsize, sizeof(double), x_hat);
@@ -84,7 +84,7 @@ int predict_kerreg(double *y, double *x, size_t npts, size_t ndim, double *y_hat
             while (wsize && (++axis < (int)ndim))
             {
                 for (j = 0; j < (int)wsize; j++) window[j]++;
-                qsort_r(window, wsize, sizeof(size_t), indirect_compare_double, x);
+                POSIX_QSORT_R(window, wsize, sizeof(size_t), indirect_compare_double, (void *)x);
                 x_left = ((double *)xval->data)[axis] - cutoff;
                 x_right = ((double *)xval->data)[axis] + cutoff;
                 update_window(x, window, &wsize, x_left, x_right);

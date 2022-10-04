@@ -416,7 +416,7 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=255, double dilation=0.0, str profile='tophat'):
+def draw_line(np.ndarray inp not None, np.ndarray lines not None, int max_val=255, double dilation=0.0, str profile='tophat'):
     inp = check_array(inp, np.NPY_UINT32)
     lines = check_array(lines, np.NPY_FLOAT32)
 
@@ -437,12 +437,12 @@ def draw_lines(np.ndarray inp not None, np.ndarray lines not None, int max_val=2
     cdef int fail
 
     with nogil:
-        fail = draw_lines_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
+        fail = draw_line_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
     return inp
 
-def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1, double dilation=0.0,
+def draw_line_stack(np.ndarray inp not None, dict lines not None, int max_val=1, double dilation=0.0,
                      str profile='tophat', unsigned int num_threads=1):
     if inp.ndim < 2:
         raise ValueError('Input array must be >=2D array.')
@@ -472,20 +472,20 @@ def draw_lines_stack(np.ndarray inp not None, dict lines not None, int max_val=1
     if N < repeats:
         repeats = N
     num_threads = repeats if <int>num_threads > repeats else <int>num_threads
-    cdef int *fail = <int *>calloc(num_threads, sizeof(int))
+    cdef int fail
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        fail[i] = fail[i] + draw_lines_c(_inp + i * _Y * _X, _Y, _X, max_val, _lptrs[i], _ldims[i], <float>dilation, _prof)
+        fail = draw_line_c(_inp + i * _Y * _X, _Y, _X, max_val, _lptrs[i], _ldims[i], <float>dilation, _prof)
 
-    for i in range(<int>num_threads):
-        if fail[i]:
-            raise RuntimeError('C backend exited with error.')
+        if fail:
+            with gil:
+                raise RuntimeError('C backend exited with error.')
 
-    free(_lptrs); free(_ldims); free(fail)
+    free(_lptrs); free(_ldims)
 
     return inp
 
-def draw_line_indices(np.ndarray lines not None, object shape=None, int max_val=255, double dilation=0.0,
+def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=255, double dilation=0.0,
                       str profile='tophat'):
     lines = check_array(lines, np.NPY_FLOAT32)
 
@@ -512,7 +512,7 @@ def draw_line_indices(np.ndarray lines not None, object shape=None, int max_val=
     cdef int fail = 0
 
     with nogil:
-        fail = draw_line_indices_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
+        fail = draw_line_index_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 

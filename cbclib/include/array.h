@@ -60,13 +60,11 @@ line init_line(array arr, int axis);
     Update the pointer to the first element of a line
 ----------------------------------------------------------------------------*/
 
-#define UPDATE_LINE(_line, _iter)                               \
-{                                                               \
-    int _div;                                                   \
-    _div = _iter / _line->stride;                               \
-    _line->data = _line->first + _line->line_size * _div +      \
-    (_iter - _div * _line->stride) * _line->item_size;          \
-}
+#define UPDATE_LINE(_line, _iter)                                               \
+do {int _div; _div = (_iter) / (_line)->stride;                                 \
+    (_line)->data = (_line)->first + (_line)->line_size * _div +                \
+                    ((_iter) - _div * (_line)->stride) * (_line)->item_size;    \
+} while (0)
 
 /*----------------------------------------------------------------------------*/
 /*--------------------------- Extend line modes ------------------------------*/
@@ -90,7 +88,37 @@ typedef enum
 void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval);
 int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
 
-// Comparing functions
+/*---------------------------------------------------------------------------
+    Portable re-entrant quick sort macro
+----------------------------------------------------------------------------*/
+#if (defined __APPLE__ || defined __MACH__ || defined __DARWIN__ || defined __FREEBSD__ || defined __BSD__)
+    typedef struct sort_r_args
+    {
+        void *arg;
+        int (*compar)(const void *a, const void *b, void *arg);
+    } sort_r_args;
+
+    static int compar_swap(void *args, const void *a, const void *b)
+    {
+        struct sort_r_args *_args = (struct sort_r_args*)args;
+        return (_args->compar)(a, b, _args->arg);
+    }
+
+    #define POSIX_QSORT_R(_base, _nmemb, _size, _compar, _arg) \
+        do {struct sort_r_args _tmp; _tmp.arg = (_arg); _tmp.compar = (_compar); qsort_r((_base), (_nmemb), (_size), &_tmp, compar_swap); } while (0)
+#elif (defined __GNUC__ || defined __linux__)
+    #define POSIX_QSORT_R(_base, _nmemb, _size, _compar, _arg) \
+        do {qsort_r((_base), (_nmemb), (_size), (_compar), (_arg)); } while (0)
+#elif (defined _WIN32 || defined _WIN64 || defined __WINDOWS__)
+    #define POSIX_QSORT_R(_base, _nmemb, _size, _compar, _arg) \
+        do {qsort_s((_base), (_nmemb), (_size), (_compar), (_arg)); } while (0)
+#else
+    #define POSIX_QSORT_R NULL
+#endif
+
+/*---------------------------------------------------------------------------
+    Comparing functions
+----------------------------------------------------------------------------*/
 int compare_double(const void *a, const void *b);
 int compare_float(const void *a, const void *b);
 int compare_int(const void *a, const void *b);

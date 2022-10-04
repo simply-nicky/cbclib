@@ -73,10 +73,10 @@ cdef extern from "img_proc.h":
     int tophat_profile(int max_val, float err, float wd) nogil
     int quad_profile(int max_val, float err, float wd) nogil    
     
-    int draw_lines_c "draw_lines" (unsigned int *out, unsigned long Y, unsigned long X,
+    int draw_line_c "draw_line" (unsigned int *out, unsigned long Y, unsigned long X,
                      unsigned int max_val, float *lines, unsigned long *ldims, float dilation, line_profile profile) nogil
 
-    int draw_line_indices_c "draw_line_indices" (unsigned int **out, unsigned long *n_idxs, unsigned long Y,
+    int draw_line_index_c "draw_line_index" (unsigned int **out, unsigned long *n_idxs, unsigned long Y,
                             unsigned long X, unsigned int max_val, float *lines, unsigned long *ldims,
                             float dilation, line_profile profile) nogil
 

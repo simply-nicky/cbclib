@@ -55,10 +55,10 @@
 
 /* free() doesn't change ptr, it still points to (now invalid) location */
 #define DEALLOC(ptr) \
-    do { free(ptr); (ptr) = NULL; } while(0)
+    do { free(ptr); (ptr) = NULL; } while (0)
 
 #define SWAP(a, b, type) \
-    do { type tmp_ = (a); (a) = (b); (b) = tmp_; } while(0)
+    do { type tmp_ = (a); (a) = (b); (b) = tmp_; } while (0)
 
 #define SWAP_BUF(a, b, size) \
     do { unsigned char buf[(size)]; memmove(buf, (a), (size)); memmove((a), (b), (size)); memmove((b), buf, (size)); } while(0)

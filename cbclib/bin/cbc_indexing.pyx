@@ -272,7 +272,7 @@ def spherical_to_cartesian(np.ndarray vecs not None):
     return out
 
 def gaussian_grid(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] z_arr,
-                  np.float64_t[:, ::1] basis, double Sigma, double sigma, unsigned int threads=1):
+                  np.float64_t[:, ::1] basis, double envelope, double sigma, unsigned int threads=1):
     cdef int Nx = x_arr.size, Ny = y_arr.size, Nz = z_arr.size
     cdef double a_abs = basis[0, 0]**2 + basis[0, 1]**2 + basis[0, 2]**2
     cdef int na_min = <int>(((x_arr[0] if basis[0, 0] > 0.0 else x_arr[Nx - 1]) * basis[0, 0] + 
@@ -311,7 +311,7 @@ def gaussian_grid(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] 
                 cnt_x = na * basis[0, 0] + nb * basis[1, 0] + nc * basis[2, 0]
                 cnt_y = na * basis[0, 1] + nb * basis[1, 1] + nc * basis[2, 1]
                 cnt_z = na * basis[0, 2] + nb * basis[1, 2] + nc * basis[2, 2]
-                if (cnt_x**2 + cnt_y**2 + cnt_z**2) < 9.0 * Sigma**2:
+                if (cnt_x**2 + cnt_y**2 + cnt_z**2) < 9.0 * envelope**2:
                     hkl[3 * n_max] = na; hkl[3 * n_max + 1] = nb; hkl[3 * n_max + 2] = nc; n_max += 1
                 
     cdef int nx, ny, nz, n
@@ -325,7 +325,7 @@ def gaussian_grid(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] 
                     _out[nx, ny, nz] = _out[nx, ny, nz] + exp(-0.5 * ((x_arr[nx] - cnt_x)**2 +
                                                                       (y_arr[ny] - cnt_y)**2 +
                                                                       (z_arr[nz] - cnt_z)**2) / (sigma * sigma))
-                _out[nx, ny, nz] = _out[nx, ny, nz] * exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (Sigma * Sigma))
+                _out[nx, ny, nz] = _out[nx, ny, nz] * exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (envelope * envelope))
 
     hkl = <int *>realloc(hkl, 3 * n_max * sizeof(int))
     cdef np.npy_intp *hkl_dims = [n_max, 3]
@@ -334,7 +334,7 @@ def gaussian_grid(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] 
     return out, hkl_arr
 
 def gaussian_grid_grad(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] z_arr,
-                       np.float64_t[:, ::1] basis, np.int32_t[:, ::1] hkl, double Sigma, double sigma,
+                       np.float64_t[:, ::1] basis, np.int32_t[:, ::1] hkl, double envelope, double sigma,
                        unsigned int threads=1):
     cdef int Nx = x_arr.size, Ny = y_arr.size, Nz = z_arr.size
     cdef np.npy_intp *odims = [9, Nx, Ny, Nz]
@@ -367,7 +367,7 @@ def gaussian_grid_grad(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_
                         _out[7, nx, ny, nz] = _out[7, nx, ny, nz] + (y_arr[ny] - cnt[1]) * hkl[n, 2] * gauss / (sigma * sigma)
                         _out[8, nx, ny, nz] = _out[8, nx, ny, nz] + (z_arr[nz] - cnt[2]) * hkl[n, 2] * gauss / (sigma * sigma)
                     
-                    gauss = exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (Sigma * Sigma))
+                    gauss = exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (envelope * envelope))
                     for i in range(9):
                         _out[i, nx, ny, nz] = _out[i, nx, ny, nz] * gauss
 

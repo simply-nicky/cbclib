@@ -1211,46 +1211,46 @@ cdef class FFTW:
 
         return self._output_array
 
-    def update_arrays(self, new_input_array, new_output_array):
-        if not isinstance(new_input_array, np.ndarray):
+    def update_arrays(self, input_array, output_array):
+        if not isinstance(input_array, np.ndarray):
             raise ValueError('Invalid input array: '
                     'The new input array needs to be an instance '
                     'of numpy.ndarray')
 
-        if not isinstance(new_output_array, np.ndarray):
+        if not isinstance(output_array, np.ndarray):
             raise ValueError('Invalid output array '
                     'The new output array needs to be an instance '
                     'of numpy.ndarray')
 
-        if not (<intptr_t>np.PyArray_DATA(new_input_array) %
+        if not (<intptr_t>np.PyArray_DATA(input_array) %
                 self.input_alignment == 0):
             raise ValueError('Invalid input alignment: '
                     'The original arrays were %d-byte aligned. It is '
                     'necessary that the update input array is similarly '
                     'aligned.' % self.input_alignment)
 
-        if not (<intptr_t>np.PyArray_DATA(new_output_array) %
+        if not (<intptr_t>np.PyArray_DATA(output_array) %
                 self.output_alignment == 0):
             raise ValueError('Invalid output alignment: '
                     'The original arrays were %d-byte aligned. It is '
                     'necessary that the update output array is similarly '
                     'aligned.' % self.output_alignment)
 
-        if not new_input_array.dtype == self._input_dtype:
+        if not input_array.dtype == self._input_dtype:
             raise ValueError('Invalid input dtype: '
                     'The new input array is not of the same '
                     'dtype as was originally planned for.')
 
-        if not new_output_array.dtype == self._output_dtype:
+        if not output_array.dtype == self._output_dtype:
             raise ValueError('Invalid output dtype: '
                     'The new output array is not of the same '
                     'dtype as was originally planned for.')
 
-        new_input_shape = new_input_array.shape
-        new_output_shape = new_output_array.shape
+        new_input_shape = input_array.shape
+        new_output_shape = output_array.shape
 
-        new_input_strides = new_input_array.strides
-        new_output_strides = new_output_array.strides
+        new_input_strides = input_array.strides
+        new_output_strides = output_array.strides
 
         if not new_input_shape == self._input_shape:
             raise ValueError('Invalid input shape: '
@@ -1272,7 +1272,7 @@ cdef class FFTW:
                     'The strides should be identical for the new '
                     'output array as for the old.')
 
-        self._update_arrays(new_input_array, new_output_array)
+        self._update_arrays(input_array, output_array)
 
     def execute(self):
         self._execute()

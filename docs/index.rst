@@ -6,12 +6,13 @@
 cbclib
 ******
 
-.. image:: figures/CBC_flowchart.png
-    :width:
+.. image:: _static/cbclib_schematics.png
+    :width: 100 %
+    :alt: Geometric model for Bragg reflection in Convergent Beam Difrraction (CBD) scheme.
 
 |
 
-Python library for data processing of convergent beam crystallography datasets.
+Python library for data processing of Convergent Beam Crystallography (CBC) datasets.
 
 
 Python Reference
@@ -21,6 +22,7 @@ Python Reference
     :maxdepth: 1
 
     install
+    reference/cbclib_api
 
 Indices and tables
 ==================

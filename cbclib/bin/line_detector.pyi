@@ -5,36 +5,41 @@ class LSD:
     """LSD  is a class for performing the streak detection on digital images with Line Segment
     Detector algorithm [LSD]_.
 
+    Args:
+        scale : When different from 1.0, LSD will scale the input image by 'scale' factor
+            by Gaussian filtering, before detecting line segments.
+        sigma_scale : When ``scale`` is different from 1.0, the sigma of the Gaussian
+            filter is :code:`sigma = sigma_scale / scale`, if scale is less than 1.0, and
+            :code:`sigma = sigma_scale` otherwise.
+        log_eps : Detection threshold, accept if -log10(NFA) > log_eps. The larger the
+            value, the more strict the detector is, and will result in less detections.
+            The value -log10(NFA) is equivalent but more intuitive than NFA:
+
+            * -1.0 gives an average of 10 false detections on noise.
+            * 0.0 gives an average of 1 false detections on noise.
+            * 1.0 gives an average of 0.1 false detections on nose.
+            * 2.0 gives an average of 0.01 false detections on noise.
+
+        ang_th : Gradient angle tolerance in the region growing algorithm, in degrees.
+        density_th : Minimal proportion of 'supporting' points in a rectangle.
+        quant : Bound to the quantization error on the gradient norm. Example: if gray
+            levels are quantized to integer steps, the gradient (computed by finite
+            differences) error due to quantization will be bounded by 2.0, as the worst
+            case is when the error are 1 and -1, that gives an error of 2.0.
+
     References:
         .. [LSD] "LSD: a Line Segment Detector" by Rafael Grompone von Gioi, Jeremie Jakubowicz,
                 Jean-Michel Morel, and Gregory Randall, Image Processing On Line, 2012,
                 DOI: 10.5201/ipol.2012.gjmr-lsd, http://dx.doi.org/10.5201/ipol.2012.gjmr-lsd.
     """
+    scale       : float
+    sigma_scale : float
+    log_eps     : float
+    ang_th      : float
+    quant       : float
 
     def __init__(self, scale: float=0.8, sigma_scale: float=0.6, log_eps: float=0.0,
                  ang_th: float=45.0, density_th: float=0.7, quant: float=2.0) -> None:
-        """Create a LSD object for streak detection on digital images.
-
-        Args:
-            scale : When different from 1.0, LSD will scale the input image by 'scale' factor
-                by Gaussian filtering, before detecting line segments.
-            sigma_scale : When ``scale`` is different from 1.0, the sigma of the Gaussian
-                filter is :code:`sigma = sigma_scale / scale`, if scale is less than 1.0, and
-                :code:`sigma = sigma_scale` otherwise.
-            log_eps : Detection threshold, accept if -log10(NFA) > log_eps. The larger the
-                value, the more strict the detector is, and will result in less detections.
-                The value -log10(NFA) is equivalent but more intuitive than NFA:
-                * -1.0 gives an average of 10 false detections on noise.
-                *  0.0 gives an average of 1 false detections on noise.
-                *  1.0 gives an average of 0.1 false detections on nose.
-                *  2.0 gives an average of 0.01 false detections on noise.
-            ang_th : Gradient angle tolerance in the region growing algorithm, in degrees.
-            density_th : Minimal proportion of 'supporting' points in a rectangle.
-            quant : Bound to the quantization error on the gradient norm. Example: if gray
-                levels are quantized to integer steps, the gradient (computed by finite
-                differences) error due to quantization will be bounded by 2.0, as the worst
-                case is when the error are 1 and -1, that gives an error of 2.0.
-        """
         ...
 
     def detect(self, image: np.ndarray, cutoff: float, filter_threshold: float=0.0,
@@ -62,7 +67,8 @@ class LSD:
             num_threads : A number of threads used in the computations.
 
         Returns:
-            :class:`dict` with the following fields:
+            A dictionary with detection results. The dictionary contains a list of the following
+            attributes:
 
             * `lines` : An array of the detected lines. Each line is comprised of 7 parameters
               as follows:

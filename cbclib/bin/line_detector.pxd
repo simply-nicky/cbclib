@@ -12,10 +12,10 @@ cdef extern from "lsd.h":
                              int **reg_img, int *reg_x, int *reg_y) nogil
 
 cdef extern from "img_proc.h":
-    int filter_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
+    int filter_line(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
                      float *ilines, unsigned long *ldims, float threshold, float dilation) nogil
 
-    int group_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
+    int group_line(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
                     float *ilines, unsigned long *ldims, float cutoff, float threshold, float dilation) nogil
 
 cdef class ArrayWrapper:

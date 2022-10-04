@@ -35,7 +35,7 @@ class CXIProtocol(INIContainer):
     attributes necessary for the :class:`cbclib.CrystData` detector data container, their
     corresponding attributes' data types, and data structure.
 
-    Attributes:
+    Args:
         datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint', or 'bool' are
             allowed.
         load_paths : Dictionary with attributes' CXI default file paths.
@@ -273,6 +273,11 @@ class CXIStore():
     """File handler class for HDF5 and CXI files. Provides an interface to save and load data
     attributes to a file. Support multiple files. The handler saves data to the first file.
 
+    Args:
+        names : Paths to the files.
+        mode : Mode in which to open file; one of ('w', 'r', 'r+', 'a', 'w-').
+        protocol : CXI protocol. Uses the default protocol if not provided.
+
     Attributes:
         file_dict : Dictionary of paths to the files and their file
             objects.
@@ -289,12 +294,6 @@ class CXIStore():
 
     def __init__(self, names: Union[str, List[str]], mode: str='r',
                  protocol: CXIProtocol=CXIProtocol.import_default()) -> None:
-        """
-        Args:
-            names : Paths to the files.
-            mode : Mode in which to open file; one of ('w', 'r', 'r+', 'a', 'w-').
-            protocol : CXI protocol. Uses the default protocol if not provided.
-        """
         if mode not in ['r', 'r+', 'w', 'w-', 'x', 'a']:
             raise ValueError(f'Wrong file mode: {mode}')
         names = protocol.str_to_list(names)

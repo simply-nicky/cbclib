@@ -296,10 +296,11 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
     """
     ...
 
-def draw_lines(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: float=0.0,
+def draw_line(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: float=0.0,
                profile: str='tophat') -> np.ndarray:
-    """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
-    The lines must follow the LSD convention, see the parameters for more info.
+    """Draw thick lines with variable thickness and the antialiasing applied on a single frame
+    by using the Bresenham's algorithm [BSH]_. The lines must follow the LSD convention,
+    see the parameters for more info.
 
     Args:
         inp : Input array.
@@ -324,6 +325,10 @@ def draw_lines(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: 
         ValueError : If `lines` has an incompatible shape.
         RuntimeError : If C backend exited with error.
 
+    References:
+        .. [BSH] "Bresenham's line algorithm." Wikipedia, Wikimedia Foundation, 20 Sept. 2022,
+                https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm.
+
     Returns:
         Output array with the lines drawn.
 
@@ -332,8 +337,8 @@ def draw_lines(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: 
     """
     ...
 
-def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int=1,
-                     dilation: float=0.0, profile: str='tophat', num_threads: int=1) -> np.ndarray:
+def draw_line_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int=1,
+                    dilation: float=0.0, profile: str='tophat', num_threads: int=1) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -371,8 +376,8 @@ def draw_lines_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: in
     """
     ...
 
-def draw_line_indices(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: int=255,
-                      dilation: float=0.0, profile: str='tophat') -> np.ndarray:
+def draw_line_index(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: int=255,
+                    dilation: float=0.0, profile: str='tophat') -> np.ndarray:
     """Return an array of rasterized thick lines indices and their corresponding pixel values.
     The lines are drawn with variable thickness and the antialiasing applied. The lines must
     follow the LSD convention, see the parameters for more info.
@@ -382,11 +387,9 @@ def draw_line_indices(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, 
             of (`N`, 7), where `N` is the number of lines. Each line is comprised
             of 7 parameters as follows:
 
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's
-            ends.
+            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's ends.
             * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance
-            over 180 degree.
+            * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
             * `-log10(NFA)` : Number of false alarms.
 
         shape : Shape of the image. All the lines outside the shape will be discarded.

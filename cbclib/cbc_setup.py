@@ -10,19 +10,19 @@ Examples:
 
     >>> import cbclib as cbc
     >>> import numpy as np
-    >>> sample = cbc.Sample(cbc.Rotation.import_tilt(0.1, 0.5 * np.pi, 0.5 * np.pi), np.ones(3))
+    >>> sample = cbc.Sample(cbc.Rotation.import_tilt((0.1, 0.5 * np.pi, 0.5 * np.pi)), np.ones(3))
 """
 from __future__ import annotations
 from copy import deepcopy
-from dataclasses import dataclass, field
-from typing import (Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List, Optional, Tuple,
-                    Union, ValuesView)
+from dataclasses import dataclass
+from typing import (Any, ClassVar, Dict, ItemsView, Iterable, Iterator, KeysView, List, Optional,
+                    Tuple, Union, ValuesView)
 import numpy as np
 import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import WhiteKernel, RBF, ConstantKernel
 from .bin import (tilt_matrix, cartesian_to_spherical, spherical_to_cartesian, euler_angles,
-                  euler_matrix, tilt_angles, draw_lines, draw_line_indices)
+                  euler_matrix, tilt_angles, draw_line, draw_line_index)
 from .cxi_protocol import Indices
 from .data_container import DataContainer, INIContainer
 
@@ -30,7 +30,7 @@ from .data_container import DataContainer, INIContainer
 class Basis(INIContainer):
     """An indexing solution, defined by a set of three unit cell vectors.
 
-    Attributes:
+    Args:
         a_vec : First basis vector.
         b_vec : Second basis vector.
         c_vec : Third basis vector.
@@ -58,7 +58,7 @@ class Basis(INIContainer):
         return cls(mat[0], mat[1], mat[2])
 
     @classmethod
-    def import_spherical(cls, sph_mat: np.ndarray) -> Basis:
+    def import_spherical(cls, mat: np.ndarray) -> Basis:
         """Return a new :class:`Basis` object, initialised by a stacked matrix of three basis
         vectors written in spherical coordinate system.
 
@@ -68,7 +68,7 @@ class Basis(INIContainer):
         Returns:
             A new :class:`Basis` object.
         """
-        return cls.import_matrix(spherical_to_cartesian(sph_mat))
+        return cls.import_matrix(spherical_to_cartesian(mat))
 
     def reciprocate(self, setup: ScanSetup) -> Basis:
         """Calculate a set of reciprocal unit cell vectors.
@@ -97,7 +97,7 @@ class ScanSetup(INIContainer):
     """Convergent beam crystallography experimental setup. Contains all the important distances
     and characteristics of the experimental setup.
 
-    Attributes:
+    Args:
         foc_pos : Focus position relative to the detector [m].
         rot_axis : Axis of rotation.
         pupil_min : Lower bound of the aperture function in the detector plane.
@@ -182,7 +182,7 @@ class ScanSetup(INIContainer):
         """Project incident wave-vectors to the detector plane.
 
         Args:
-            kout : Incident wave-vectors.
+            kin : Incident wave-vectors.
 
         Returns:
             A tuple of x and y detector coordinates.
@@ -198,15 +198,17 @@ class ScanSetup(INIContainer):
         Returns:
             A new :class:`cbclib.Rotation` object.
         """
-        return Rotation.import_tilt(theta, np.arccos(self.rot_axis[2]),
-                                    np.arctan2(self.rot_axis[1], self.rot_axis[0]))
+        return Rotation.import_tilt((theta, np.arccos(self.rot_axis[2]),
+                                     np.arctan2(self.rot_axis[1], self.rot_axis[0])))
+
+FloatArray = Union[np.ndarray, List[float], Tuple[float, float, float]]
 
 @dataclass
 class Rotation(DataContainer):
     """A rotation matrix implementation. Provides auxiliary methods to work with Euler
     and tilt angles.
 
-    Attributes:
+    Args:
         matrix : Rotation matrix.
     """
     matrix : np.ndarray = np.eye(3, 3)
@@ -215,7 +217,7 @@ class Rotation(DataContainer):
         self.matrix = self.matrix.reshape((3, 3))
 
     @classmethod
-    def import_euler(cls, alpha: float, beta: float, gamma: float) -> Rotation:
+    def import_euler(cls, angles: FloatArray) -> Rotation:
         r"""Calculate a rotation matrix from Euler angles with Bunge convention [EUL]_.
 
         Args:
@@ -224,10 +226,10 @@ class Rotation(DataContainer):
         Returns:
             A new rotation matrix :class:`Rotation`.
         """
-        return Rotation(euler_matrix(np.array([alpha, beta, gamma])))
+        return Rotation(euler_matrix(np.asarray(angles)))
 
     @classmethod
-    def import_tilt(cls, theta: float, alpha: float, beta: float) -> Rotation:
+    def import_tilt(cls, angles: FloatArray) -> Rotation:
         r"""Calculate a rotation matrix for a set of three angles set of three angles
         :math:`\theta, \alpha, \beta`, a rotation angle :math:`\theta`, an angle between the
         axis of rotation and OZ axis :math:`\alpha`, and a polar angle of the axis of rotation
@@ -239,7 +241,7 @@ class Rotation(DataContainer):
         Returns:
             A new rotation matrix :class:`Rotation`.
         """
-        return Rotation(tilt_matrix(np.array([theta, alpha, beta])))
+        return Rotation(tilt_matrix(np.asarray(angles)))
 
     def __call__(self, inp: np.ndarray) -> np.ndarray:
         """Apply the rotation to a set of vectors ``inp``.
@@ -288,9 +290,6 @@ class Rotation(DataContainer):
     def to_tilt(self) -> np.ndarray:
         r"""Calculate an axis of rotation and a rotation angle for a rotation matrix.
 
-        Args:
-            rot_mats : A set of rotation matrices.
-
         Returns:
             A set of three angles :math:`\theta, \alpha, \beta`, a rotation angle :math:`\theta`,
             an angle between the axis of rotation and OZ axis :math:`\alpha`, and a polar angle
@@ -307,12 +306,12 @@ class Rotation(DataContainer):
 class Sample():
     """A convergent beam sample implementation. Stores position and orientation of the sample.
 
-    Attributes:
+    Args:
         rotation : rotation matrix, that defines the orientation of the sample.
-        pos : Sample's position [m].
+        position : Sample's position [m].
     """
     rotation : Rotation
-    pos : np.ndarray
+    position : np.ndarray
     mat_columns : ClassVar[Tuple[str]] = ('Rxx', 'Rxy', 'Rxz',
                                           'Ryx', 'Ryy', 'Ryz',
                                           'Rzx', 'Rzy', 'Rzz')
@@ -332,7 +331,7 @@ class Sample():
             A new :class:`Sample` object.
         """
         return cls(rotation=Rotation(data[list(cls.mat_columns)].to_numpy()),
-                   pos=data[list(cls.pos_columns)].to_numpy())
+                   position=data[list(cls.pos_columns)].to_numpy())
 
     def rotate(self, basis: Basis) -> Basis:
         """Rotate a :class:`cbclib.Basis` by the ``rotation`` attribute.
@@ -357,7 +356,7 @@ class Sample():
         Returns:
             An array of output wave-vectors.
         """
-        return setup.detector_to_kout(x, y, self.pos)
+        return setup.detector_to_kout(x, y, self.position)
 
     def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup) -> Tuple[np.ndarray, np.ndarray]:
         """Project output wave-vectors originating from the sample's position to the detector
@@ -370,7 +369,7 @@ class Sample():
         Returns:
             A tuple of x and y detector coordinates.
         """
-        return setup.kout_to_detector(kout, self.pos)
+        return setup.kout_to_detector(kout, self.position)
 
     def to_dataframe(self) -> pd.Series:
         """Export the sample object to a :class:`pandas.Series` array.
@@ -379,9 +378,9 @@ class Sample():
             A :class:`pandas.Series` array with the following columns:
             * 'Rxx', 'Rxy', 'Rxz', 'Ryx', 'Ryy', 'Ryz', 'Rzx', 'Rzy', 'Rzz' : Rotational
               matrix.
-            * 'x', 'y', 'z' : Sample's position [m]. 
+            * 'x', 'y', 'z' : Sample's position [m].
         """
-        return pd.Series(np.concatenate((self.rotation.matrix.ravel(), self.pos)),
+        return pd.Series(np.concatenate((self.rotation.matrix.ravel(), self.position)),
                          index=self.mat_columns + self.pos_columns)
 
 MapSamples = Union[Iterable[Tuple[int, Sample]], Dict[int, Sample]]
@@ -470,7 +469,7 @@ class ScanSamples():
         Returns:
             Set of sample coordinates.
         """
-        return np.asarray([sample.pos[axis] for sample in self.values()])
+        return np.asarray([sample.position[axis] for sample in self.values()])
 
     def regularise(self, kernel_bandwidth: Tuple[int, int]) -> ScanSamples:
         """Regularise sample positions by applying a Gaussian Process with a gaussian kernel
@@ -520,7 +519,7 @@ class ScanSamples():
         """
         obj = deepcopy(self)
         for frame in obj:
-            obj[frame].pos[axis] = positions[frame]
+            obj[frame].position[axis] = positions[frame]
         return obj
 
     def to_dict(self) -> Dict[str, Sample]:
@@ -538,7 +537,7 @@ class ScanSamples():
             A :class:`pandas.DataFrame` table with the following columns:
             * 'Rxx', 'Rxy', 'Rxz', 'Ryx', 'Ryy', 'Ryz', 'Rzx', 'Rzy', 'Rzz' : Rotational
               matrices.
-            * 'x', 'y', 'z' : Sample positions [m]. 
+            * 'x', 'y', 'z' : Sample positions [m].
         """
         return pd.DataFrame((sample.to_dataframe() for sample in self.values()), index=self.keys())
 
@@ -547,7 +546,7 @@ class Streaks(DataContainer):
     """Detector streak lines container. Provides an interface to draw a pattern for a set of
     lines.
 
-    Attributes:
+    Args:
         x0 : x coordinates of the first point of a line.
         y0 : y coordinates of the first point of a line.
         x1 : x coordinates of the second point of a line.
@@ -578,6 +577,14 @@ class Streaks(DataContainer):
         return self.length.shape[0]
 
     def mask_streaks(self, indices: Indices) -> Streaks:
+        """Return a new streaks container with a set of streaks discarded.
+
+        Args:
+            indices : A set of indices of the streaks to discard.
+
+        Returns:
+            A new :class:`cbclib.Streaks` container.
+        """
         return Streaks(**{attr: self[attr][indices] for attr in self.contents()})
 
     def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dp: float=1.0, dilation: float=0.0,
@@ -593,6 +600,8 @@ class Streaks(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+
+            drop_duplicates : Discard pixel data with duplicate x and y coordinates if True.
 
         Returns:
             A pattern in :class:`pandas.DataFrame` format.
@@ -622,7 +631,7 @@ class Streaks(DataContainer):
         """
         if dp > 1.0 or dp <= 0.0:
             raise ValueError('`dp` must be in the range of (0.0, 1.0]')
-        idx, x, y, p = draw_line_indices(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
+        idx, x, y, p = draw_line_index(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
                                          dilation=dilation, profile=profile).T
         pattern = {'x': x, 'y': y, 'p': p / int(1.0 / dp)}
         for attr in ['h', 'k', 'l', 'hkl_index']:
@@ -670,7 +679,7 @@ class Streaks(DataContainer):
             A pattern mask.
         """
         mask = np.zeros(shape, dtype=np.uint32)
-        return draw_lines(mask, lines=self.to_numpy(), max_val=max_val, dilation=dilation,
+        return draw_line(mask, lines=self.to_numpy(), max_val=max_val, dilation=dilation,
                           profile=profile)
 
     def to_dataframe(self) -> pd.DataFrame:

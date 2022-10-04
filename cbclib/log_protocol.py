@@ -49,7 +49,7 @@ class LogProtocol(INIContainer):
     """Log file protocol class. Contains log file keys to retrieve
     and the data types of the corresponding values.
 
-    Attributes:
+    Args:
         datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'bool', or 'str' are
             allowed.
         log_keys : Dictionary with attributes' log file keys.
@@ -70,16 +70,10 @@ class LogProtocol(INIContainer):
                                              'percent': 1e-2}
 
     def __post_init__(self):
-        """
-        Args:
-            datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'bool', or 'str' are
-                allowed.
-            log_keys : Dictionary with attributes' log file keys.
-            part_keys : Dictionary with the part names inside the log file where the attributes are
-                stored.
-        """
-        self.log_keys = {attr: self.str_to_list(val) for attr, val in self.log_keys.items() if attr in self.datatypes}
-        self.part_keys = {attr: val for attr, val in self.part_keys.items() if attr in self.datatypes}
+        self.log_keys = {attr: self.str_to_list(val)
+                         for attr, val in self.log_keys.items() if attr in self.datatypes}
+        self.part_keys = {attr: val for attr, val in self.part_keys.items()
+                          if attr in self.datatypes}
 
     @classmethod
     def import_default(cls) -> LogProtocol:
@@ -267,7 +261,7 @@ class LogContainer(DataContainer):
     an interface to read the log files and generate a an array of sample translations and a set
     of scan samples :class:`cbclib.ScanSamples`.
 
-    Attributes:
+    Args:
         protocol : A log protocol object
         log_attr : A dictionary of log attributes imported from a log file.
         log_data : A dictionary of log data imported from a log file.
@@ -275,7 +269,6 @@ class LogContainer(DataContainer):
         translations : An array of sample translations.
     """
     protocol        : LogProtocol = field(default_factory=LogProtocol.import_default)
-
     log_attr        : Dict[str, Dict[str, Any]] = field(default_factory=dict)
     log_data        : Dict[str, Any] = field(default_factory=dict)
     idxs            : Optional[np.ndarray] = None

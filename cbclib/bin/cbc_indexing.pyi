@@ -97,7 +97,7 @@ def gaussian_grid(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, basis
         y_arr : A set of y coordinates of diffraction signal in Fourier space.
         z_arr : A set of z coordinates of diffraction signal in Fourier space.
         basis : Basis vectors of the indexing solution.
-        Sigma : A width of the envelope gaussian function.
+        envelope : A width of the envelope gaussian function.
         sigma : A width of diffraction orders.
         threads : A number of threads used in the computations.
 
@@ -107,7 +107,7 @@ def gaussian_grid(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, basis
     ...
 
 def gaussian_grid_grad(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, basis: np.ndarray,
-                       hkl: np.ndarray, Sigma: float, sigma: float, threads: int=1) -> np.ndarray:
+                       hkl: np.ndarray, envelope: float, sigma: float, threads: int=1) -> np.ndarray:
     r"""Return the  gradient of the criterion function for Fourier autoindexing based on
     maximising the marginal log-likelihood.
 
@@ -116,7 +116,7 @@ def gaussian_grid_grad(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, 
         y_arr : A set of y coordinates of diffraction signal in Fourier space.
         z_arr : A set of z coordinates of diffraction signal in Fourier space.
         basis : Basis vectors of the indexing solution.
-        Sigma : A width of the envelope gaussian function.
+        envelope : A width of the envelope gaussian function.
         sigma : A width of diffraction orders.
         threads : A number of threads used in the computations.
 

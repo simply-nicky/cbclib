@@ -6,8 +6,8 @@
 #include "img_proc.h"
 #include "smoothers.h"
 
-static int test_draw_lines();
-static int test_draw_line_indices();
+static int test_draw_line();
+static int test_draw_line_index();
 static int test_lsd();
 static int test_median();
 static int test_pairs();
@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     return test_pairs();
 }
 
-static int test_draw_lines()
+static int test_draw_line()
 {
     size_t X = 32;
     size_t Y = 48;
@@ -36,7 +36,7 @@ static int test_draw_lines()
 
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
 
-    draw_lines(out, Y, X, 1, lines, ldims, 0.0, linear_profile);
+    draw_line(out, Y, X, 1, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("%3d ", 666);
@@ -55,7 +55,7 @@ static int test_draw_lines()
     return EXIT_SUCCESS;
 }
 
-static int test_draw_line_indices()
+static int test_draw_line_index()
 {
     size_t X = 32;
     size_t Y = 48;
@@ -75,7 +75,7 @@ static int test_draw_line_indices()
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
     lines[7] = 30.; lines[8] = 15.; lines[9] = 5.; lines[10] = 10.; lines[11] = 3.5;
 
-    draw_line_indices(&out, &n_idxs, Y, X, 255, lines, ldims, 0.0, linear_profile);
+    draw_line_index(&out, &n_idxs, Y, X, 255, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("idx  x   y   I \n");
@@ -218,7 +218,7 @@ static int test_pairs()
     float *olines = MALLOC(float, n_lines * 7);
     for (int i = 0; i < X * Y; i++) data[i] = 1.0;
 
-    filter_lines(olines, proc, data, Y, X, ilines, ldims, 1.0, 0.0);
+    filter_line(olines, proc, data, Y, X, ilines, ldims, 1.0, 0.0);
 
     int out_lines = 0;
     for (int i = 0; i < n_lines; i++) out_lines += proc[i];

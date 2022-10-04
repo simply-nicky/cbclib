@@ -8,13 +8,24 @@ from configparser import ConfigParser
 from dataclasses import dataclass
 import os
 import re
-from typing import (Any, Callable, Dict, ItemsView, Iterator, List, Tuple, Type, Union,
+from typing import (Any, Callable, Dict, Generic, ItemsView, Iterator, List, Optional, Tuple, Type, Union,
                     ValuesView, TypeVar)
 import numpy as np
 
-T = TypeVar('T', bound='DataContainer')
+T = TypeVar('T')
+Self = TypeVar('Self')
 
-class DataContainer:
+class ReferenceType(Generic[T]):
+    __callback__: Callable[[ReferenceType[T]], Any]
+    def __new__(cls: type[Self], o: T,
+                callback: Optional[Callable[[ReferenceType[T]], Any]]=...) -> Self:
+        ...
+    def __call__(self) -> Optional[T]:
+        ...
+
+D = TypeVar('D', bound='DataContainer')
+
+class DataContainer():
     """Abstract data container class based on :class:`dataclass`. Has :class:`dict` intefrace,
     and :func:`DataContainer.replace` to create a new obj with a set of data attributes replaced.
     """
@@ -29,7 +40,7 @@ class DataContainer:
         """
         return [attr for attr in self.keys() if self.get(attr) is not None]
 
-    def get(self, attr: str, val: Any=None) -> Any:
+    def get(self, attr: str, value: Any=None) -> Any:
         """Retrieve a dataset, return ``value`` if the attribute is not found.
 
         Args:
@@ -41,7 +52,7 @@ class DataContainer:
         """
         if attr in self.keys():
             return self[attr]
-        return val
+        return value
 
     def keys(self) -> List[str]:
         """Return a list of the attributes available in the container.
@@ -68,7 +79,7 @@ class DataContainer:
         """
         return dict(self).items()
 
-    def replace(self, **kwargs: Any) -> T:
+    def replace(self: D, **kwargs: Any) -> D:
         """Return a new container object with a set of attributes replaced.
 
         Args:
@@ -131,7 +142,7 @@ class INIContainer(DataContainer):
         return str
 
     @classmethod
-    def _format_dict(cls, ini_dict: Dict[str, Union[str, Dict[str, str]]]) -> Dict[str, Any]:
+    def _format_dict(cls, ini_dict: Dict[str, Any]) -> Dict[str, Any]:
         for attr, val in ini_dict.items():
             formatter = cls.get_formatter(cls.__dataclass_fields__[attr].type)
             if isinstance(val, dict):
@@ -155,7 +166,7 @@ class INIContainer(DataContainer):
         ini_parser = ConfigParser()
         ini_parser.read(ini_file)
 
-        ini_dict = {}
+        ini_dict: Dict[str, Any] = {}
         for section, attrs in cls.__ini_fields__.items():
             if isinstance(attrs, str):
                 ini_dict[attrs] = dict(ini_parser[section])
@@ -184,7 +195,7 @@ class INIContainer(DataContainer):
 
         raise ValueError('strings must be a string or a list of strings')
 
-    def _get_string(self, attr) -> str:
+    def _get_string(self, attr: Any) -> Union[str, Dict[str, str]]:
         val = self.get(attr)
         if isinstance(val, np.ndarray):
             return np.array2string(val, separator=',')
@@ -192,8 +203,8 @@ class INIContainer(DataContainer):
             return {k: str(v) for k, v in val.items()}
         return str(val)
 
-    def ini_dict(self) -> Dict[str, Union[str, Dict[str, str]]]:
-        ini_dict = {}
+    def ini_dict(self) -> Dict[str, Any]:
+        ini_dict: Dict[str, Any] = {}
         for section, attrs in self.__ini_fields__.items():
             if isinstance(attrs, str):
                 ini_dict[section] = self._get_string(attrs)
@@ -249,7 +260,7 @@ class Transform(DataContainer):
 class Crop(Transform):
     """Crop transform. Crops a frame according to a region of interest.
 
-    Attributes:
+    Args:
         roi : Region of interest. Comprised of four elements ``[y_min, y_max, x_min, x_max]``.
     """
     roi : Union[List[int], Tuple[int, int, int, int], np.ndarray]
@@ -281,24 +292,26 @@ class Crop(Transform):
                 fs_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]])
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Apply the transform to a set of points.
+        """Transform detector coordinates.
 
         Args:
-            pts : Input array of points.
+            x : A set of  x coordinates.
+            y : A set of y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of transformed x and y coordinates.
         """
         return x - self.roi[2], y - self.roi[0]
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Tranform back an array of points.
+        """Transform detector coordinates back.
 
         Args:
-            pts : Input tranformed array of points.
+            x : A set of transformed x coordinates.
+            y : A set of transformed y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of x and y coordinates.
         """
         return x + self.roi[2], y + self.roi[0]
 
@@ -306,7 +319,7 @@ class Crop(Transform):
 class Downscale(Transform):
     """Downscale the image by a integer ratio.
 
-    Attributes:
+    Args:
         scale : Downscaling integer ratio.
     """
     scale : int
@@ -325,25 +338,26 @@ class Downscale(Transform):
         return (ss_idxs[::self.scale, ::self.scale], fs_idxs[::self.scale, ::self.scale])
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Apply the transform to a set of points.
+        """Transform detector coordinates.
 
         Args:
-            pts : Input array of points.
+            x : A set of  x coordinates.
+            y : A set of y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of transformed x and y coordinates.
         """
         return x / self.scale, y / self.scale
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Tranform back an array of points.
+        """Transform detector coordinates back.
 
         Args:
-            pts : Input tranformed array of points.
-            shape : Detector shape.
+            x : A set of transformed x coordinates.
+            y : A set of transformed y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of x and y coordinates.
         """
         return x * self.scale, y * self.scale
 
@@ -351,8 +365,9 @@ class Downscale(Transform):
 class Mirror(Transform):
     """Mirror the data around an axis.
 
-    Attributes:
+    Args:
         axis : Axis of reflection.
+        shape : Shape of the input array.
     """
     axis: int
     shape: Tuple[int, int]
@@ -374,26 +389,28 @@ class Mirror(Transform):
         raise ValueError('Axis must equal to 0 or 1')
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Apply the transform to a set of points.
+        """Transform detector coordinates.
 
         Args:
-            pts : Input array of points.
+            x : A set of  x coordinates.
+            y : A set of y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of transformed x and y coordinates.
         """
         if self.axis:
             return x, self.shape[0] - y
         return self.shape[1] - x, y
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Tranform back an array of points.
+        """Transform detector coordinates back.
 
         Args:
-            pts : Input tranformed array of points.
+            x : A set of transformed x coordinates.
+            y : A set of transformed y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of x and y coordinates.
         """
         return self.forward_points(x, y)
 
@@ -401,7 +418,7 @@ class Mirror(Transform):
 class ComposeTransforms(Transform):
     """Composes several transforms together.
 
-    Attributes:
+    Args:
         transforms: List of transforms.
     """
     transforms : List[Transform]
@@ -433,26 +450,28 @@ class ComposeTransforms(Transform):
         return ss_idxs, fs_idxs
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Apply the transform to a set of points.
+        """Transform detector coordinates.
 
         Args:
-            pts : Input array of points.
+            x : A set of  x coordinates.
+            y : A set of y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of transformed x and y coordinates.
         """
         for transform in self:
             x, y = transform.forward_points(x, y)
         return x, y
 
     def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Tranform back an array of points.
+        """Transform detector coordinates back.
 
         Args:
-            pts : Input tranformed array of points.
+            x : A set of transformed x coordinates.
+            y : A set of transformed y coordinates.
 
         Returns:
-            Output array of points.
+            A tuple of x and y coordinates.
         """
         for transform in list(self)[::-1]:
             x, y = transform.backward_points(x, y)
