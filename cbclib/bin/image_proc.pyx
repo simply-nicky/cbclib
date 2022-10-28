@@ -47,7 +47,7 @@ def fft_convolve(np.ndarray array not None, np.ndarray kernel not None, int axis
     axis = axis if axis >= 0 else ndim + axis
     axis = axis if axis <= ndim - 1 else ndim - 1
     cdef np.npy_intp ksize = np.PyArray_DIM(kernel, 0)
-    cdef int _mode = extend_mode_to_code(mode)
+    cdef int _mode = mode_to_code(mode)
     cdef np.npy_intp *dims = array.shape
     cdef unsigned long *_dims = <unsigned long *>dims
 
@@ -125,7 +125,7 @@ def gaussian_filter(np.ndarray inp not None, object sigma not None, object order
             sigmas[n] = 0.0
 
     cdef int fail = 0
-    cdef int _mode = extend_mode_to_code(mode)
+    cdef int _mode = mode_to_code(mode)
     cdef np.npy_intp *dims = inp.shape
     cdef unsigned long *_dims = <unsigned long *>dims
 
@@ -186,7 +186,7 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
             sigmas[n] = 0.0
 
     cdef int fail = 0
-    cdef int _mode = extend_mode_to_code(mode)
+    cdef int _mode = mode_to_code(mode)
     cdef np.npy_intp *dims = inp.shape
     cdef unsigned long *_dims = <unsigned long *>dims
 
@@ -273,7 +273,7 @@ def median(np.ndarray inp not None, np.ndarray mask=None, int axis=0, unsigned n
         elif type_num == np.NPY_UINT64:
             fail = median_c(_out, _inp, _mask, ndim, _dims, 8, axis, compare_ulong, num_threads)
         else:
-            raise TypeError('inp argument has incompatible type: {:s}'.format(inp.dtype))
+            raise TypeError(f'inp argument has incompatible type: {str(inp.dtype)}')
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -328,7 +328,7 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
     cdef unsigned char *_imask = <unsigned char *>np.PyArray_DATA(inp_mask)
-    cdef int _mode = extend_mode_to_code(mode)
+    cdef int _mode = mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:
@@ -343,7 +343,7 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
         elif type_num == np.NPY_UINT64:
             fail = median_filter_c(_out, _inp, _mask, _imask, ndim, _dims, 8, _fsize, _fmask, _mode, _cval, compare_ulong, num_threads)
         else:
-            raise TypeError('inp argument has incompatible type: {:s}'.format(inp.dtype))
+            raise TypeError(f'inp argument has incompatible type: {str(inp.dtype)}')
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -397,7 +397,7 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
     cdef unsigned char *_imask = <unsigned char *>np.PyArray_DATA(inp_mask)
-    cdef int _mode = extend_mode_to_code(mode)
+    cdef int _mode = mode_to_code(mode)
     cdef void *_cval = <void *>&cval
 
     with nogil:

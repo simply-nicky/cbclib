@@ -1,13 +1,13 @@
 # Diffraction pattern results and temporary development files
 /figures/
 /results/
+/scripts/
 /logs/
 /cbclib/include/*.d
 /cbclib/include/*.o
 /cbclib/include/*.out
 /cbclib/include/*.so
 /cbclib/bin/*.c
-/scripts/*.sh
 dev.ipynb
 
 #jupyter checkpoints

@@ -14,161 +14,161 @@
 
 // adapted from https://stackoverflow.com/questions/42792939/
 // CAUTION: this function only works for arguments in the range [-0.25; 0.25]!
-static void my_sincosm1pi (double a, double *restrict res)
+static void my_sincosm1pi(double a, double *restrict res)
 {
     double s = a * a;
-    /* Approximate cos(pi*x)-1 for x in [-0.25,0.25] */
+    /* Approximate cos(pi * x) - 1 for x in [-0.25, 0.25] */
     double r =     -1.0369917389758117e-4;
-    r = fma (r, s,  1.9294935641298806e-3);
-    r = fma (r, s, -2.5806887942825395e-2);
-    r = fma (r, s,  2.3533063028328211e-1);
-    r = fma (r, s, -1.3352627688538006e+0);
-    r = fma (r, s,  4.0587121264167623e+0);
-    r = fma (r, s, -4.9348022005446790e+0);
-    double c = r*s;
-    /* Approximate sin(pi*x) for x in [-0.25,0.25] */
+    r = fma(r, s,  1.9294935641298806e-3);
+    r = fma(r, s, -2.5806887942825395e-2);
+    r = fma(r, s,  2.3533063028328211e-1);
+    r = fma(r, s, -1.3352627688538006e+0);
+    r = fma(r, s,  4.0587121264167623e+0);
+    r = fma(r, s, -4.9348022005446790e+0);
+    double c = r * s;
+    /* Approximate sin(pi * x) for x in [-0.25, 0.25] */
     r =             4.6151442520157035e-4;
-    r = fma (r, s, -7.3700183130883555e-3);
-    r = fma (r, s,  8.2145868949323936e-2);
-    r = fma (r, s, -5.9926452893214921e-1);
-    r = fma (r, s,  2.5501640398732688e+0);
-    r = fma (r, s, -5.1677127800499516e+0);
+    r = fma(r, s, -7.3700183130883555e-3);
+    r = fma(r, s,  8.2145868949323936e-2);
+    r = fma(r, s, -5.9926452893214921e-1);
+    r = fma(r, s,  2.5501640398732688e+0);
+    r = fma(r, s, -5.1677127800499516e+0);
     s = s * a;
     r = r * s;
-    s = fma (a, 3.1415926535897931e+0, r);
+    s = fma(a, 3.1415926535897931e+0, r);
     res[0] = c;
     res[1] = s;
 }
 
-NOINLINE static void calc_first_octant(size_t den, double * restrict res)
+NOINLINE static void calc_first_octant(size_t den, double *restrict res)
 {
-    size_t n = (den+4)>>3;
-    if (n==0) return;
-    res[0]=1.; res[1]=0.;
-    if (n==1) return;
-    size_t l1=(size_t)sqrt(n);
-    for (size_t i=1; i<l1; ++i)
-        my_sincosm1pi((2.*i)/den,&res[2*i]);
-    size_t start=l1;
-    while(start<n)
+    size_t n = (den + 4) >> 3;
+    if (n == 0) return;
+    res[0] = 1.0; res[1] = 0.0;
+    if (n == 1) return;
+    size_t l1 = (size_t)sqrt(n);
+    for (size_t i = 1; i < l1; ++i)
+        my_sincosm1pi((2.0 * i) / den, &res[2 * i]);
+    size_t start = l1;
+    while(start < n)
     {
         double cs[2];
-        my_sincosm1pi((2.*start)/den,cs);
-        res[2*start] = cs[0]+1.;
-        res[2*start+1] = cs[1];
+        my_sincosm1pi((2.0 * start) / den, cs);
+        res[2 * start] = cs[0] + 1.0;
+        res[2 * start + 1] = cs[1];
         size_t end = l1;
-        if (start+end>n) end = n-start;
-        for (size_t i=1; i<end; ++i)
+        if (start + end > n) end = n - start;
+        for (size_t i = 1; i < end; ++i)
         {
-            double csx[2]={res[2*i], res[2*i+1]};
-            res[2*(start+i)] = ((cs[0]*csx[0] - cs[1]*csx[1] + cs[0]) + csx[0]) + 1.;
-            res[2*(start+i)+1] = (cs[0]*csx[1] + cs[1]*csx[0]) + cs[1] + csx[1];
+            double csx[2] = {res[2 * i], res[2 * i + 1]};
+            res[2 * (start + i)] = ((cs[0] * csx[0] - cs[1] * csx[1] + cs[0]) + csx[0]) + 1.0;
+            res[2 * (start + i) + 1] = (cs[0] * csx[1] + cs[1] * csx[0]) + cs[1] + csx[1];
         }
         start += l1;
     }
-    for (size_t i=1; i<l1; ++i)
-        res[2*i] += 1.;
+    for (size_t i = 1; i < l1; ++i)
+        res[2 * i] += 1.0;
 }
 
-NOINLINE static void calc_first_quadrant(size_t n, double * restrict res)
+NOINLINE static void calc_first_quadrant(size_t n, double *restrict res)
 {
-    double * restrict p = res+n;
-    calc_first_octant(n<<1, p);
-    size_t ndone=(n+2)>>2;
-    size_t i=0, idx1=0, idx2=2*ndone-2;
-    for (; i+1<ndone; i+=2, idx1+=2, idx2-=2)
+    double * restrict p = res + n;
+    calc_first_octant(n << 1, p);
+    size_t ndone = (n + 2) >> 2;
+    size_t i, idx1, idx2;
+    for (i = 0, idx1 = 0, idx2 = 2 * ndone - 2;
+         i + 1 < ndone; i += 2, idx1 += 2, idx2 -= 2)
     {
-        res[idx1]   = p[2*i];
-        res[idx1+1] = p[2*i+1];
-        res[idx2]   = p[2*i+3];
-        res[idx2+1] = p[2*i+2];
+        res[idx1]     = p[2 * i];
+        res[idx1 + 1] = p[2 * i + 1];
+        res[idx2]     = p[2 * i + 3];
+        res[idx2 + 1] = p[2 * i + 2];
     }
-    if (i!=ndone)
+    if (i != ndone)
     {
-        res[idx1  ] = p[2*i];
-        res[idx1+1] = p[2*i+1];
+        res[idx1]     = p[2 * i];
+        res[idx1 + 1] = p[2 * i + 1];
     }
 }
 
-NOINLINE static void calc_first_half(size_t n, double * restrict res)
+NOINLINE static void calc_first_half(size_t n, double *restrict res)
 {
-    int ndone=(n+1)>>1;
-    double * p = res+n-1;
-    calc_first_octant(n<<2, p);
-    int i4=0, in=n, i=0;
-    for (; i4<=in-i4; ++i, i4+=4) // octant 0
+    int ndone = (n + 1) >> 1;
+    double *p = res + n - 1;
+    calc_first_octant(n << 2, p);
+    int i4, in, i;
+    for (i4 = 0, in = n, i = 0; i4 <= in - i4; ++i, i4 += 4) // octant 0
     {
-        res[2*i] = p[2*i4]; res[2*i+1] = p[2*i4+1];
+        res[2 * i] = p[2 * i4]; res[2 * i + 1] = p[2 * i4 + 1];
     }
-    for (; i4-in <= 0; ++i, i4+=4) // octant 1
+    for (; i4 - in <= 0; ++i, i4 += 4) // octant 1
     {
-       int xm = in-i4;
-       res[2*i] = p[2*xm+1]; res[2*i+1] = p[2*xm];
+       int xm = in - i4;
+       res[2 * i] = p[2 * xm + 1]; res[2 * i + 1] = p[2 * xm];
     }
-    for (; i4<=3*in-i4; ++i, i4+=4) // octant 2
+    for (; i4 <= 3 * in - i4; ++i, i4 += 4) // octant 2
     {
-       int xm = i4-in;
-       res[2*i] = -p[2*xm+1]; res[2*i+1] = p[2*xm];
+       int xm = i4 - in;
+       res[2 * i] = -p[2 * xm + 1]; res[2 * i + 1] = p[2 * xm];
     }
-    for (; i<ndone; ++i, i4+=4) // octant 3
+    for (; i < ndone; ++i, i4 += 4) // octant 3
     {
-        int xm = 2*in-i4;
-        res[2*i] = -p[2*xm]; res[2*i+1] = p[2*xm+1];
+        int xm = 2 * in - i4;
+        res[2 * i] = -p[2 * xm]; res[2 * i + 1] = p[2 * xm + 1];
     }
 }
 
-NOINLINE static void fill_first_quadrant(size_t n, double * restrict res)
+NOINLINE static void fill_first_quadrant(size_t n, double *restrict res)
 {
     const double hsqt2 = 0.707106781186547524400844362104849;
-    size_t quart = n>>2;
-    if ((n&7)==0)
-        res[quart] = res[quart+1] = hsqt2;
-    for (size_t i=2, j=2*quart-2; i<quart; i+=2, j-=2)
+    size_t quart = n >> 2;
+    if ((n & 7) == 0) res[quart] = res[quart + 1] = hsqt2;
+    for (size_t i = 2, j = 2 * quart - 2; i < quart; i += 2, j -= 2)
     {
-        res[j  ] = res[i+1];
-        res[j+1] = res[i  ];
+        res[j]     = res[i + 1];
+        res[j + 1] = res[i];
     }
 }
 
-NOINLINE static void fill_first_half(size_t n, double * restrict res)
+NOINLINE static void fill_first_half(size_t n, double *restrict res)
 {
-    size_t half = n>>1;
-    if ((n&3)==0)
-        for (size_t i=0; i<half; i+=2)
+    size_t half = n >> 1;
+    if ((n & 3) == 0)
+        for (size_t i = 0; i < half; i += 2)
         {
-            res[i+half]   = -res[i+1];
-            res[i+half+1] =  res[i  ];
+            res[i + half]     = -res[i + 1];
+            res[i + half + 1] =  res[i];
         }
     else
-        for (size_t i=2, j=2*half-2; i<half; i+=2, j-=2)
+        for (size_t i = 2, j = 2 * half - 2; i < half; i += 2, j -= 2)
         {
-            res[j  ] = -res[i  ];
-            res[j+1] =  res[i+1];
+            res[j]     = -res[i];
+            res[j + 1] =  res[i + 1];
         }
 }
 
-NOINLINE static void fill_second_half(size_t n, double * restrict res)
+NOINLINE static void fill_second_half(size_t n, double *restrict res)
 {
-    if ((n&1)==0)
-        for (size_t i=0; i<n; ++i)
-            res[i+n] = -res[i];
+    if ((n & 1) == 0)
+        for (size_t i = 0; i < n; ++i)
+            res[i + n] = -res[i];
     else
-        for (size_t i=2, j=2*n-2; i<n; i+=2, j-=2)
+        for (size_t i = 2, j = 2 * n - 2; i < n; i += 2, j -= 2)
         {
-            res[j  ] =  res[i  ];
-            res[j+1] = -res[i+1];
+            res[j]     =  res[i];
+            res[j + 1] = -res[i + 1];
         }
 }
 
-NOINLINE static void sincos_2pibyn_half(size_t n, double * restrict res)
+NOINLINE static void sincos_2pibyn_half(size_t n, double *restrict res)
 {
-    if ((n&3)==0)
+    if ((n & 3) == 0)
     {
         calc_first_octant(n, res);
         fill_first_quadrant(n, res);
         fill_first_half(n, res);
     }
-    else if ((n&1)==0)
+    else if ((n & 1) == 0)
     {
         calc_first_quadrant(n, res);
         fill_first_half(n, res);
@@ -177,71 +177,72 @@ NOINLINE static void sincos_2pibyn_half(size_t n, double * restrict res)
         calc_first_half(n, res);
 }
 
-NOINLINE static void sincos_2pibyn(size_t n, double * restrict res)
+NOINLINE static void sincos_2pibyn(size_t n, double *restrict res)
 {
     sincos_2pibyn_half(n, res);
     fill_second_half(n, res);
 }
 
-NOINLINE static size_t largest_prime_factor (size_t n)
+NOINLINE static size_t largest_prime_factor(size_t n)
 {
-    size_t res=1;
+    size_t res = 1;
     size_t tmp;
-    while (((tmp=(n>>1))<<1)==n)
-    { res=2; n=tmp; }
+    while (((tmp = (n >> 1)) << 1) == n)
+    {res = 2; n = tmp;}
 
-    size_t limit=(size_t)sqrt(n+0.01);
-    for (size_t x=3; x<=limit; x+=2)
-    while (((tmp=(n/x))*x)==n)
+    size_t limit = (size_t)sqrt(n + 0.01);
+    for (size_t x = 3; x <= limit; x += 2)
+    while (((tmp = (n / x)) * x) == n)
     {
-        res=x;
-        n=tmp;
-        limit=(size_t)sqrt(n+0.01);
+        res = x;
+        n = tmp;
+        limit = (size_t)sqrt(n + 0.01);
     }
-    if (n>1) res=n;
+    if (n > 1) res = n;
 
     return res;
 }
 
-NOINLINE static double cost_guess (size_t n)
+NOINLINE static double cost_guess(size_t n)
 {
-    const double lfp=1.1; // penalty for non-hardcoded larger factors
-    size_t ni=n;
-    double result=0.;
+    const double lfp = 1.1; // penalty for non-hardcoded larger factors
+    size_t ni = n;
+    double result = 0.0;
     size_t tmp;
-    while (((tmp=(n>>1))<<1)==n)
-    { result+=2; n=tmp; }
+    while (((tmp = (n >> 1)) << 1) == n)
+    {result += 2; n = tmp;}
 
-    size_t limit=(size_t)sqrt(n+0.01);
-    for (size_t x=3; x<=limit; x+=2)
-    while ((tmp=(n/x))*x==n)
+    size_t limit = (size_t)sqrt(n + 0.01);
+    for (size_t x = 3; x <= limit; x += 2)
+    while ((tmp = (n / x)) * x == n)
     {
-        result+= (x<=5) ? x : lfp*x; // penalize larger prime factors
-        n=tmp;
-        limit=(size_t)sqrt(n+0.01);
+        result += (x <= 5) ? x : lfp * x; // penalize larger prime factors
+        n = tmp;
+        limit = (size_t)sqrt(n + 0.01);
     }
-    if (n>1) result+=(n<=5) ? n : lfp*n;
+    if (n > 1) result += (n <= 5) ? n : lfp * n;
 
-    return result*ni;
+    return result * ni;
 }
 
 /* returns the smallest composite of 2, 3, 5, 7 and 11 which is >= n */
 NOINLINE size_t good_size(size_t n)
 {
-    if (n<=6) return n;
+    if (n <= 6) return n;
 
-    size_t bestfac=2*n;
-    for (size_t f2=1; f2<bestfac; f2*=2)
-        for (size_t f23=f2; f23<bestfac; f23*=3)
-            for (size_t f235=f23; f235<bestfac; f235*=5)
-                for (size_t f2357=f235; f2357<bestfac; f2357*=7)
-                    for (size_t f235711=f2357; f235711<bestfac; f235711*=11)
-                        if (f235711>=n) bestfac=f235711;
+    size_t bestfac = 2 * n;
+    for (size_t f2 = 1; f2 < bestfac; f2 *= 2)
+        for (size_t f23 = f2; f23 < bestfac; f23 *= 3)
+            for (size_t f235 = f23; f235 < bestfac; f235 *= 5)
+                for (size_t f2357 = f235; f2357 < bestfac; f2357 *= 7)
+                    for (size_t f235711 = f2357; f235711 < bestfac; f235711 *= 11)
+                        if (f235711 >= n) bestfac = f235711;
     return bestfac;
 }
 
-typedef struct cmplx {
-    double r,i;
+typedef struct cmplx
+{
+    double r , i;
 } cmplx;
 
 #define NFCT 25
@@ -257,305 +258,309 @@ typedef struct cfftp_plan_i
     cmplx *mem;
     cfftp_fctdata fct[NFCT];
 } cfftp_plan_i;
-typedef struct cfftp_plan_i * cfftp_plan;
+typedef struct cfftp_plan_i *cfftp_plan;
 
-#define PMC(a,b,c,d) { a.r=c.r+d.r; a.i=c.i+d.i; b.r=c.r-d.r; b.i=c.i-d.i; }
-#define ADDC(a,b,c) { a.r=b.r+c.r; a.i=b.i+c.i; }
-#define SCALEC(a,b) { a.r*=b; a.i*=b; }
-#define ROT90(a) { double tmp_=a.r; a.r=-a.i; a.i=tmp_; }
-#define ROTM90(a) { double tmp_=-a.r; a.r=a.i; a.i=tmp_; }
-#define CH(a,b,c) ch[(a)+ido*((b)+l1*(c))]
-#define CC(a,b,c) cc[(a)+ido*((b)+cdim*(c))]
-#define WA(x,i) wa[(i)-1+(x)*(ido-1)]
-/* a = b*c */
-#define A_EQ_B_MUL_C(a,b,c) { a.r=b.r*c.r-b.i*c.i; a.i=b.r*c.i+b.i*c.r; }
-/* a = conj(b)*c*/
-#define A_EQ_CB_MUL_C(a,b,c) { a.r=b.r*c.r+b.i*c.i; a.i=b.r*c.i-b.i*c.r; }
+#define PMC(a, b, c, d) {a.r = c.r + d.r; a.i = c.i + d.i; b.r = c.r - d.r; b.i = c.i - d.i;}
+#define ADDC(a, b, c) {a.r = b.r + c.r; a.i = b.i + c.i;}
+#define SCALEC(a, b) {a.r *= b; a.i *= b;}
+#define ROT90(a) {double tmp_ = a.r; a.r = -a.i; a.i = tmp_;}
+#define ROTM90(a) {double tmp_ = -a.r; a.r = a.i; a.i = tmp_;}
+#define CH(a, b, c) ch[(a) + ido * ((b) + l1 * (c))]
+#define CC(a, b, c) cc[(a) + ido * ((b) + cdim * (c))]
+#define WA(x, i) wa[(i) - 1 + (x) * (ido - 1)]
 
-#define PMSIGNC(a,b,c,d) { a.r=c.r+sign*d.r; a.i=c.i+sign*d.i; b.r=c.r-sign*d.r; b.i=c.i-sign*d.i; }
-/* a = b*c */
-#define MULPMSIGNC(a,b,c) { a.r=b.r*c.r-sign*b.i*c.i; a.i=b.r*c.i+sign*b.i*c.r; }
+/* a = b * c */
+#define A_EQ_B_MUL_C(a, b, c) { a.r = b.r * c.r - b.i * c.i; a.i = b.r * c.i + b.i * c.r;}
+/* a = conj(b) * c */
+#define A_EQ_CB_MUL_C(a, b, c) {a.r = b.r * c.r + b.i * c.i; a.i = b.r * c.i - b.i * c.r;}
+
+#define PMSIGNC(a, b, c, d) {a.r = c.r + sign * d.r; a.i = c.i + sign * d.i; b.r = c.r - sign * d.r; b.i = c.i - sign * d.i; }
+/* a = b * c */
+#define MULPMSIGNC(a, b, c) {a.r = b.r * c.r - sign * b.i * c.i; a.i = b.r * c.i + sign * b.i * c.r;}
 /* a *= b */
-#define MULPMSIGNCEQ(a,b) { double xtmp=a.r; a.r=b.r*a.r-sign*b.i*a.i; a.i=b.r*a.i+sign*b.i*xtmp; }
+#define MULPMSIGNCEQ(a, b) {double xtmp = a.r; a.r = b.r * a.r - sign * b.i * a.i; a.i = b.r * a.i + sign * b.i * xtmp;}
 
-NOINLINE static void pass2b (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass2b(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=2;
+    const size_t cdim = 2;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
-            PMC (CH(0,k,0),CH(0,k,1),CC(0,0,k),CC(0,1,k))
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
+            PMC(CH(0, k, 0), CH(0, k, 1), CC(0, 0, k), CC(0, 1, k))
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
-            PMC (CH(0,k,0),CH(0,k,1),CC(0,0,k),CC(0,1,k))
-            for (size_t i=1; i<ido; ++i)
+            PMC(CH(0, k, 0), CH(0, k, 1), CC(0, 0, k), CC(0, 1, k))
+            for (size_t i = 1; i < ido; ++i)
             {
                 cmplx t;
-                PMC (CH(i,k,0),t,CC(i,0,k),CC(i,1,k))
-                A_EQ_B_MUL_C (CH(i,k,1),WA(0,i),t)
+                PMC(CH(i, k, 0), t, CC(i, 0, k), CC(i, 1, k))
+                A_EQ_B_MUL_C(CH(i, k, 1), WA(0, i), t)
             }
         }
 } 
 
-NOINLINE static void pass2f (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass2f(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=2;
+    const size_t cdim = 2;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
-            PMC (CH(0,k,0),CH(0,k,1),CC(0,0,k),CC(0,1,k))
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
+            PMC(CH(0, k, 0), CH(0, k, 1), CC(0, 0, k), CC(0, 1, k))
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
-            PMC (CH(0,k,0),CH(0,k,1),CC(0,0,k),CC(0,1,k))
-            for (size_t i=1; i<ido; ++i)
+            PMC(CH(0, k, 0), CH(0, k, 1), CC(0, 0, k), CC(0, 1, k))
+            for (size_t i = 1; i < ido; ++i)
             {
                 cmplx t;
-                PMC (CH(i,k,0),t,CC(i,0,k),CC(i,1,k))
-                A_EQ_CB_MUL_C (CH(i,k,1),WA(0,i),t)
+                PMC(CH(i, k, 0), t, CC(i, 0, k), CC(i, 1, k))
+                A_EQ_CB_MUL_C(CH(i, k, 1), WA(0, i), t)
             }
         }
 }
 
-#define PREP3(idx) \
-        cmplx t0 = CC(idx,0,k), t1, t2; \
-        PMC (t1,t2,CC(idx,1,k),CC(idx,2,k)) \
-        CH(idx,k,0).r=t0.r+t1.r; \
-        CH(idx,k,0).i=t0.i+t1.i;
-#define PARTSTEP3a(u1,u2,twr,twi) \
-        { \
-        cmplx ca,cb; \
-        ca.r=t0.r+twr*t1.r; \
-        ca.i=t0.i+twr*t1.i; \
-        cb.i=twi*t2.r; \
-        cb.r=-(twi*t2.i); \
-        PMC(CH(0,k,u1),CH(0,k,u2),ca,cb) \
-        }
+#define PREP3(idx)                                  \
+        cmplx t0 = CC(idx, 0, k), t1, t2;           \
+        PMC(t1, t2, CC(idx, 1, k), CC(idx, 2, k))   \
+        CH(idx, k, 0).r = t0.r + t1.r;              \
+        CH(idx, k, 0).i = t0.i + t1.i;
 
-#define PARTSTEP3b(u1,u2,twr,twi) \
-        { \
-        cmplx ca,cb,da,db; \
-        ca.r=t0.r+twr*t1.r; \
-        ca.i=t0.i+twr*t1.i; \
-        cb.i=twi*t2.r; \
-        cb.r=-(twi*t2.i); \
-        PMC(da,db,ca,cb) \
-        A_EQ_B_MUL_C (CH(i,k,u1),WA(u1-1,i),da) \
-        A_EQ_B_MUL_C (CH(i,k,u2),WA(u2-1,i),db) \
-        }
+#define PARTSTEP3a(u1, u2, twr, twi)                \
+    {                                               \
+        cmplx ca , cb;                              \
+        ca.r = t0.r + twr * t1.r;                   \
+        ca.i = t0.i + twr * t1.i;                   \
+        cb.i = twi * t2.r;                          \
+        cb.r = -(twi * t2.i);                       \
+        PMC(CH(0, k, u1), CH(0, k, u2), ca, cb)     \
+    }
 
-NOINLINE static void pass3b (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+#define PARTSTEP3b(u1, u2, twr, twi)                    \
+    {                                                   \
+        cmplx ca, cb, da, db;                           \
+        ca.r = t0.r + twr * t1.r;                       \
+        ca.i = t0.i + twr * t1.i;                       \
+        cb.i = twi * t2.r;                              \
+        cb.r = -(twi * t2.i);                           \
+        PMC(da, db, ca, cb)                             \
+        A_EQ_B_MUL_C(CH(i, k, u1), WA(u1 - 1, i), da)   \
+        A_EQ_B_MUL_C(CH(i, k, u2), WA(u2 - 1, i), db)   \
+    }
+
+NOINLINE static void pass3b(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=3;
-    const double tw1r=-0.5, tw1i= 0.86602540378443864676;
+    const size_t cdim = 3;
+    const double tw1r = -0.5, tw1i = 0.86602540378443864676;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP3(0)
-            PARTSTEP3a(1,2,tw1r,tw1i)
+            PARTSTEP3a(1, 2, tw1r, tw1i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP3(0)
-                PARTSTEP3a(1,2,tw1r,tw1i)
+                PARTSTEP3a(1, 2, tw1r, tw1i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP3(i)
-                PARTSTEP3b(1,2,tw1r,tw1i)
+                PARTSTEP3b(1, 2, tw1r, tw1i)
             }
         }
 }
 
-#define PARTSTEP3f(u1,u2,twr,twi) \
-        { \
-        cmplx ca,cb,da,db; \
-        ca.r=t0.r+twr*t1.r; \
-        ca.i=t0.i+twr*t1.i; \
-        cb.i=twi*t2.r; \
-        cb.r=-(twi*t2.i); \
-        PMC(da,db,ca,cb) \
-        A_EQ_CB_MUL_C (CH(i,k,u1),WA(u1-1,i),da) \
-        A_EQ_CB_MUL_C (CH(i,k,u2),WA(u2-1,i),db) \
-        }
+#define PARTSTEP3f(u1, u2, twr, twi)                    \
+    {                                                   \
+        cmplx ca, cb, da, db;                           \
+        ca.r = t0.r + twr * t1.r;                       \
+        ca.i = t0.i + twr * t1.i;                       \
+        cb.i = twi * t2.r;                              \
+        cb.r = -(twi * t2.i);                           \
+        PMC(da, db, ca, cb)                             \
+        A_EQ_CB_MUL_C(CH(i, k, u1), WA(u1 - 1, i), da)  \
+        A_EQ_CB_MUL_C(CH(i, k, u2), WA(u2 - 1, i), db)  \
+    }
 
-NOINLINE static void pass3f (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass3f(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=3;
-    const double tw1r=-0.5, tw1i= -0.86602540378443864676;
+    const size_t cdim = 3;
+    const double tw1r = -0.5, tw1i = -0.86602540378443864676;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP3(0)
-            PARTSTEP3a(1,2,tw1r,tw1i)
+            PARTSTEP3a(1, 2, tw1r, tw1i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP3(0)
-                PARTSTEP3a(1,2,tw1r,tw1i)
+                PARTSTEP3a(1, 2, tw1r, tw1i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP3(i)
-                PARTSTEP3f(1,2,tw1r,tw1i)
+                PARTSTEP3f(1, 2, tw1r, tw1i)
             }
         }
 }
 
-NOINLINE static void pass4b (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass4b(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=4;
+    const size_t cdim = 4;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             cmplx t1, t2, t3, t4;
-            PMC(t2,t1,CC(0,0,k),CC(0,2,k))
-            PMC(t3,t4,CC(0,1,k),CC(0,3,k))
+            PMC(t2, t1, CC(0, 0, k), CC(0, 2, k))
+            PMC(t3, t4, CC(0, 1, k), CC(0, 3, k))
             ROT90(t4)
-            PMC(CH(0,k,0),CH(0,k,2),t2,t3)
-            PMC(CH(0,k,1),CH(0,k,3),t1,t4)
+            PMC(CH(0, k, 0), CH(0, k, 2), t2, t3)
+            PMC(CH(0, k, 1), CH(0, k, 3), t1, t4)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 cmplx t1, t2, t3, t4;
-                PMC(t2,t1,CC(0,0,k),CC(0,2,k))
-                PMC(t3,t4,CC(0,1,k),CC(0,3,k))
+                PMC(t2, t1, CC(0, 0, k), CC(0, 2, k))
+                PMC(t3, t4, CC(0, 1, k), CC(0, 3, k))
                 ROT90(t4)
-                PMC(CH(0,k,0),CH(0,k,2),t2,t3)
-                PMC(CH(0,k,1),CH(0,k,3),t1,t4)
+                PMC(CH(0, k, 0), CH(0, k, 2), t2, t3)
+                PMC(CH(0, k, 1), CH(0, k, 3), t1, t4)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 cmplx c2, c3, c4, t1, t2, t3, t4;
-                cmplx cc0=CC(i,0,k), cc1=CC(i,1,k),cc2=CC(i,2,k),cc3=CC(i,3,k);
-                PMC(t2,t1,cc0,cc2)
-                PMC(t3,t4,cc1,cc3)
+                cmplx cc0 = CC(i, 0, k), cc1 = CC(i, 1, k);
+                cmplx cc2 = CC(i, 2, k), cc3 = CC(i, 3, k);
+                PMC(t2, t1, cc0, cc2)
+                PMC(t3, t4, cc1, cc3)
                 ROT90(t4)
-                cmplx wa0=WA(0,i), wa1=WA(1,i),wa2=WA(2,i);
-                PMC(CH(i,k,0),c3,t2,t3)
-                PMC(c2,c4,t1,t4)
-                A_EQ_B_MUL_C (CH(i,k,1),wa0,c2)
-                A_EQ_B_MUL_C (CH(i,k,2),wa1,c3)
-                A_EQ_B_MUL_C (CH(i,k,3),wa2,c4)
+                cmplx wa0 = WA(0, i), wa1 = WA(1, i), wa2 = WA(2, i);
+                PMC(CH(i, k, 0), c3, t2, t3)
+                PMC(c2, c4, t1, t4)
+                A_EQ_B_MUL_C(CH(i, k, 1), wa0, c2)
+                A_EQ_B_MUL_C(CH(i, k, 2), wa1, c3)
+                A_EQ_B_MUL_C(CH(i, k, 3), wa2, c4)
             }
         }
 }
-NOINLINE static void pass4f (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass4f(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=4;
+    const size_t cdim = 4;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             cmplx t1, t2, t3, t4;
-            PMC(t2,t1,CC(0,0,k),CC(0,2,k))
-            PMC(t3,t4,CC(0,1,k),CC(0,3,k))
+            PMC(t2, t1, CC(0, 0, k), CC(0, 2, k))
+            PMC(t3, t4, CC(0, 1, k), CC(0, 3, k))
             ROTM90(t4)
-            PMC(CH(0,k,0),CH(0,k,2),t2,t3)
-            PMC(CH(0,k,1),CH(0,k,3),t1,t4)
+            PMC(CH(0, k, 0), CH(0, k, 2), t2, t3)
+            PMC(CH(0, k, 1), CH(0, k, 3), t1, t4)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 cmplx t1, t2, t3, t4;
-                PMC(t2,t1,CC(0,0,k),CC(0,2,k))
-                PMC(t3,t4,CC(0,1,k),CC(0,3,k))
+                PMC(t2, t1, CC(0, 0, k), CC(0, 2, k))
+                PMC(t3, t4, CC(0, 1, k), CC(0, 3, k))
                 ROTM90(t4)
-                PMC(CH(0,k,0),CH(0,k,2),t2,t3)
-                PMC (CH(0,k,1),CH(0,k,3),t1,t4)
+                PMC(CH(0, k, 0), CH(0, k, 2), t2, t3)
+                PMC(CH(0, k, 1), CH(0, k, 3), t1, t4)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 cmplx c2, c3, c4, t1, t2, t3, t4;
-                cmplx cc0=CC(i,0,k), cc1=CC(i,1,k),cc2=CC(i,2,k),cc3=CC(i,3,k);
-                PMC(t2,t1,cc0,cc2)
-                PMC(t3,t4,cc1,cc3)
+                cmplx cc0 = CC(i, 0, k), cc1 = CC(i, 1, k);
+                cmplx cc2 = CC(i, 2, k), cc3 = CC(i, 3, k);
+                PMC(t2, t1, cc0, cc2)
+                PMC(t3, t4, cc1, cc3)
                 ROTM90(t4)
-                cmplx wa0=WA(0,i), wa1=WA(1,i),wa2=WA(2,i);
-                PMC(CH(i,k,0),c3,t2,t3)
-                PMC(c2,c4,t1,t4)
-                A_EQ_CB_MUL_C (CH(i,k,1),wa0,c2)
-                A_EQ_CB_MUL_C (CH(i,k,2),wa1,c3)
-                A_EQ_CB_MUL_C (CH(i,k,3),wa2,c4)
+                cmplx wa0 = WA(0, i), wa1 = WA(1, i), wa2 = WA(2, i);
+                PMC(CH(i, k, 0), c3, t2, t3)
+                PMC(c2, c4, t1, t4)
+                A_EQ_CB_MUL_C(CH(i, k, 1), wa0, c2)
+                A_EQ_CB_MUL_C(CH(i, k, 2), wa1, c3)
+                A_EQ_CB_MUL_C(CH(i, k, 3), wa2, c4)
             }
         }
 }
 
-#define PREP5(idx) \
-        cmplx t0 = CC(idx,0,k), t1, t2, t3, t4; \
-        PMC (t1,t4,CC(idx,1,k),CC(idx,4,k)) \
-        PMC (t2,t3,CC(idx,2,k),CC(idx,3,k)) \
-        CH(idx,k,0).r=t0.r+t1.r+t2.r; \
-        CH(idx,k,0).i=t0.i+t1.i+t2.i;
+#define PREP5(idx)                                  \
+        cmplx t0 = CC(idx, 0, k), t1, t2, t3, t4;   \
+        PMC(t1, t4, CC(idx, 1, k), CC(idx, 4, k))   \
+        PMC(t2, t3, CC(idx, 2, k), CC(idx, 3, k))   \
+        CH(idx, k, 0).r = t0.r + t1.r + t2.r;       \
+        CH(idx, k, 0).i = t0.i + t1.i + t2.i;
 
-#define PARTSTEP5a(u1,u2,twar,twbr,twai,twbi) \
-        { \
-        cmplx ca,cb; \
-        ca.r=t0.r+twar*t1.r+twbr*t2.r; \
-        ca.i=t0.i+twar*t1.i+twbr*t2.i; \
-        cb.i=twai*t4.r twbi*t3.r; \
-        cb.r=-(twai*t4.i twbi*t3.i); \
-        PMC(CH(0,k,u1),CH(0,k,u2),ca,cb) \
-        }
+#define PARTSTEP5a(u1, u2, twar, twbr, twai, twbi)  \
+    {                                               \
+        cmplx ca, cb;                               \
+        ca.r = t0.r + twar * t1.r + twbr * t2.r;    \
+        ca.i = t0.i + twar * t1.i + twbr * t2.i;    \
+        cb.i = twai * t4.r twbi * t3.r;             \
+        cb.r = -(twai * t4.i twbi * t3.i);          \
+        PMC(CH(0, k, u1), CH(0, k, u2), ca, cb)     \
+    }
 
-#define PARTSTEP5b(u1,u2,twar,twbr,twai,twbi) \
-        { \
-        cmplx ca,cb,da,db; \
-        ca.r=t0.r+twar*t1.r+twbr*t2.r; \
-        ca.i=t0.i+twar*t1.i+twbr*t2.i; \
-        cb.i=twai*t4.r twbi*t3.r; \
-        cb.r=-(twai*t4.i twbi*t3.i); \
-        PMC(da,db,ca,cb) \
-        A_EQ_B_MUL_C (CH(i,k,u1),WA(u1-1,i),da) \
-        A_EQ_B_MUL_C (CH(i,k,u2),WA(u2-1,i),db) \
-        }
+#define PARTSTEP5b(u1, u2, twar, twbr, twai, twbi)      \
+    {                                                   \
+        cmplx ca, cb, da, db;                           \
+        ca.r = t0.r + twar * t1.r + twbr * t2.r;        \
+        ca.i = t0.i + twar * t1.i + twbr * t2.i;        \
+        cb.i = twai * t4.r twbi * t3.r;                 \
+        cb.r = -(twai * t4.i twbi * t3.i);              \
+        PMC(da, db, ca, cb)                             \
+        A_EQ_B_MUL_C(CH(i, k, u1), WA(u1 - 1, i), da)   \
+        A_EQ_B_MUL_C(CH(i, k, u2), WA(u2 - 1, i), db)   \
+    }
 
-NOINLINE static void pass5b (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass5b(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=5;
+    const size_t cdim = 5;
     const double tw1r= 0.3090169943749474241,
-                  tw1i= 0.95105651629515357212,
-                  tw2r= -0.8090169943749474241,
-                  tw2i= 0.58778525229247312917;
+                 tw1i= 0.95105651629515357212,
+                 tw2r= -0.8090169943749474241,
+                 tw2i= 0.58778525229247312917;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP5(0)
-            PARTSTEP5a(1,4,tw1r,tw2r,+tw1i,+tw2i)
-            PARTSTEP5a(2,3,tw2r,tw1r,+tw2i,-tw1i)
+            PARTSTEP5a(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+            PARTSTEP5a(2, 3, tw2r, tw1r, +tw2i, -tw1i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP5(0)
-                PARTSTEP5a(1,4,tw1r,tw2r,+tw1i,+tw2i)
-                PARTSTEP5a(2,3,tw2r,tw1r,+tw2i,-tw1i)
+                PARTSTEP5a(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+                PARTSTEP5a(2, 3, tw2r, tw1r, +tw2i, -tw1i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP5(i)
-                PARTSTEP5b(1,4,tw1r,tw2r,+tw1i,+tw2i)
-                PARTSTEP5b(2,3,tw2r,tw1r,+tw2i,-tw1i)
+                PARTSTEP5b(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+                PARTSTEP5b(2, 3, tw2r, tw1r, +tw2i, -tw1i)
             }
         }
 }
@@ -572,72 +577,72 @@ NOINLINE static void pass5b (size_t ido, size_t l1, const cmplx * restrict cc,
         A_EQ_CB_MUL_C (CH(i,k,u2),WA(u2-1,i),db) \
         }
 
-NOINLINE static void pass5f (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa)
+NOINLINE static void pass5f(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa)
 {
-    const size_t cdim=5;
+    const size_t cdim = 5;
     const double tw1r= 0.3090169943749474241,
                  tw1i= -0.95105651629515357212,
                  tw2r= -0.8090169943749474241,
                  tw2i= -0.58778525229247312917;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP5(0)
-            PARTSTEP5a(1,4,tw1r,tw2r,+tw1i,+tw2i)
-            PARTSTEP5a(2,3,tw2r,tw1r,+tw2i,-tw1i)
+            PARTSTEP5a(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+            PARTSTEP5a(2, 3, tw2r, tw1r, +tw2i, -tw1i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP5(0)
-                PARTSTEP5a(1,4,tw1r,tw2r,+tw1i,+tw2i)
-                PARTSTEP5a(2,3,tw2r,tw1r,+tw2i,-tw1i)
+                PARTSTEP5a(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+                PARTSTEP5a(2, 3, tw2r, tw1r, +tw2i, -tw1i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP5(i)
-                PARTSTEP5f(1,4,tw1r,tw2r,+tw1i,+tw2i)
-                PARTSTEP5f(2,3,tw2r,tw1r,+tw2i,-tw1i)
+                PARTSTEP5f(1, 4, tw1r, tw2r, +tw1i, +tw2i)
+                PARTSTEP5f(2, 3, tw2r, tw1r, +tw2i, -tw1i)
             }
         }
 }
 
-#define PREP7(idx) \
-        cmplx t1 = CC(idx,0,k), t2, t3, t4, t5, t6, t7; \
-        PMC (t2,t7,CC(idx,1,k),CC(idx,6,k)) \
-        PMC (t3,t6,CC(idx,2,k),CC(idx,5,k)) \
-        PMC (t4,t5,CC(idx,3,k),CC(idx,4,k)) \
-        CH(idx,k,0).r=t1.r+t2.r+t3.r+t4.r; \
-        CH(idx,k,0).i=t1.i+t2.i+t3.i+t4.i;
+#define PREP7(idx)                                          \
+        cmplx t1 = CC(idx, 0, k), t2, t3, t4, t5, t6, t7;   \
+        PMC(t2, t7, CC(idx, 1, k), CC(idx, 6,k))            \
+        PMC(t3, t6, CC(idx, 2, k), CC(idx, 5,k))            \
+        PMC(t4, t5, CC(idx, 3, k), CC(idx, 4,k))            \
+        CH(idx,k,0).r = t1.r + t2.r + t3.r + t4.r;          \
+        CH(idx,k,0).i = t1.i + t2.i + t3.i + t4.i;
 
-#define PARTSTEP7a0(u1,u2,x1,x2,x3,y1,y2,y3,out1,out2) \
-        { \
-        cmplx ca,cb; \
-        ca.r=t1.r+x1*t2.r+x2*t3.r+x3*t4.r; \
-        ca.i=t1.i+x1*t2.i+x2*t3.i+x3*t4.i; \
-        cb.i=y1*t7.r y2*t6.r y3*t5.r; \
-        cb.r=-(y1*t7.i y2*t6.i y3*t5.i); \
-        PMC(out1,out2,ca,cb) \
-        }
+#define PARTSTEP7a0(u1, u2, x1, x2, x3, y1, y2, y3, out1, out2) \
+    {                                                           \
+        cmplx ca, cb;                                           \
+        ca.r = t1.r + x1 * t2.r + x2 * t3.r + x3 * t4.r;        \
+        ca.i = t1.i + x1 * t2.i + x2 * t3.i + x3 * t4.i;        \
+        cb.i = y1 * t7.r y2 * t6.r y3 * t5.r;                   \
+        cb.r = -(y1 * t7.i y2 * t6.i y3 * t5.i);                \
+        PMC(out1, out2, ca, cb)                                 \
+    }
 
-#define PARTSTEP7a(u1,u2,x1,x2,x3,y1,y2,y3) \
-        PARTSTEP7a0(u1,u2,x1,x2,x3,y1,y2,y3,CH(0,k,u1),CH(0,k,u2))
+#define PARTSTEP7a(u1, u2, x1, x2, x3, y1, y2, y3) \
+        PARTSTEP7a0(u1, u2, x1, x2, x3, y1, y2, y3, CH(0, k, u1), CH(0, k, u2))
 
-#define PARTSTEP7(u1,u2,x1,x2,x3,y1,y2,y3) \
-        { \
-        cmplx da,db; \
-        PARTSTEP7a0(u1,u2,x1,x2,x3,y1,y2,y3,da,db) \
-        MULPMSIGNC (CH(i,k,u1),WA(u1-1,i),da) \
-        MULPMSIGNC (CH(i,k,u2),WA(u2-1,i),db) \
-        }
+#define PARTSTEP7(u1, u2, x1, x2, x3, y1, y2, y3)   \
+    {                                               \
+        cmplx da, db;                               \
+        PARTSTEP7a0(u1,u2,x1,x2,x3,y1,y2,y3,da,db)  \
+        MULPMSIGNC(CH(i, k, u1), WA(u1 - 1, i), da) \
+        MULPMSIGNC(CH(i, k, u2), WA(u2 - 1, i), db) \
+    }
 
-NOINLINE static void pass7(size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa, const int sign)
+NOINLINE static void pass7(size_t ido, size_t l1, const cmplx *restrict cc,
+                           cmplx *restrict ch, const cmplx *restrict wa, const int sign)
 {
-    const size_t cdim=7;
+    const size_t cdim = 7;
     const double tw1r= 0.623489801858733530525,
                  tw1i= sign * 0.7818314824680298087084,
                  tw2r= -0.222520933956314404289,
@@ -645,68 +650,68 @@ NOINLINE static void pass7(size_t ido, size_t l1, const cmplx * restrict cc,
                  tw3r= -0.9009688679024191262361,
                  tw3i= sign * 0.4338837391175581204758;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP7(0)
-            PARTSTEP7a(1,6,tw1r,tw2r,tw3r,+tw1i,+tw2i,+tw3i)
-            PARTSTEP7a(2,5,tw2r,tw3r,tw1r,+tw2i,-tw3i,-tw1i)
-            PARTSTEP7a(3,4,tw3r,tw1r,tw2r,+tw3i,-tw1i,+tw2i)
+            PARTSTEP7a(1, 6, tw1r, tw2r, tw3r, +tw1i, +tw2i, +tw3i)
+            PARTSTEP7a(2, 5, tw2r, tw3r, tw1r, +tw2i, -tw3i, -tw1i)
+            PARTSTEP7a(3, 4, tw3r, tw1r, tw2r, +tw3i, -tw1i, +tw2i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP7(0)
-                PARTSTEP7a(1,6,tw1r,tw2r,tw3r,+tw1i,+tw2i,+tw3i)
-                PARTSTEP7a(2,5,tw2r,tw3r,tw1r,+tw2i,-tw3i,-tw1i)
-                PARTSTEP7a(3,4,tw3r,tw1r,tw2r,+tw3i,-tw1i,+tw2i)
+                PARTSTEP7a(1, 6, tw1r, tw2r, tw3r, +tw1i, +tw2i, +tw3i)
+                PARTSTEP7a(2, 5, tw2r, tw3r, tw1r, +tw2i, -tw3i, -tw1i)
+                PARTSTEP7a(3, 4, tw3r, tw1r, tw2r, +tw3i, -tw1i, +tw2i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP7(i)
-                PARTSTEP7(1,6,tw1r,tw2r,tw3r,+tw1i,+tw2i,+tw3i)
-                PARTSTEP7(2,5,tw2r,tw3r,tw1r,+tw2i,-tw3i,-tw1i)
-                PARTSTEP7(3,4,tw3r,tw1r,tw2r,+tw3i,-tw1i,+tw2i)
+                PARTSTEP7(1, 6, tw1r, tw2r, tw3r, +tw1i, +tw2i, +tw3i)
+                PARTSTEP7(2, 5, tw2r, tw3r, tw1r, +tw2i, -tw3i, -tw1i)
+                PARTSTEP7(3, 4, tw3r, tw1r, tw2r, +tw3i, -tw1i, +tw2i)
             }
         }
 }
 
-#define PREP11(idx) \
-        cmplx t1 = CC(idx,0,k), t2, t3, t4, t5, t6, t7, t8, t9, t10, t11; \
-        PMC (t2,t11,CC(idx,1,k),CC(idx,10,k)) \
-        PMC (t3,t10,CC(idx,2,k),CC(idx, 9,k)) \
-        PMC (t4,t9 ,CC(idx,3,k),CC(idx, 8,k)) \
-        PMC (t5,t8 ,CC(idx,4,k),CC(idx, 7,k)) \
-        PMC (t6,t7 ,CC(idx,5,k),CC(idx, 6,k)) \
-        CH(idx,k,0).r=t1.r+t2.r+t3.r+t4.r+t5.r+t6.r; \
-        CH(idx,k,0).i=t1.i+t2.i+t3.i+t4.i+t5.i+t6.i;
+#define PREP11(idx)                                                         \
+        cmplx t1 = CC(idx, 0, k), t2, t3, t4, t5, t6, t7, t8, t9, t10, t11; \
+        PMC(t2, t11, CC(idx, 1, k), CC(idx, 10, k))                         \
+        PMC(t3, t10, CC(idx, 2, k), CC(idx,  9, k))                         \
+        PMC(t4,  t9, CC(idx, 3, k), CC(idx,  8, k))                         \
+        PMC(t5,  t8, CC(idx, 4, k), CC(idx,  7, k))                         \
+        PMC(t6,  t7, CC(idx, 5, k), CC(idx,  6, k))                         \
+        CH(idx, k, 0).r = t1.r + t2.r + t3.r + t4.r + t5.r + t6.r;          \
+        CH(idx, k, 0).i = t1.i + t2.i + t3.i + t4.i + t5.i + t6.i;
 
-#define PARTSTEP11a0(u1,u2,x1,x2,x3,x4,x5,y1,y2,y3,y4,y5,out1,out2) \
-        { \
-        cmplx ca,cb; \
-        ca.r=t1.r+x1*t2.r+x2*t3.r+x3*t4.r+x4*t5.r+x5*t6.r; \
-        ca.i=t1.i+x1*t2.i+x2*t3.i+x3*t4.i+x4*t5.i+x5*t6.i; \
-        cb.i=y1*t11.r y2*t10.r y3*t9.r y4*t8.r y5*t7.r; \
-        cb.r=-(y1*t11.i y2*t10.i y3*t9.i y4*t8.i y5*t7.i ); \
-        PMC(out1,out2,ca,cb) \
-        }
+#define PARTSTEP11a0(u1, u2, x1, x2, x3, x4, x5, y1, y2, y3, y4, y5, out1, out2)\
+    {                                                                           \
+        cmplx ca, cb;                                                           \
+        ca.r = t1.r + x1 * t2.r + x2 * t3.r + x3 * t4.r + x4 * t5.r + x5 * t6.r;\
+        ca.i = t1.i + x1 * t2.i + x2 * t3.i + x3 * t4.i + x4 * t5.i + x5 * t6.i;\
+        cb.i = y1 * t11.r y2 * t10.r y3 * t9.r y4 * t8.r y5 * t7.r;             \
+        cb.r = -(y1 * t11.i y2 * t10.i y3 * t9.i y4 * t8.i y5 * t7.i);          \
+        PMC(out1, out2, ca, cb)                                                 \
+    }
 
-#define PARTSTEP11a(u1,u2,x1,x2,x3,x4,x5,y1,y2,y3,y4,y5) \
-        PARTSTEP11a0(u1,u2,x1,x2,x3,x4,x5,y1,y2,y3,y4,y5,CH(0,k,u1),CH(0,k,u2))
+#define PARTSTEP11a(u1, u2, x1, x2, x3, x4, x5, y1, y2, y3, y4, y5) \
+        PARTSTEP11a0(u1, u2, x1, x2, x3, x4, x5, y1, y2, y3, y4, y5, CH(0, k, u1), CH(0, k, u2))
 
-#define PARTSTEP11(u1,u2,x1,x2,x3,x4,x5,y1,y2,y3,y4,y5) \
-        { \
-        cmplx da,db; \
-        PARTSTEP11a0(u1,u2,x1,x2,x3,x4,x5,y1,y2,y3,y4,y5,da,db) \
-        MULPMSIGNC (CH(i,k,u1),WA(u1-1,i),da) \
-        MULPMSIGNC (CH(i,k,u2),WA(u2-1,i),db) \
-        }
+#define PARTSTEP11(u1, u2, x1, x2, x3, x4, x5, y1, y2, y3, y4, y5)          \
+    {                                                                       \
+        cmplx da, db;                                                       \
+        PARTSTEP11a0(u1, u2, x1, x2, x3, x4, x5, y1, y2, y3, y4, y5, da, db)\
+        MULPMSIGNC(CH(i, k, u1), WA(u1 - 1, i), da)                         \
+        MULPMSIGNC(CH(i, k, u2), WA(u2 - 1, i), db)                         \
+    }
 
-NOINLINE static void pass11 (size_t ido, size_t l1, const cmplx * restrict cc,
-    cmplx * restrict ch, const cmplx * restrict wa, const int sign)
+NOINLINE static void pass11(size_t ido, size_t l1, const cmplx *restrict cc,
+                            cmplx *restrict ch, const cmplx *restrict wa, const int sign)
 {
-    const size_t cdim=11;
+    const size_t cdim = 11;
     const double tw1r =        0.8412535328311811688618,
                  tw1i = sign * 0.5406408174555975821076,
                  tw2r =        0.4154150130018864255293,
@@ -718,137 +723,135 @@ NOINLINE static void pass11 (size_t ido, size_t l1, const cmplx * restrict cc,
                  tw5r =       -0.9594929736144973898904,
                  tw5i = sign * 0.2817325568414296977114;
 
-    if (ido==1)
-        for (size_t k=0; k<l1; ++k)
+    if (ido == 1)
+        for (size_t k = 0; k < l1; ++k)
         {
             PREP11(0)
-            PARTSTEP11a(1,10,tw1r,tw2r,tw3r,tw4r,tw5r,+tw1i,+tw2i,+tw3i,+tw4i,+tw5i)
-            PARTSTEP11a(2, 9,tw2r,tw4r,tw5r,tw3r,tw1r,+tw2i,+tw4i,-tw5i,-tw3i,-tw1i)
-            PARTSTEP11a(3, 8,tw3r,tw5r,tw2r,tw1r,tw4r,+tw3i,-tw5i,-tw2i,+tw1i,+tw4i)
-            PARTSTEP11a(4, 7,tw4r,tw3r,tw1r,tw5r,tw2r,+tw4i,-tw3i,+tw1i,+tw5i,-tw2i)
-            PARTSTEP11a(5, 6,tw5r,tw1r,tw4r,tw2r,tw3r,+tw5i,-tw1i,+tw4i,-tw2i,+tw3i)
+            PARTSTEP11a(1, 10, tw1r, tw2r, tw3r, tw4r, tw5r, +tw1i, +tw2i, +tw3i, +tw4i, +tw5i)
+            PARTSTEP11a(2,  9, tw2r, tw4r, tw5r, tw3r, tw1r, +tw2i, +tw4i, -tw5i, -tw3i, -tw1i)
+            PARTSTEP11a(3,  8, tw3r, tw5r, tw2r, tw1r, tw4r, +tw3i, -tw5i, -tw2i, +tw1i, +tw4i)
+            PARTSTEP11a(4,  7, tw4r, tw3r, tw1r, tw5r, tw2r, +tw4i, -tw3i, +tw1i, +tw5i, -tw2i)
+            PARTSTEP11a(5,  6, tw5r, tw1r, tw4r, tw2r, tw3r, +tw5i, -tw1i, +tw4i, -tw2i, +tw3i)
         }
     else
-        for (size_t k=0; k<l1; ++k)
+        for (size_t k = 0; k < l1; ++k)
         {
             {
                 PREP11(0)
-                PARTSTEP11a(1,10,tw1r,tw2r,tw3r,tw4r,tw5r,+tw1i,+tw2i,+tw3i,+tw4i,+tw5i)
-                PARTSTEP11a(2, 9,tw2r,tw4r,tw5r,tw3r,tw1r,+tw2i,+tw4i,-tw5i,-tw3i,-tw1i)
-                PARTSTEP11a(3, 8,tw3r,tw5r,tw2r,tw1r,tw4r,+tw3i,-tw5i,-tw2i,+tw1i,+tw4i)
-                PARTSTEP11a(4, 7,tw4r,tw3r,tw1r,tw5r,tw2r,+tw4i,-tw3i,+tw1i,+tw5i,-tw2i)
-                PARTSTEP11a(5, 6,tw5r,tw1r,tw4r,tw2r,tw3r,+tw5i,-tw1i,+tw4i,-tw2i,+tw3i)
+                PARTSTEP11a(1, 10, tw1r, tw2r, tw3r, tw4r, tw5r, +tw1i, +tw2i, +tw3i, +tw4i, +tw5i)
+                PARTSTEP11a(2,  9, tw2r, tw4r, tw5r, tw3r, tw1r, +tw2i, +tw4i, -tw5i, -tw3i, -tw1i)
+                PARTSTEP11a(3,  8, tw3r, tw5r, tw2r, tw1r, tw4r, +tw3i, -tw5i, -tw2i, +tw1i, +tw4i)
+                PARTSTEP11a(4,  7, tw4r, tw3r, tw1r, tw5r, tw2r, +tw4i, -tw3i, +tw1i, +tw5i, -tw2i)
+                PARTSTEP11a(5,  6, tw5r, tw1r, tw4r, tw2r, tw3r, +tw5i, -tw1i, +tw4i, -tw2i, +tw3i)
             }
-            for (size_t i=1; i<ido; ++i)
+            for (size_t i = 1; i < ido; ++i)
             {
                 PREP11(i)
-                PARTSTEP11(1,10,tw1r,tw2r,tw3r,tw4r,tw5r,+tw1i,+tw2i,+tw3i,+tw4i,+tw5i)
-                PARTSTEP11(2, 9,tw2r,tw4r,tw5r,tw3r,tw1r,+tw2i,+tw4i,-tw5i,-tw3i,-tw1i)
-                PARTSTEP11(3, 8,tw3r,tw5r,tw2r,tw1r,tw4r,+tw3i,-tw5i,-tw2i,+tw1i,+tw4i)
-                PARTSTEP11(4, 7,tw4r,tw3r,tw1r,tw5r,tw2r,+tw4i,-tw3i,+tw1i,+tw5i,-tw2i)
-                PARTSTEP11(5, 6,tw5r,tw1r,tw4r,tw2r,tw3r,+tw5i,-tw1i,+tw4i,-tw2i,+tw3i)
+                PARTSTEP11(1, 10, tw1r, tw2r, tw3r, tw4r, tw5r, +tw1i, +tw2i, +tw3i, +tw4i, +tw5i)
+                PARTSTEP11(2,  9, tw2r, tw4r, tw5r, tw3r, tw1r, +tw2i, +tw4i, -tw5i, -tw3i, -tw1i)
+                PARTSTEP11(3,  8, tw3r, tw5r, tw2r, tw1r, tw4r, +tw3i, -tw5i, -tw2i, +tw1i, +tw4i)
+                PARTSTEP11(4,  7, tw4r, tw3r, tw1r, tw5r, tw2r, +tw4i, -tw3i, +tw1i, +tw5i, -tw2i)
+                PARTSTEP11(5,  6, tw5r, tw1r, tw4r, tw2r, tw3r, +tw5i, -tw1i, +tw4i, -tw2i, +tw3i)
             }
         }
 }
 
-#define CX(a,b,c) cc[(a)+ido*((b)+l1*(c))]
-#define CX2(a,b) cc[(a)+idl1*(b)]
-#define CH2(a,b) ch[(a)+idl1*(b)]
+#define CX(a, b, c) cc[(a) + ido * ((b) + l1 * (c))]
+#define CX2(a, b) cc[(a) + idl1 * (b)]
+#define CH2(a, b) ch[(a) + idl1 * (b)]
 
-NOINLINE static int passg (size_t ido, size_t ip, size_t l1,
-    cmplx * restrict cc, cmplx * restrict ch, const cmplx * restrict wa,
-    const cmplx * restrict csarr, const int sign)
+NOINLINE static int passg(size_t ido, size_t ip, size_t l1, cmplx *restrict cc, cmplx *restrict ch,
+                          const cmplx *restrict wa, const cmplx *restrict csarr, const int sign)
 {
-    const size_t cdim=ip;
-    size_t ipph = (ip+1)/2;
-    size_t idl1 = ido*l1;
+    const size_t cdim = ip;
+    size_t ipph = (ip + 1) / 2;
+    size_t idl1 = ido * l1;
 
-    cmplx * restrict wal=MALLOC(cmplx,ip);
+    cmplx *restrict wal = MALLOC(cmplx, ip);
     if (!wal) return -1;
-    wal[0]=(cmplx){1.,0.};
-    for (size_t i=1; i<ip; ++i)
-        wal[i]=(cmplx){csarr[i].r,sign*csarr[i].i};
+    wal[0] = (cmplx){1., 0.};
+    for (size_t i = 1; i < ip; ++i)
+        wal[i] = (cmplx){csarr[i].r, sign * csarr[i].i};
 
-    for (size_t k=0; k<l1; ++k)
-        for (size_t i=0; i<ido; ++i)
-            CH(i,k,0) = CC(i,0,k);
-    for (size_t j=1, jc=ip-1; j<ipph; ++j, --jc)
-        for (size_t k=0; k<l1; ++k)
-            for (size_t i=0; i<ido; ++i)
-                PMC(CH(i,k,j),CH(i,k,jc),CC(i,j,k),CC(i,jc,k))
-    for (size_t k=0; k<l1; ++k)
-        for (size_t i=0; i<ido; ++i)
+    for (size_t k = 0; k < l1; ++k)
+        for (size_t i = 0; i < ido; ++i)
+            CH(i, k, 0) = CC(i, 0, k);
+    for (size_t j = 1, jc = ip - 1; j < ipph; ++j, --jc)
+        for (size_t k = 0; k < l1; ++k)
+            for (size_t i = 0; i < ido; ++i)
+                PMC(CH(i, k, j), CH(i, k, jc), CC(i, j, k), CC(i, jc, k))
+    for (size_t k = 0; k < l1; ++k)
+        for (size_t i = 0; i < ido; ++i)
         {
-            cmplx tmp = CH(i,k,0);
-            for (size_t j=1; j<ipph; ++j)
-                ADDC(tmp,tmp,CH(i,k,j))
-            CX(i,k,0) = tmp;
+            cmplx tmp = CH(i, k, 0);
+            for (size_t j = 1; j < ipph; ++j)
+                ADDC(tmp, tmp, CH(i, k, j))
+            CX(i, k, 0) = tmp;
         }
     for (size_t l=1, lc=ip-1; l<ipph; ++l, --lc)
     {
-        // j=0
-        for (size_t ik=0; ik<idl1; ++ik)
+        // j = 0
+        for (size_t ik = 0; ik < idl1; ++ik)
         {
-            CX2(ik,l).r = CH2(ik,0).r+wal[l].r*CH2(ik,1).r+wal[2*l].r*CH2(ik,2).r;
-            CX2(ik,l).i = CH2(ik,0).i+wal[l].r*CH2(ik,1).i+wal[2*l].r*CH2(ik,2).i;
-            CX2(ik,lc).r=-wal[l].i*CH2(ik,ip-1).i-wal[2*l].i*CH2(ik,ip-2).i;
-            CX2(ik,lc).i=wal[l].i*CH2(ik,ip-1).r+wal[2*l].i*CH2(ik,ip-2).r;
+            CX2(ik, l).r = CH2(ik, 0).r + wal[l].r * CH2(ik, 1).r + wal[2 * l].r * CH2(ik, 2).r;
+            CX2(ik, l).i = CH2(ik, 0).i + wal[l].r * CH2(ik, 1).i + wal[2 * l].r * CH2(ik, 2).i;
+            CX2(ik, lc).r = -wal[l].i * CH2(ik, ip - 1).i - wal[2 * l].i * CH2(ik, ip - 2).i;
+            CX2(ik, lc).i =  wal[l].i * CH2(ik, ip - 1).r + wal[2 * l].i * CH2(ik, ip - 2).r;
         }
 
-        size_t iwal=2*l;
-        size_t j=3, jc=ip-3;
-        for (; j<ipph-1; j+=2, jc-=2)
+        size_t iwal = 2 * l, j, jc;
+        for (j = 3, jc = ip - 3; j < ipph - 1; j += 2, jc -= 2)
         {
-            iwal+=l; if (iwal>ip) iwal-=ip;
-            cmplx xwal=wal[iwal];
-            iwal+=l; if (iwal>ip) iwal-=ip;
-            cmplx xwal2=wal[iwal];
-            for (size_t ik=0; ik<idl1; ++ik)
+            iwal +=l ; if (iwal > ip) iwal -= ip;
+            cmplx xwal = wal[iwal];
+            iwal += l; if (iwal > ip) iwal -= ip;
+            cmplx xwal2 = wal[iwal];
+            for (size_t ik = 0; ik < idl1; ++ik)
             {
-                CX2(ik,l).r += CH2(ik,j).r*xwal.r+CH2(ik,j+1).r*xwal2.r;
-                CX2(ik,l).i += CH2(ik,j).i*xwal.r+CH2(ik,j+1).i*xwal2.r;
-                CX2(ik,lc).r -= CH2(ik,jc).i*xwal.i+CH2(ik,jc-1).i*xwal2.i;
-                CX2(ik,lc).i += CH2(ik,jc).r*xwal.i+CH2(ik,jc-1).r*xwal2.i;
+                CX2(ik, l).r  += CH2(ik,  j).r * xwal.r + CH2(ik,  j + 1).r * xwal2.r;
+                CX2(ik, l).i  += CH2(ik,  j).i * xwal.r + CH2(ik,  j + 1).i * xwal2.r;
+                CX2(ik, lc).r -= CH2(ik, jc).i * xwal.i + CH2(ik, jc - 1).i * xwal2.i;
+                CX2(ik, lc).i += CH2(ik, jc).r * xwal.i + CH2(ik, jc - 1).r * xwal2.i;
             }
         }
-        for (; j<ipph; ++j, --jc)
+        for (; j < ipph; ++j, --jc)
         {
-            iwal+=l; if (iwal>ip) iwal-=ip;
-            cmplx xwal=wal[iwal];
-            for (size_t ik=0; ik<idl1; ++ik)
+            iwal += l; if (iwal > ip) iwal -= ip;
+            cmplx xwal = wal[iwal];
+            for (size_t ik = 0; ik < idl1; ++ik)
             {
-                CX2(ik,l).r += CH2(ik,j).r*xwal.r;
-                CX2(ik,l).i += CH2(ik,j).i*xwal.r;
-                CX2(ik,lc).r -= CH2(ik,jc).i*xwal.i;
-                CX2(ik,lc).i += CH2(ik,jc).r*xwal.i;
+                CX2(ik,  l).r += CH2(ik,  j).r * xwal.r;
+                CX2(ik,  l).i += CH2(ik,  j).i * xwal.r;
+                CX2(ik, lc).r -= CH2(ik, jc).i * xwal.i;
+                CX2(ik, lc).i += CH2(ik, jc).r * xwal.i;
             }
         }
     }
     DEALLOC(wal);
 
     // shuffling and twiddling
-    if (ido==1)
-        for (size_t j=1, jc=ip-1; j<ipph; ++j, --jc)
-            for (size_t ik=0; ik<idl1; ++ik)
+    if (ido == 1)
+        for (size_t j = 1, jc = ip - 1; j < ipph; ++j, --jc)
+            for (size_t ik = 0; ik < idl1; ++ik)
             {
-                cmplx t1=CX2(ik,j), t2=CX2(ik,jc);
-                PMC(CX2(ik,j),CX2(ik,jc),t1,t2)
+                cmplx t1 = CX2(ik, j), t2 = CX2(ik, jc);
+                PMC(CX2(ik, j), CX2(ik, jc), t1, t2)
             }
     else
     {
-        for (size_t j=1, jc=ip-1; j<ipph; ++j,--jc)
-            for (size_t k=0; k<l1; ++k)
+        for (size_t j = 1, jc = ip - 1; j < ipph; ++j,--jc)
+            for (size_t k = 0; k < l1; ++k)
             {
-                cmplx t1=CX(0,k,j), t2=CX(0,k,jc);
-                PMC(CX(0,k,j),CX(0,k,jc),t1,t2)
-                for (size_t i=1; i<ido; ++i)
+                cmplx t1 = CX(0, k, j), t2 = CX(0, k, jc);
+                PMC(CX(0, k, j), CX(0, k, jc), t1, t2)
+                for (size_t i = 1; i < ido; ++i)
                 {
                     cmplx x1, x2;
-                    PMC(x1,x2,CX(i,k,j),CX(i,k,jc))
-                    size_t idij=(j-1)*(ido-1)+i-1;
-                    MULPMSIGNC (CX(i,k,j),wa[idij],x1)
-                    idij=(jc-1)*(ido-1)+i-1;
-                    MULPMSIGNC (CX(i,k,jc),wa[idij],x2)
+                    PMC(x1, x2, CX(i, k, j), CX(i, k, jc))
+                    size_t idij = (j - 1) * (ido - 1) + i - 1;
+                    MULPMSIGNC(CX(i, k, j), wa[idij], x1)
+                    idij = (jc - 1) * (ido - 1) + i - 1;
+                    MULPMSIGNC(CX(i, k, jc), wa[idij], x2)
                 }
             }
     }
@@ -859,58 +862,57 @@ NOINLINE static int passg (size_t ido, size_t ip, size_t l1,
 #undef CX2
 #undef CX
 
-NOINLINE WARN_UNUSED_RESULT static int pass_all(cfftp_plan plan, cmplx c[], double fct,
-    const int sign)
+NOINLINE WARN_UNUSED_RESULT static int pass_all(cfftp_plan plan, cmplx c[], double fct, const int sign)
 {
-    if (plan->length==1) return 0;
-    size_t len=plan->length;
-    size_t l1=1, nf=plan->nfct;
+    if (plan->length == 1) return 0;
+    size_t len = plan->length;
+    size_t l1 = 1, nf = plan->nfct;
     cmplx *ch = MALLOC(cmplx, len);
     if (!ch) return -1;
-    cmplx *p1=c, *p2=ch;
+    cmplx *p1 = c, *p2 = ch;
 
-    for(size_t k1=0; k1<nf; k1++)
+    for(size_t k1 = 0; k1 < nf; k1++)
     {
-        size_t ip=plan->fct[k1].fct;
-        size_t l2=ip*l1;
-        size_t ido = len/l2;
-        if     (ip==4)
-            sign>0 ? pass4b (ido, l1, p1, p2, plan->fct[k1].tw)
-                   : pass4f (ido, l1, p1, p2, plan->fct[k1].tw);
-        else if(ip==2)
-            sign>0 ? pass2b (ido, l1, p1, p2, plan->fct[k1].tw)
-                   : pass2f (ido, l1, p1, p2, plan->fct[k1].tw);
-        else if(ip==3)
-            sign>0 ? pass3b (ido, l1, p1, p2, plan->fct[k1].tw)
-                   : pass3f (ido, l1, p1, p2, plan->fct[k1].tw);
-        else if(ip==5)
-            sign>0 ? pass5b (ido, l1, p1, p2, plan->fct[k1].tw)
-                   : pass5f (ido, l1, p1, p2, plan->fct[k1].tw);
-        else if(ip==7)  pass7 (ido, l1, p1, p2, plan->fct[k1].tw, sign);
-        else if(ip==11) pass11(ido, l1, p1, p2, plan->fct[k1].tw, sign);
+        size_t ip = plan->fct[k1].fct;
+        size_t l2 = ip * l1;
+        size_t ido = len / l2;
+        if      (ip == 4)
+            sign > 0 ? pass4b(ido, l1, p1, p2, plan->fct[k1].tw)
+                     : pass4f(ido, l1, p1, p2, plan->fct[k1].tw);
+        else if (ip == 2)
+            sign > 0 ? pass2b(ido, l1, p1, p2, plan->fct[k1].tw)
+                     : pass2f(ido, l1, p1, p2, plan->fct[k1].tw);
+        else if (ip == 3)
+            sign > 0 ? pass3b(ido, l1, p1, p2, plan->fct[k1].tw)
+                     : pass3f(ido, l1, p1, p2, plan->fct[k1].tw);
+        else if (ip == 5)
+            sign > 0 ? pass5b(ido, l1, p1, p2, plan->fct[k1].tw)
+                     : pass5f(ido, l1, p1, p2, plan->fct[k1].tw);
+        else if (ip ==  7)  pass7(ido, l1, p1, p2, plan->fct[k1].tw, sign);
+        else if (ip == 11) pass11(ido, l1, p1, p2, plan->fct[k1].tw, sign);
         else
         {
             if (passg(ido, ip, l1, p1, p2, plan->fct[k1].tw, plan->fct[k1].tws, sign))
-            { DEALLOC(ch); return -1; }
-            SWAP(p1,p2,cmplx *);
+            {DEALLOC(ch); return -1;}
+            SWAP(p1, p2, cmplx *);
         }
-        SWAP(p1,p2,cmplx *);
+        SWAP(p1, p2, cmplx *);
         l1=l2;
     }
-    if (p1!=c)
+    if (p1 != c)
     {
-        if (fct!=1.)
-            for (size_t i=0; i<len; ++i)
+        if (fct != 1.0)
+            for (size_t i = 0; i < len; ++i)
             {
-                c[i].r = ch[i].r*fct;
-                c[i].i = ch[i].i*fct;
+                c[i].r = ch[i].r * fct;
+                c[i].i = ch[i].i * fct;
             }
             else
-                memcpy (c,p1,len*sizeof(cmplx));
+                memcpy(c, p1, len * sizeof(cmplx));
     }
     else
-        if (fct!=1.)
-            for (size_t i=0; i<len; ++i)
+        if (fct != 1.0)
+            for (size_t i = 0; i < len; ++i)
             {
                 c[i].r *= fct;
                 c[i].i *= fct;
@@ -933,116 +935,119 @@ NOINLINE WARN_UNUSED_RESULT static int pass_all(cfftp_plan plan, cmplx c[], doub
 #undef ADDC
 #undef PMC
 
-NOINLINE WARN_UNUSED_RESULT
-static int cfftp_forward(cfftp_plan plan, double c[], double fct)
-{ return pass_all(plan,(cmplx *)c, fct, -1); }
-
-NOINLINE WARN_UNUSED_RESULT
-static int cfftp_backward(cfftp_plan plan, double c[], double fct)
-{ return pass_all(plan,(cmplx *)c, fct, 1); }
-
-NOINLINE WARN_UNUSED_RESULT
-static int cfftp_factorize (cfftp_plan plan)
+NOINLINE WARN_UNUSED_RESULT static int cfftp_forward(cfftp_plan plan, double c[], double fct)
 {
-    size_t length=plan->length;
-    size_t nfct=0;
-    while ((length%4)==0)
-    { if (nfct>=NFCT) return -1; plan->fct[nfct++].fct=4; length>>=2; }
-    if ((length%2)==0)
+    return pass_all(plan, (cmplx *)c, fct, -1);
+}
+
+NOINLINE WARN_UNUSED_RESULT static int cfftp_backward(cfftp_plan plan, double c[], double fct)
+{
+    return pass_all(plan, (cmplx *)c, fct, 1);
+}
+
+NOINLINE WARN_UNUSED_RESULT static int cfftp_factorize(cfftp_plan plan)
+{
+    size_t length = plan->length;
+    size_t nfct = 0;
+    while ((length % 4) == 0)
     {
-        length>>=1;
-        // factor 2 should be at the front of the factor list
-        if (nfct>=NFCT) return -1;
-        plan->fct[nfct++].fct=2;
-        SWAP(plan->fct[0].fct, plan->fct[nfct-1].fct,size_t);
+        if (nfct >= NFCT) return -1;
+        plan->fct[nfct++].fct = 4; length >>= 2;
     }
-    size_t maxl=(size_t)(sqrt((double)length))+1;
-    for (size_t divisor=3; (length>1)&&(divisor<maxl); divisor+=2)
-        if ((length%divisor)==0)
+    if ((length % 2) == 0)
+    {
+        length >>= 1;
+        // factor 2 should be at the front of the factor list
+        if (nfct >= NFCT) return -1;
+        plan->fct[nfct++].fct = 2;
+        SWAP(plan->fct[0].fct, plan->fct[nfct - 1].fct, size_t);
+    }
+    size_t maxl = (size_t)(sqrt((double)length)) + 1;
+    for (size_t divisor = 3; (length > 1) && (divisor < maxl); divisor += 2)
+        if ((length % divisor) == 0)
         {
-            while ((length%divisor)==0)
+            while ((length % divisor) == 0)
             {
-                if (nfct>=NFCT) return -1;
-                plan->fct[nfct++].fct=divisor;
-                length/=divisor;
+                if (nfct >= NFCT) return -1;
+                plan->fct[nfct++].fct = divisor;
+                length /= divisor;
             }
-            maxl=(size_t)(sqrt((double)length))+1;
+            maxl = (size_t)(sqrt((double)length)) + 1;
         }
-    if (length>1) plan->fct[nfct++].fct=length;
-    plan->nfct=nfct;
+    if (length > 1) plan->fct[nfct++].fct = length;
+    plan->nfct = nfct;
     return 0;
 }
 
-NOINLINE static size_t cfftp_twsize (cfftp_plan plan)
+NOINLINE static size_t cfftp_twsize(cfftp_plan plan)
 {
-    size_t twsize=0, l1=1;
-    for (size_t k=0; k<plan->nfct; ++k)
+    size_t twsize = 0, l1 = 1;
+    for (size_t k=0; k < plan->nfct; ++k)
     {
-        size_t ip=plan->fct[k].fct, ido= plan->length/(l1*ip);
-        twsize+=(ip-1)*(ido-1);
-        if (ip>11)
-            twsize+=ip;
-        l1*=ip;
+        size_t ip = plan->fct[k].fct, ido = plan->length / (l1 * ip);
+        twsize += (ip - 1) * (ido - 1);
+        if (ip > 11) twsize += ip;
+        l1 *= ip;
     }
     return twsize;
 }
 
-NOINLINE WARN_UNUSED_RESULT static int cfftp_comp_twiddle (cfftp_plan plan)
+NOINLINE WARN_UNUSED_RESULT static int cfftp_comp_twiddle(cfftp_plan plan)
 {
-    size_t length=plan->length;
-    double *twid = MALLOC(double, 2*length);
+    size_t length = plan->length;
+    double *twid = MALLOC(double, 2 * length);
     if (!twid) return -1;
     sincos_2pibyn(length, twid);
-    size_t l1=1;
-    size_t memofs=0;
-    for (size_t k=0; k<plan->nfct; ++k)
+    size_t l1 = 1;
+    size_t memofs = 0;
+    for (size_t k = 0; k < plan->nfct; ++k)
     {
-        size_t ip=plan->fct[k].fct, ido= length/(l1*ip);
-        plan->fct[k].tw=plan->mem+memofs;
-        memofs+=(ip-1)*(ido-1);
-        for (size_t j=1; j<ip; ++j)
-            for (size_t i=1; i<ido; ++i)
+        size_t ip = plan->fct[k].fct, ido= length / (l1 * ip);
+        plan->fct[k].tw = plan->mem + memofs;
+        memofs += (ip - 1) * (ido - 1);
+        for (size_t j = 1; j < ip; ++j)
+            for (size_t i = 1; i < ido; ++i)
             {
-                plan->fct[k].tw[(j-1)*(ido-1)+i-1].r = twid[2*j*l1*i];
-                plan->fct[k].tw[(j-1)*(ido-1)+i-1].i = twid[2*j*l1*i+1];
+                plan->fct[k].tw[(j - 1) * (ido - 1) + i - 1].r = twid[2 * j * l1 * i];
+                plan->fct[k].tw[(j - 1) * (ido - 1) + i - 1].i = twid[2 * j * l1 * i + 1];
             }
-        if (ip>11)
+        if (ip > 11)
         {
-            plan->fct[k].tws=plan->mem+memofs;
-            memofs+=ip;
-            for (size_t j=0; j<ip; ++j)
+            plan->fct[k].tws = plan->mem + memofs;
+            memofs += ip;
+            for (size_t j = 0; j < ip; ++j)
             {
-                plan->fct[k].tws[j].r = twid[2*j*l1*ido];
-                plan->fct[k].tws[j].i = twid[2*j*l1*ido+1];
+                plan->fct[k].tws[j].r = twid[2 * j * l1 * ido];
+                plan->fct[k].tws[j].i = twid[2 * j * l1 * ido + 1];
             }
         }
-        l1*=ip;
+        l1 *= ip;
     }
     DEALLOC(twid);
     return 0;
 }
 
-static cfftp_plan make_cfftp_plan (size_t length)
+static cfftp_plan make_cfftp_plan(size_t length)
 {
-    if (length==0) return NULL;
-    cfftp_plan plan = MALLOC(cfftp_plan_i,1);
+    if (length == 0) return NULL;
+    cfftp_plan plan = MALLOC(cfftp_plan_i, 1);
     if (!plan) return NULL;
-    plan->length=length;
-    plan->nfct=0;
-    for (size_t i=0; i<NFCT; ++i)
-        plan->fct[i]=(cfftp_fctdata){0,0,0};
-    plan->mem=0;
-    if (length==1) return plan;
-    if (cfftp_factorize(plan)!=0) { DEALLOC(plan); return NULL; }
-    size_t tws=cfftp_twsize(plan);
-    plan->mem=MALLOC(cmplx,tws);
-    if (!plan->mem) { DEALLOC(plan); return NULL; }
-    if (cfftp_comp_twiddle(plan)!=0)
-        { DEALLOC(plan->mem); DEALLOC(plan); return NULL; }
+    plan->length = length;
+    plan->nfct = 0;
+    for (size_t i = 0; i < NFCT; ++i)
+        plan->fct[i] = (cfftp_fctdata){0, 0, 0};
+    plan->mem = 0;
+    if (length == 1) return plan;
+    if (cfftp_factorize(plan) != 0) {DEALLOC(plan); return NULL;}
+    size_t tws = cfftp_twsize(plan);
+    plan->mem = MALLOC(cmplx, tws);
+    if (!plan->mem) {DEALLOC(plan); return NULL;}
+    if (cfftp_comp_twiddle(plan) != 0)
+        {DEALLOC(plan->mem); DEALLOC(plan); return NULL;}
     return plan;
 }
 
-static void destroy_cfftp_plan (cfftp_plan plan)
+static void destroy_cfftp_plan(cfftp_plan plan)
 {
     DEALLOC(plan->mem);
     DEALLOC(plan);
@@ -2285,7 +2290,7 @@ static NOINLINE int compare_size_t(const void *a, const void *b)
 
 static NOINLINE size_t search_lpre(size_t key)
 {
-    return searchsorted(&key, LPRE, LPRE_SIZE, sizeof(size_t), compare_size_t);
+    return searchsorted(&key, LPRE, LPRE_SIZE, sizeof(size_t), SEARCH_LEFT, compare_size_t);
 }
 
 static size_t find_match(size_t target, size_t p7_11_13)

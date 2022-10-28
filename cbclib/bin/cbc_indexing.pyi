@@ -1,4 +1,3 @@
-from typing import List, Tuple, Union
 import numpy as np
 
 def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
@@ -158,8 +157,8 @@ def cross_entropy(x: np.ndarray, p: np.ndarray, q: np.ndarray, q_max: float, eps
     """
     ...
 
-def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, df_xy: np.ndarray, df_p: np.ndarray, df_hkl: np.ndarray,
-               hkl_idxs: np.ndarray, threshold: float, threads: int=1) -> np.ndarray:
+def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, coord: np.ndarray, prob: np.ndarray, idxs: np.ndarray,
+               threshold: float, threads: int=1) -> np.ndarray:
     """Filter generated diffraction streaks that have the signal-to-noise ratio above ``threshold``.
     The SNR value is calculated as the ratio between the absolute value of background corrected signal
     ``sgn`` and the square root of the background signal ``bgd``.
@@ -167,14 +166,13 @@ def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, df_xy: np.ndarray, df_p: np.nda
     Args:
         sgn : Background corrected measured intensities.
         bgd : Background intensities.
-        df_xy : Coordinates of the generated pattern.
-        df_p : Normalised intensities of the generated pattern.
-        df_hkl : Miller indices of the generated pattern.
-        hkl_idxs : A list of all Miller indices.
+        coord : Coordinates of the generated pattern.
+        prob : Normalised intensities of the generated pattern.
+        idxs : Streak indices of the generated pattern.
         threshold : SNR ratio threshold.
         threads : Number of threads used in the calculations.
 
     Returns:
-        Mask of Miller indices ``hkl_idxs``, True if :code:`SNR > threshold`.
+        A mask of diffraction streaks, True if :code:`SNR > threshold` for the given streak.
     """
     ...

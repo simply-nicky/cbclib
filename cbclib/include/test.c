@@ -4,7 +4,7 @@
 #include "median.h"
 #include "lsd.h"
 #include "img_proc.h"
-#include "smoothers.h"
+#include "sgn_proc.h"
 
 static int test_draw_line();
 static int test_draw_line_index();

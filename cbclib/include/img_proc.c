@@ -3,9 +3,6 @@
 
 #define TOL 3.1425926535897937e-05
 
-#define CLIP(c, a, b)                           \
-    do {(c) = ((c) > (a)) ? (c) : (a); (c) = ((c) < (b)) ? (c) : (b); } while (0)
-
 #define WRAP_DIST(_dist, _dx, _hb, _fb, _div)                   \
     do {float _dx1; if ((_dx) < -(_hb)) _dx1 = (_dx) + (_fb);   \
         else if ((_dx) > (_hb)) _dx1 = (_dx) - (_fb);           \
@@ -125,7 +122,8 @@ static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned 
         pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
         url: http://members.chello.at/~easyfilter/bresenham.html
 ---------------------------------------------------------------------------*/
-static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned int max_val, set_pixel setter, line_profile profile)
+static void plot_line_width(void *out, const size_t *dims, rect rt, float wd, unsigned int max_val,
+                            set_pixel setter, line_profile profile)
 {
     /* plot an anti-aliased line of width wd */
     int dx = abs(rt->x1 - rt->x0), sx = rt->x0 < rt->x1 ? 1 : -1;
@@ -203,8 +201,8 @@ static void plot_line_width(void *out, size_t *dims, rect rt, float wd, unsigned
     DEALLOC(bnd);
 }
 
-int draw_line(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, size_t *ldims,
-               float dilation, line_profile profile)
+int draw_line(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines, const size_t *ldims,
+              float dilation, line_profile profile)
 {
     /* check parameters */
     if (!out || !lines || !profile) {ERROR("draw_line: one of the arguments is NULL."); return -1;}
@@ -239,7 +237,7 @@ int draw_line(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float
 }
 
 int draw_line_index(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
-                      float *lines, size_t *ldims, float dilation, line_profile profile)
+                    float *lines, const size_t *ldims, float dilation, line_profile profile)
 {
     /* check parameters */
     if (!lines || !profile) {ERROR("draw_line_index: lines is NULL."); return -1;}
@@ -376,7 +374,7 @@ static void create_line_image(unsigned int **out, rect orect, size_t Y, size_t X
 }
 
 static float collapse_pair(float *oln, unsigned int *img, rect img_rt, float *data, size_t Y, size_t X,
-    float *ln0, float *ln1, size_t lsize)
+                           float *ln0, float *ln1, size_t lsize)
 {
     int j, k;
     unsigned int *img_j, *img_jk;
@@ -474,7 +472,7 @@ static float find_overlap(unsigned int *img0, rect rt0, unsigned int *img1, rect
 }
 
 int filter_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
-    size_t *ldims, float threshold, float dilation)
+                const size_t *ldims, float threshold, float dilation)
 {
     /* Check parameters */
     if (!olines|| !proc || !ilines) {ERROR("filter_line: one of the arguments is NULL."); return -1;}
@@ -524,8 +522,8 @@ int filter_line(float *olines, unsigned char *proc, float *data, size_t Y, size_
     return 0;
 }
 
-int group_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines, size_t *ldims,
-    float cutoff, float threshold, float dilation)
+int group_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
+               const size_t *ldims, float cutoff, float threshold, float dilation)
 {
     /* Check parameters */
     if (!olines|| !data || !ilines) {ERROR("group_line: one of the arguments is NULL."); return -1;}

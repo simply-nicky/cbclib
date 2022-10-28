@@ -1225,7 +1225,7 @@ typedef struct
     float vx[4];    		/* rectangle's corner X coordinates in circular order */
     float vy[4];    		/* rectangle's corner Y coordinates in circular order */
     float ys, ye;    		/* start and end Y values of current 'column' */
-    int x, y;             	/* coordinates of currently expflored pixel */
+    int x, y;             	/* coordinates of currently explored pixel */
 } rect_iter;
 
 /*----------------------------------------------------------------------------*/
@@ -1293,7 +1293,7 @@ static int ri_end(rect_iter * i)
 
     /* if the current x value is larger than the largest
          x value in the rectangle (vx[2]), we know the full
-         expfloration of the rectangle is finished. */
+         exploration of the rectangle is finished. */
     return (float)(i->x) > i->vx[2];
 }
 
@@ -1307,19 +1307,19 @@ static void ri_inc(rect_iter * i)
     /* check input */
     if (i == NULL) LSD_ERROR("ri_inc: NULL iterator.");
 
-    /* if not at end of expfloration,
+    /* if not at end of exploration,
        increase y value for next pixel in the 'column' */
     if (!ri_end(i)) i->y++;
 
     /* if the end of the current 'column' is reached,
-       and it is not the end of expfloration,
+       and it is not the end of exploration,
        advance to the next 'column' */
     while((float) (i->y) > i->ye && !ri_end(i))
         {
             /* increase x, next 'column' */
             i->x++;
 
-            /* if end of expfloration, return */
+            /* if end of exploration, return */
             if (ri_end(i)) return;
 
             /* update lower y limit (start) for the new 'column'.

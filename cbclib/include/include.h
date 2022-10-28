@@ -47,6 +47,9 @@
 
 #define SQ(x)   ((x) * (x))
 
+#define CLIP(c, a, b) \
+    do {(c) = ((c) > (a)) ? (c) : (a); (c) = ((c) < (b)) ? (c) : (b); } while (0)
+
 #define MALLOC(type, num) \
     ((type *)malloc((num) * sizeof(type)))
 

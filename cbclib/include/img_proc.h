@@ -24,9 +24,9 @@ static inline int quad_profile(int max_val, float err, float wd)
 ---------------------------------------------------------------------------*/
 
 int draw_line(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines,
-    size_t *ldims, float dilation, line_profile profile);
+              const size_t *ldims, float dilation, line_profile profile);
 int draw_line_index(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
-    float *lines, size_t *ldims, float dilation, line_profile profile);
+                    float *lines, const size_t *ldims, float dilation, line_profile profile);
 
 /*-------------------------------------------------------------------------------*/
 /** Filter lines with an image moment MO less then a threshold.
@@ -47,7 +47,7 @@ int draw_line_index(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsi
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
 int filter_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
-    size_t *ldims, float threshold, float dilation);
+                const size_t *ldims, float threshold, float dilation);
 
 /*-------------------------------------------------------------------------------*/
 /** Group a pair of lines into one if the correlation if above the treshold.
@@ -68,7 +68,7 @@ int filter_line(float *olines, unsigned char *proc, float *data, size_t Y, size_
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
 int group_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
-    size_t *ldims, float cutoff, float threshold, float dilation);
+               const size_t *ldims, float cutoff, float threshold, float dilation);
 
 int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats);
 int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats);

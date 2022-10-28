@@ -16,7 +16,7 @@ CBC datasets:
 * :class:`cbclib.Map3D` is the 3D data container used for the Fourier auto-indexing. It stores the measured
   signal in reciprocal space in a rasterised manner and provides a set of utility functions, that supplement
   the auto-indexing algorithm.
-* :class:`cbclib.SampleProblem` is the Sample refinement problem. It employs :class:`cbclib.CBDModel` CBD
+* :class:`cbclib.SampleProblem` is the sample refinement problem. It employs :class:`cbclib.CBDModel` CBD
   pattern prediction to find sample position and alignment, that yields the best fit with the experimentally
   measured pattern. The criterion calculates the marginal log-likelihood, that the experimentally measured
   pattern corresponds to the predicted one.
@@ -29,5 +29,5 @@ Contents
 
     classes/cbc_table
     classes/map_3d
-    classes/fftw
     classes/sample_problem
+    classes/scan_samples

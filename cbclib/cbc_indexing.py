@@ -1,15 +1,18 @@
 from __future__ import annotations
-from typing import (Any, ClassVar, Dict, List, Optional, Set, Tuple, Union)
+from typing import Any, ClassVar, Dict, List, Optional, Set, Tuple, Union
 from dataclasses import InitVar, dataclass, field
 from weakref import ref
 import numpy as np
 import pandas as pd
 from scipy.ndimage import label, center_of_mass, mean
+from tqdm.auto import tqdm
+
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
-                  gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl)
+                  gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl,
+                  unique_indices, find_kins, kr_grid, update_sf, scaling_criterion)
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks
 from .cxi_protocol import Indices
-from .data_container import Transform, Crop, ReferenceType
+from .data_container import DataContainer, Transform, Crop, ReferenceType
 
 @dataclass
 class CBCTable():
@@ -17,6 +20,7 @@ class CBCTable():
     table. A table must contain the following columns:
 
     * `frames` : Frame index.
+    * `index` : Diffraction streak index.
     * `x`, `y` : x and y pixel coordinate.
     * `p` : Normalised pattern value. The value lies in (0.0 - 1.0) interval.
     * `I_raw` : Raw photon count.
@@ -30,7 +34,6 @@ class CBCTable():
         crop : Detector region of interest.
     """
     columns         : ClassVar[Set[str]] = {'frames', 'x', 'y', 'p', 'I_raw', 'sgn', 'bgd'}
-    hkl_columns     : ClassVar[Set[str]] = {'h', 'k', 'l'}
     table           : pd.DataFrame
     setup           : ScanSetup
     crop            : Optional[Crop] = None
@@ -38,13 +41,8 @@ class CBCTable():
     def __post_init__(self):
         if not self.columns.issubset(self.table.columns):
             raise ValueError(f'Dataframe must contain the following columns: {self.columns}')
-        for col in self.hkl_columns:
-            if col not in self.table.columns:
-                self.table[col] = np.nan
         if self.crop is None:
             self.crop = self.get_crop()
-        if not self.isunique():
-            self.reset_index()
 
     @classmethod
     def import_csv(cls, path: str, setup: ScanSetup) -> CBCTable:
@@ -125,13 +123,33 @@ class CBCTable():
         return Crop((self.table['y'].min(), self.table['y'].max() + 1,
                      self.table['x'].min(), self.table['x'].max() + 1))
 
-    def isunique(self) -> bool:
-        """Check if the table index is unique.
+    def generate_kins(self, basis: Basis, samples: ScanSamples, num_threads: int=1) -> np.ndarray:
+        """Convert diffraction pattern locations to incoming wavevectors. The incoming wavevectors
+        are normalised and specify the spatial frequencies of the incoming beam that bring about
+        the diffraction signal measured on the detector.
+
+        Args:
+            basis : Basis vectors of crystal lattice unit cell.
+            samples : Set of scan samples.
+            num_threads : Number of threads used in the calculations.
+
+        Raises:
+            AttributeError : If Miller indices ('h', 'k', 'l') are not present in the CBC table.
 
         Returns:
-            True if the index is unique.
+            A set of incoming wavevectors.
         """
-        return np.unique(self.table.index).size == self.table.index.size
+        if not {'h', 'k', 'l'}.issubset(self.table.columns):
+            raise AttributeError('CBC table is not indexed.')
+        frames, fidxs, _ = unique_indices(frames=self.table['frames'].to_numpy(),
+                                          indices=self.table['index'].to_numpy())
+        smp_df = samples.to_dataframe()
+        return find_kins(x=self.table['x'].to_numpy(), y=self.table['y'].to_numpy(),
+                         hkl=self.table[['h', 'k', 'l']].to_numpy(), fidxs=fidxs,
+                         smp_pos=smp_df.iloc[frames, 9:].to_numpy(),
+                         rot_mat=smp_df.iloc[frames, :9].to_numpy(), basis=basis.mat,
+                         x_pixel_size=self.setup.x_pixel_size,
+                         y_pixel_size=self.setup.y_pixel_size, num_threads=num_threads)
 
     def pattern_dataframe(self, frame: int) -> pd.DataFrame:
         """Return a single pattern table. The `x`, `y` coordinates are transformed by the ``crop``
@@ -179,8 +197,8 @@ class CBCTable():
         pattern[df_frame['y'], df_frame['x']] = df_frame['p']
         return pattern
 
-    def refine_indexing(self, frame: int, bounds: Tuple[float, float, float], basis: Basis,
-                        sample: Sample, q_abs: float, width: float, alpha: float=0.0) -> SampleProblem:
+    def refine(self, frame: int, bounds: Tuple[float, float, float], basis: Basis,
+               sample: Sample, q_abs: float, width: float, alpha: float=0.0) -> SampleProblem:
         """Return a :class:`SampleProblem` problem designed to perform the sample refinement.
         Indexing refinement yields a :class:`Sample` object, that attains the best fit between the
         predicted pattern and the pattern from this CBC table.
@@ -203,7 +221,7 @@ class CBCTable():
 
                 Each of the terms is diregarded in the refinement process, if the corresponding
                 bound is equal to 0.
-            basis : Basis vectors of lattice unit cell.
+            basis : Basis vectors of crystal lattice unit cell.
             sample : Sample object. The object is given by the rotation matrix and a sample
                 position.
             q_abs : Size of the recpirocal space. Reciprocal vectors are normalised, and span in
@@ -219,13 +237,39 @@ class CBCTable():
             cbclib.SampleProblem : CBC sample refinement problem.
         """
         return SampleProblem(bounds=bounds, basis=basis, sample=sample, q_abs=q_abs, width=width,
-                            parent=ref(self), pattern=self.pattern_dict(frame), alpha=alpha)
+                             parent=ref(self), pattern=self.pattern_dict(frame), alpha=alpha)
 
-    def reset_index(self):
-        """Reset the table index. Advised to perform if the index is not unique. You can check it
-        with :func:`CBCTable.isunique` method.
+    def scale(self, xtal_shape: Tuple[int, int], basis: Basis, samples: ScanSamples,
+              num_threads: int=1) -> IntensityScaler:
+        """Return a :class:`IntensityScaler` CBC dataset intensity scaler. The scaler generates a
+        crystal diffraction efficiency map and structure factors based on diffraction signal. The
+        intensity scaling algorithm uses the crystal basis and sample objects to project the
+        diffraction signal onto the crystal plane.
+
+        Args:
+            xtal_shape : Crystal plane grid shape.
+            basis : Basis vectors of crystal lattice unit cell.
+            samples : Set of scan samples.
+            num_threads : Number of threads to be used in the calculations.
+
+        Raises:
+            AttributeError : If Miller indices ('h', 'k', 'l') are not present in the CBC table.
+
+        Returns:
+            A CBC dataset intensity scaler.
         """
-        self.table.reset_index(drop=True, inplace=True)
+        if not {'h', 'k', 'l'}.issubset(self.table.columns):
+            raise AttributeError('CBC table is not indexed.')
+        frames, fidxs, iidxs = unique_indices(frames=self.table['frames'].to_numpy(),
+                                              indices=self.table['index'].to_numpy())
+        hkl = self.table.iloc[iidxs[:-1]][['h', 'k', 'l']]
+        hkl, hkl_idxs = np.unique(hkl, return_inverse=True, axis=0)
+        kins = self.generate_kins(basis, samples, num_threads)
+        xtal_map = (np.asarray(xtal_shape) - 1) * (kins - self.setup.kin_min[:2]) / \
+                   (self.setup.kin_max[:2] - self.setup.kin_min[:2])
+        return IntensityScaler(parent=ref(self), frames=frames, fidxs=fidxs, iidxs=iidxs,
+                               hkl=hkl, hkl_idxs=hkl_idxs, xtal_map=xtal_map,
+                               signal=self.table['sgn'].to_numpy(), num_threads=num_threads)
 
     def update_crop(self, crop: Optional[Crop]=None) -> CBCTable:
         """Return a new CBC table with the updated region of interest.
@@ -486,8 +530,8 @@ class CBDModel():
     basis       : Basis
     sample      : Sample
     setup       : ScanSetup
-    transform   : Optional[Transform]=None
-    shape       : Optional[Tuple[int, int]]=None
+    transform   : Optional[Transform] = None
+    shape       : Optional[Tuple[int, int]] = None
 
     def __post_init__(self):
         self.basis = self.sample.rotate(self.basis)
@@ -535,8 +579,8 @@ class CBDModel():
         """
         kin, mask = calc_source_lines(basis=self.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
                                       kin_max=self.setup.kin_max)
-        idxs = np.arange(hkl.shape[0])[mask]
-        kout = kin + hkl[idxs].dot(self.basis.mat)[:, None]
+        hkl = hkl[mask]
+        kout = kin + hkl.dot(self.basis.mat)[:, None]
 
         x, y = self.sample.kout_to_detector(kout, self.setup)
         if self.transform:
@@ -545,9 +589,9 @@ class CBDModel():
         if self.shape:
             mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
                    (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
-            x, y, idxs = x[mask], y[mask], idxs[mask]
+            x, y, hkl = x[mask], y[mask], hkl[mask]
         return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1],
-                       h=hkl[idxs, 0], k=hkl[idxs, 1], l=hkl[idxs, 2], hkl_index=idxs,
+                       h=hkl[:, 0], k=hkl[:, 1], l=hkl[:, 2],
                        width=width * np.ones(x.shape[0]))
 
     def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray,
@@ -578,9 +622,9 @@ class CBDModel():
         """
         streaks = self.generate_streaks(hkl, width)
         pattern = streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
-        mask = filter_hkl(sgn=signal, bgd=background, df_xy=pattern[['x', 'y']].to_numpy(),
-                          df_p=pattern['p'].to_numpy(), df_hkl=pattern['hkl_index'].to_numpy(),
-                          hkl_idxs=streaks.hkl_index, threshold=threshold, threads=num_threads)
+        mask = filter_hkl(sgn=signal, bgd=background, coord=pattern[['x', 'y']].to_numpy(),
+                          prob=pattern['p'].to_numpy(), idxs=pattern['index'].to_numpy(),
+                          threshold=threshold, num_threads=num_threads)
         return streaks.mask_streaks(mask)
 
     def pattern_dataframe(self, hkl: np.ndarray, width: float, dp: float=1e-3,
@@ -872,13 +916,16 @@ class SampleProblem():
         df_frame['ij'] = self._pattern_to_ij_and_q(df_frame)[0]
         df_frame = df_frame.sort_values('ij')
 
-        df = self.pattern_dataframe(x).sort_values('p', ascending=True)
+        streaks = self.generate_streaks(x)
+        df = streaks.pattern_dataframe(self.shape, dp=1.0 / self.q_max, profile='linear')
+        df = df.sort_values('p', ascending=True)
         df['ij'] = self._pattern_to_ij_and_q(df)[0]
         df = df[np.in1d(df['ij'], df_frame['ij'])]
+
         mask = np.zeros(self.shape, dtype=bool)
         labels = np.zeros(self.shape, dtype=np.uint32)
         mask[df_frame['y'], df_frame['x']] = True
-        labels[df['y'], df['x']] = df['hkl_index']
+        labels[df['y'], df['x']] = df['index']
         for _ in range(iterations):
             labels = median_filter(labels, footprint=self.footprint, inp_mask=labels,
                                    mask=mask, num_threads=num_threads)
@@ -887,9 +934,173 @@ class SampleProblem():
         ij_sim = np.where(labels.ravel())[0]
         ij_diff = ij_sim[~np.in1d(ij_sim, df['ij'])]
         df_idxs = df_diff.index[df_diff['ij'].searchsorted(ij_diff)]
-        df_diff.loc[df_idxs, ['h', 'k', 'l']] = self.hkl[labels.ravel()[ij_diff], :]
+        df_diff.loc[df_idxs, ['h', 'k', 'l']] = streaks.hkl[labels.ravel()[ij_diff], :]
 
         df_idxs = df_frame.index[df_frame['ij'].searchsorted(df['ij'])]
         df_inst = df_frame.loc[df_idxs]
         df_inst.loc[:, ['h', 'k', 'l']] = df[['h', 'k', 'l']].values
-        return pd.concat((df_inst, df_diff))
+        return pd.concat((df_inst, df_diff)).drop('ij', axis=1)
+
+@dataclass
+class IntensityScaler(DataContainer):
+    """Iterative CBC dataset intensity scaling algorithm. Provides an interface
+    to generate a crystal diffraction efficiency mapping (xtal) and crystal structure
+    factors (sfac).
+
+    Args:
+        fidxs : Array of CBC table first row indices pertaining to different CBC patterns.
+        frames : Array of unique frame indices stored in the table.
+        hkl : Array of unique Miller indices stored inside the CBC table.
+        hkl_idxs : Array of output hkl list indices.
+        iidxs : Array of CBC table first row indices pertaining to different CBC streaks.
+        num_threads : Number of threads used in the calculations.
+        parent : Reference to the parent CBC table.
+        sfac : Crystal structure factors.
+        signal : Diffraction signal.
+        xidx : Set of crystal diffraction map frame indices.
+        xtal : Crystal diffraction efficiency mapping.
+        xtal_map : Mapping of diffraction signal into the crystal plane grid.
+
+    Attributes:
+        fidxs : Array of CBC table first row indices pertaining to different CBC patterns.
+        frames : Array of unique frame indices stored in the table.
+        hkl : Array of unique Miller indices stored inside the CBC table.
+        hkl_idxs : Array of output hkl list indices.
+        iidxs : Array of CBC table first row indices pertaining to different CBC streaks.
+        num_threads : Number of threads used in the calculations.
+        parent : Reference to the parent CBC table.
+        sfac : Crystal structure factors.
+        signal : Diffraction signal.
+        xidx : Set of crystal diffraction map frame indices.
+        xtal : Crystal diffraction efficiency map.
+        xtal_map : Mapping of diffraction signal into the crystal plane grid.
+    """
+    parent      : ReferenceType[CBCTable]
+    frames      : np.ndarray
+    fidxs       : np.ndarray
+    iidxs       : np.ndarray
+    hkl         : np.ndarray
+    hkl_idxs    : np.ndarray
+    xtal_map    : np.ndarray
+    signal      : np.ndarray
+    num_threads : int
+
+    xidx        : Optional[np.ndarray] = None
+    xtal        : Optional[np.ndarray] = None
+    sfac        : Optional[np.ndarray] = None
+
+    step        : ClassVar[np.ndarray] = np.ones(2)
+
+    def __post_init__(self):
+        if self.xidx is None:
+            frames = self.parent().table['frames']
+            self.xidx = frames.map({f: idx for idx, f in enumerate(self.frames)}).to_numpy()
+
+    def criterion(self) -> float:
+        r"""Return the mean abolute error (MAE) of the intensity scaling problem.
+
+        Notes:
+            The MAE is given by:
+
+            .. math::
+                L(I, D_{xtal}, F_{xtal}) = \frac{1}{N} \sum_{i = 0}^N \left| I - D_{xtal}(x_i, y_i)
+                F_{xtal}(hkl_i) \right|,
+
+            where :math:`I` - diffraction signal, :math:`D_{xtal}` - crystal diffraction efficiency
+            map, and :math:`F_{xtal}` - crystal structure factors.
+
+        Returns:
+            Mean absolute error.
+        """
+        if self.sfac is None:
+            raise AttributeError("'sfac' attribute is not defined")
+        if self.xtal is None:
+            raise AttributeError("'xtal' attribute is not defined")
+        return scaling_criterion(sf=self.sfac, sgn=self.signal, xidx=self.xidx,
+                                 xmap=self.xtal_map, xtal=self.xtal, iidxs=self.iidxs,
+                                 num_threads=self.num_threads)
+
+    def update_xtal(self, bandwidth: float) -> IntensityScaler:
+        """Generate a new crystal map using the kernel regression.
+
+        Args:
+            bandwidth : kernel bandwidth in pixels.
+
+        Returns:
+            New :class:`IntensityScaler` container with the updated crystal efficiency map.
+        """
+        if self.sfac is None:
+            raise AttributeError("'sfac' attribute is not defined")
+        pupils = []
+        for f0, f1 in zip(self.fidxs, self.fidxs[1:]):
+            pupils.append(kr_grid(y=self.signal[f0:f1] / self.sfac[f0:f1], x=self.xtal_map[f0:f1],
+                                  step=self.step, sigma=bandwidth, cutoff=3.0 * bandwidth,
+                                  num_threads=self.num_threads))
+        norm = np.mean(pupils)
+        return self.replace(xtal=np.stack(pupils) / norm, sfac=self.sfac * norm)
+
+    def update_sfac(self) -> IntensityScaler:
+        """Generate new crystal structure factors.
+
+        Returns:
+            New :class:`IntensityScaler` container with the updated crystal structure factors.
+        """
+        if self.xtal is None:
+            raise AttributeError("'xtal' attribute is not defined")
+        sfac = update_sf(sgn=self.signal, xidx=self.xidx, xmap=self.xtal_map,
+                         xtal=self.xtal, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
+                         num_threads=self.num_threads)
+        return self.replace(sfac=sfac)
+
+    def train(self, bandwidth: float, n_iter: int=10, f_tol: float=1e-3,
+              return_extra: bool=False, verbose: bool=True) -> IntensityScaler:
+        """Perform an iterative update of crystal diffraction efficiency map (xtal) and crystal
+        structure factors (sfac) until the mean absolute error converges to a minimum. The kernel
+        bandwidth in the diffraction efficiency map update is held fixed during the iterative
+        update.
+
+        Args:
+            bandwidth : Kernel bandwidth used in the diffraction efficiency map (xtal) update.
+            n_iter : Maximum number of iterations.
+            f_tol : Tolerance for termination by the change of the average error. The
+                iteration stops when :math:`(f^k - f^{k + 1}) / max(|f^k|, |f^{k + 1}|) <= f_{tol}`.
+            return_extra : Return errors at each iteration if True.
+            verbose : Set verbosity of the computation process.
+
+        Returns:
+            A tuple of two items (`scaler`, `errors`). The elements of the tuple
+            are as follows:
+
+            * `scaler` : A new :class:`IntensityScaler` object with the updated
+              ``xtal`` and ``sfac``.
+            * `errors` : List of mean absolute errors for each iteration. Only if
+              ``return_extra`` is True.
+        """
+        shape = self.xtal_map.max(axis=0).astype(int) + 1
+        xtal = np.ones((self.frames.size, shape[0], shape[1]), dtype=np.float32)
+        obj = self.replace(xtal=xtal).update_sfac()
+
+        itor = tqdm(range(1, n_iter + 1), disable=not verbose,
+                    bar_format='{desc} {percentage:3.0f}% {bar} '\
+                    'Iteration {n_fmt} / {total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]')
+
+        errors = [obj.criterion()]
+        if verbose:
+            itor.set_description(f"Error = {errors[-1]:.6f}")
+
+        for _ in itor:
+            new_obj = obj.update_xtal(bandwidth=bandwidth)
+            new_obj = new_obj.update_sfac()
+            errors.append(new_obj.criterion())
+
+            if verbose:
+                itor.set_description(f"Error = {errors[-1]:.6f}")
+
+            if (errors[-2] - errors[-1]) / max(errors[-2], errors[-1]) > f_tol:
+                obj = new_obj
+            else:
+                break
+
+        if return_extra:
+            return obj, errors
+        return obj

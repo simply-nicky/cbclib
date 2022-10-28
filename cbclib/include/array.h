@@ -7,31 +7,29 @@ typedef struct array_s
     int ndim;
     size_t size;
     size_t item_size;
-    size_t *dims;
+    const size_t *dims;
     size_t *strides;
     void *data;
 } array_s;
 typedef struct array_s *array;
 
-array new_array(int ndim, size_t *dims, size_t item_size, void *data);
+array new_array(int ndim, const size_t *dims, size_t item_size, void *data);
 void free_array(array arr);
 
-#define UNRAVEL_INDEX(_coord, _idx, _arr)           \
-{                                                   \
-    int _i = *_idx, _n;                             \
-    for (_n = 0; _n < _arr->ndim; _n++)             \
-    {                                               \
-        (_coord)[_n] = _i / _arr->strides[_n];      \
-        _i -= (_coord)[_n] * _arr->strides[_n];     \
-    }                                               \
-}
+#define UNRAVEL_INDEX(_coord, _idx, _arr)               \
+    do {int _i = *(_idx), _n;                           \
+        for (_n = 0; _n < (_arr)->ndim; _n++)           \
+        {                                               \
+            (_coord)[_n] = _i / (_arr)->strides[_n];    \
+            _i -= (_coord)[_n] * (_arr)->strides[_n];   \
+        }                                               \
+    } while (0)
 
-#define RAVEL_INDEX(_coord, _idx, _arr)             \
-{                                                   \
-    *_idx = 0; int _n;                              \
-    for (_n = 0; _n < _arr->ndim; _n++)             \
-        *_idx += _arr->strides[_n] * (_coord)[_n];  \
-}
+#define RAVEL_INDEX(_coord, _idx, _arr)                     \
+    do {*(_idx) = 0; int _n;                                \
+        for (_n = 0; _n < (_arr)->ndim; _n++)               \
+            *(_idx) += (_arr)->strides[_n] * (_coord)[_n];  \
+    } while (0)
 
 /*---------------------------------------------------------------------------
     struct line:
@@ -85,8 +83,8 @@ typedef enum
     EXTEND_WRAP = 4
 } EXTEND_MODE;
 
-void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval);
-int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
+void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, const void *cval);
+int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, const void *cval);
 
 /*---------------------------------------------------------------------------
     Portable re-entrant quick sort macro
@@ -128,14 +126,20 @@ int compare_ulong(const void *a, const void *b);
 int indirect_compare_double(const void *a, const void *b, void *data);
 int indirect_compare_float(const void *a, const void *b, void *data);
 
-int indirect_search_double(const void *a, const void *b, void *data);
-int indirect_search_float(const void *a, const void *b, void *data);
+int indirect_search_double(const void *key, const void *base, void *data);
+int indirect_search_float(const void *key, const void *base, void *data);
 
 // Array search
+typedef enum
+{
+    SEARCH_LEFT = 0,
+    SEARCH_RIGHT = 1
+} SEARCH_SIDE;
+
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
-    int (*compar)(const void *, const void *));
+    SEARCH_SIDE side, int (*compar)(const void *, const void *));
 
 size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
-    int (*compar)(const void *, const void *, void *), void *arg);
+    SEARCH_SIDE side, int (*compar)(const void *, const void *, void *), void *arg);
 
 #endif

@@ -126,7 +126,7 @@ static void * wirthselect(void *inp, int k, int n, size_t size,
 
 #define wirthmedian(a, n, size, compar) wirthselect(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar)
 
-int median(void *out, void *inp, unsigned char *mask, int ndim, size_t *dims, size_t item_size, int axis,
+int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *dims, size_t item_size, int axis,
     int (*compar)(const void*, const void*), unsigned threads)
 {
     /* check parameters */
@@ -182,7 +182,7 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, size_t *dims, si
     return 0;
 }
 
-int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, size_t *dims,
+int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
@@ -232,7 +232,7 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
     return 0;
 }
 
-int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, size_t *dims,
+int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {

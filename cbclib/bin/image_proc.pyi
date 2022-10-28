@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 def next_fast_len(target: int, backend: str='numpy') -> int:

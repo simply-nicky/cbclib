@@ -60,8 +60,8 @@ class DataContainer():
         Returns:
             List of the attributes available in the container.
         """
-        return [attr for attr in self.__dataclass_fields__.keys()
-                if getattr(type(self), attr, None) is None]
+        return [attr for attr, field in self.__dataclass_fields__.items()
+                if str(field._field_type) == '_FIELD']
 
     def values(self) -> ValuesView:
         """Return the attributes' data stored in the container.
@@ -107,9 +107,9 @@ class INIContainer(DataContainer):
 
     @classmethod
     def _format_tuple(cls, string: str, f: Callable=str) -> Tuple:
-        is_tuple = re.search(r'^\[([\s\S]*)\]$', string)
+        is_tuple = re.search(r'^\(([\s\S]*)\)$', string)
         if is_tuple:
-            return [f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p]
+            return tuple(f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p)
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
@@ -144,7 +144,7 @@ class INIContainer(DataContainer):
     @classmethod
     def _format_dict(cls, ini_dict: Dict[str, Any]) -> Dict[str, Any]:
         for attr, val in ini_dict.items():
-            formatter = cls.get_formatter(cls.__dataclass_fields__[attr].type)
+            formatter = cls.get_formatter(str(cls.__dataclass_fields__[attr].type))
             if isinstance(val, dict):
                 ini_dict[attr] = {k: formatter(v) for k, v in val.items()}
             if isinstance(val, str):

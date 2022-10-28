@@ -32,7 +32,7 @@ void free_footprint(footprint fpt);
 
 void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
 
-int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size,
+int median(void *out, void *data, unsigned char *mask, int ndim, const size_t *dims, size_t item_size,
     int axis, int (*compar)(const void*, const void*), unsigned threads);
 
 /*-------------------------------------------------------------------------------*/
@@ -64,7 +64,7 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
 
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
-int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, size_t *dims,
+int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads);
 
@@ -97,7 +97,7 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
 
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
-int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, size_t *dims,
+int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads);
 

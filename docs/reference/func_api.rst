@@ -12,10 +12,13 @@ Here is a list of image processing routines used in this software. This routines
 measured CBC patterns. Some of these routines rely on the 2-dimensional Fourier transform. All of the pertained functions
 use `FFTW <https://www.fftw.org>`_ library to perform the fast Fourier transform (FFT).
 
+Also, the `pyFFTW wrapper <https://github.com/pyFFTW/pyFFTW>`_ of the `FFTW <https://www.fftw.org>`_ library is incorporated
+into the library for computing dicrete Fourier transforms of multidimensional arrays.
 
 .. toctree::
     :maxdepth: 1
 
+    classes/fftw
     funcs/next_fast_len
     funcs/fft_convolve
     funcs/gaussian_filter
@@ -54,3 +57,17 @@ performance and enable the concurrent computations.
     funcs/cartesian_to_spherical
     funcs/calc_source_lines
     funcs/filter_hkl
+
+Diffraction signal processing
+-----------------------------
+
+A set of functions used in the CBC intensity scaling and the estimation of a crystal diffraction efficiency map.
+
+.. toctree::
+    :maxdepth: 1
+
+    funcs/find_kins
+    funcs/update_sf
+    funcs/scaling_criterion
+    funcs/kr_predict
+    funcs/kr_grid

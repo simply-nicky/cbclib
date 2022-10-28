@@ -92,7 +92,7 @@ cdef enum:
     EXTEND_REFLECT = 3
     EXTEND_WRAP = 4
 
-cdef inline int extend_mode_to_code(str mode) except -1:
+cdef inline int mode_to_code(str mode) except -1:
     if mode == 'constant':
         return EXTEND_CONSTANT
     elif mode == 'nearest':
@@ -104,7 +104,7 @@ cdef inline int extend_mode_to_code(str mode) except -1:
     elif mode == 'wrap':
         return EXTEND_WRAP
     else:
-        raise RuntimeError('boundary mode not supported')
+        raise RuntimeError(f'Invalid boundary mode: {mode}')
 
 cdef inline np.ndarray check_array(np.ndarray array, int type_num):
     cdef np.ndarray out

@@ -125,8 +125,8 @@ class ScanSetup(INIContainer):
                                                0.5 * (self.pupil_min[1] + self.pupil_max[1]))
 
     def _det_to_k(self, x: np.ndarray, y: np.ndarray, source: np.ndarray) -> np.ndarray:
-        delta_y = y * self.y_pixel_size - source[1]
         delta_x = x * self.x_pixel_size - source[0]
+        delta_y = y * self.y_pixel_size - source[1]
         phis = np.arctan2(delta_y, delta_x)
         thetas = np.arctan(np.sqrt(delta_x**2 + delta_y**2) / source[2])
         return np.stack((np.sin(thetas) * np.cos(phis),
@@ -280,10 +280,6 @@ class Rotation(DataContainer):
 
         Returns:
             A set of Euler angles with Bunge convention :math:`\phi_1, \Phi, \phi_2`.
-
-        References:
-            .. [EUL] Depriester, Dorian. (2018), "Computing Euler angles with Bunge convention
-                    from rotation matrix", 10.13140/RG.2.2.34498.48321/5.
         """
         return euler_angles(self.matrix)
 
@@ -556,7 +552,6 @@ class Streaks(DataContainer):
         h : First Miller index.
         k : Second Miller index.
         l : Third Miller index.
-        hkl_index: Miller index label.
     """
     x0          : np.ndarray
     y0          : np.ndarray
@@ -567,7 +562,12 @@ class Streaks(DataContainer):
     h           : Optional[np.ndarray] = None
     k           : Optional[np.ndarray] = None
     l           : Optional[np.ndarray] = None
-    hkl_index   : Optional[np.ndarray] = None
+
+    @property
+    def hkl(self) -> Optional[np.ndarray]:
+        if self.h is None:
+            return None
+        return np.stack((self.h, self.k, self.l), axis=1)
 
     def __post_init__(self):
         if self.length is None:
@@ -587,7 +587,7 @@ class Streaks(DataContainer):
         """
         return Streaks(**{attr: self[attr][indices] for attr in self.contents()})
 
-    def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dp: float=1.0, dilation: float=0.0,
+    def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3, dilation: float=0.0,
                           profile: str='tophat', drop_duplicates: bool=False) -> pd.DataFrame:
         """Draw a pattern in the :class:`pandas.DataFrame` format.
 
@@ -612,8 +612,8 @@ class Streaks(DataContainer):
             return df.drop_duplicates(['x', 'y'])
         return df
 
-    def pattern_dict(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3, dilation: float=0.0,
-                     profile: str='tophat') -> Dict[str, np.ndarray]:
+    def pattern_dict(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3,
+                     dilation: float=0.0, profile: str='tophat') -> Dict[str, np.ndarray]:
         """Draw a pattern in the :class:`dict` format.
 
         Args:
@@ -632,9 +632,9 @@ class Streaks(DataContainer):
         if dp > 1.0 or dp <= 0.0:
             raise ValueError('`dp` must be in the range of (0.0, 1.0]')
         idx, x, y, p = draw_line_index(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
-                                         dilation=dilation, profile=profile).T
-        pattern = {'x': x, 'y': y, 'p': p / int(1.0 / dp)}
-        for attr in ['h', 'k', 'l', 'hkl_index']:
+                                       dilation=dilation, profile=profile).T
+        pattern = {'index': idx, 'x': x, 'y': y, 'p': p / int(1.0 / dp)}
+        for attr in ['h', 'k', 'l']:
             if attr in self.contents():
                 pattern[attr] = self[attr][idx]
         return pattern
@@ -680,7 +680,7 @@ class Streaks(DataContainer):
         """
         mask = np.zeros(shape, dtype=np.uint32)
         return draw_line(mask, lines=self.to_numpy(), max_val=max_val, dilation=dilation,
-                          profile=profile)
+                         profile=profile)
 
     def to_dataframe(self) -> pd.DataFrame:
         """Export a streaks container into :class:`pandas.DataFrame`.
