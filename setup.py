@@ -1,6 +1,6 @@
 import os
 import sys
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 from distutils.core import Extension
 import numpy
 
@@ -24,16 +24,18 @@ extension_args = {'language': 'c',
 
 extensions = [Extension(name='cbclib.bin.cbc_indexing',
                         sources=['cbclib/bin/cbc_indexing' + ext, 'cbclib/include/img_proc.c',
-                                 'cbclib/include/array.c'],
+                                 'cbclib/include/array.c', 'cbclib/include/kd_tree.c'],
                         **extension_args),
               Extension(name='cbclib.bin.image_proc',
                         sources=['cbclib/bin/image_proc' + ext, 'cbclib/include/pocket_fft.c',
                                  'cbclib/include/img_proc.c', 'cbclib/include/fft_functions.c',
-                                 'cbclib/include/median.c', 'cbclib/include/array.c'],
+                                 'cbclib/include/median.c', 'cbclib/include/array.c',
+                                 'cbclib/include/kd_tree.c'],
                         **extension_args),
               Extension(name='cbclib.bin.line_detector',
                         sources=['cbclib/bin/line_detector' + ext, 'cbclib/include/lsd.c',
-                                 'cbclib/include/img_proc.c', 'cbclib/include/array.c'],
+                                 'cbclib/include/img_proc.c', 'cbclib/include/array.c',
+                                 'cbclib/include/kd_tree.c'],
                         **extension_args),
               Extension(name='cbclib.bin.signal_proc',
                         sources=['cbclib/bin/signal_proc' + ext, 'cbclib/include/sgn_proc.c',
@@ -43,7 +45,8 @@ extensions = [Extension(name='cbclib.bin.cbc_indexing',
                         sources=['cbclib/bin/pyfftw' + ext], **extension_args)]
 
 if USE_CYTHON:
-    extensions = cythonize(extensions, annotate=True, language_level="3", include_path=['cbclib/bin',],
+    extensions = cythonize(extensions, annotate=True, language_level="3",
+                           include_path=['cbclib/bin',],
                            compiler_directives={'cdivision': True,
                                                 'boundscheck': False,
                                                 'wraparound': False,
@@ -54,15 +57,14 @@ with open('README.md', 'r') as readme:
     long_description = readme.read()
 
 setup(name='cbclib',
-      version='0.6.0',
+      version='0.6.1',
       author='Nikolay Ivanov',
       author_email="nikolay.ivanov@desy.de",
       long_description=long_description,
       long_description_content_type='text/markdown',
       url="https://github.com/simply-nicky/cbclib",
-      packages=find_packages(),
+      packages=find_namespace_packages(),
       include_package_data=True,
-      package_data={'cbclib': ['config/*.ini',]},
       install_requires=['h5py', 'numpy', 'scipy'],
       ext_modules=extensions,
       classifiers=[

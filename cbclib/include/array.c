@@ -572,3 +572,75 @@ size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t siz
         default: ERROR("searchsorted_r: invalid extend mode."); return 0;
     }
 }
+
+/*----------------------------------------------------------------------------*/
+/*------------------------------- Wirth select -------------------------------*/
+/*----------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------
+    Function :  kth_smallest()
+    In       :  array of elements, n elements in the array, rank k 
+    Out      :  one element
+    Job      :  find the kth smallest element in the array
+    Notice   :  Buffer must be of size n
+
+    Reference:
+        Author: Wirth, Niklaus
+        Title: Algorithms + data structures = programs
+        Publisher: Englewood Cliffs: Prentice-Hall, 1976 Physical description: 366 p.
+        Series: Prentice-Hall Series in Automatic Computation
+---------------------------------------------------------------------------*/
+
+void *wirthselect(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *))
+{
+    int i, j, l = 0, m = n - 1;
+    void *buf = malloc(size);
+    while (l < m)
+    {
+        memcpy(buf, inp + k * size, size);
+        i = l; j = m;
+
+        do
+        {
+            while (compar(buf, inp + i * size) > 0) i++;
+            while (compar(buf, inp + j * size) < 0) j--;
+            if (i <= j) 
+            {
+                SWAP_BUF(inp + i * size, inp + j * size, size);
+                i++; j--;
+            }
+        } while (i <= j);
+        if (j < k) l = i;
+        if (k < i) m = j;
+    }
+    free(buf);
+    
+    return inp + k * size;
+}
+
+void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *, void *), void *arg)
+{
+    int i, j, l = 0, m = n - 1;
+    void *buf = malloc(size);
+    while (l < m)
+    {
+        memcpy(buf, inp + k * size, size);
+        i = l; j = m;
+
+        do
+        {
+            while (compar(buf, inp + i * size, arg) > 0) i++;
+            while (compar(buf, inp + j * size, arg) < 0) j--;
+            if (i <= j) 
+            {
+                SWAP_BUF(inp + i * size, inp + j * size, size);
+                i++; j--;
+            }
+        } while (i <= j);
+        if (j < k) l = i;
+        if (k < i) m = j;
+    }
+    free(buf);
+    
+    return inp + k * size;
+}

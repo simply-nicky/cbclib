@@ -129,6 +129,10 @@ int indirect_compare_float(const void *a, const void *b, void *data);
 int indirect_search_double(const void *key, const void *base, void *data);
 int indirect_search_float(const void *key, const void *base, void *data);
 
+
+/*---------------------------------------------------------------------------
+    Binary search
+----------------------------------------------------------------------------*/
 // Array search
 typedef enum
 {
@@ -141,5 +145,14 @@ size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
 
 size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
     SEARCH_SIDE side, int (*compar)(const void *, const void *, void *), void *arg);
+
+/*---------------------------------------------------------------------------
+    Wirth select
+----------------------------------------------------------------------------*/
+void *wirthselect(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *));
+void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *, void *), void *arg);
+
+#define wirthmedian(a, n, size, compar) wirthselect(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar)
+#define wirthmedian_r(a, n, size, compar, arg) wirthselect_r(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar, arg)
 
 #endif

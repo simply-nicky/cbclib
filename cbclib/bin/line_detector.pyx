@@ -46,8 +46,8 @@ cdef class LSD:
             self.quant = quant
 
     def detect(self, np.ndarray image not None, float cutoff, float filter_threshold=0.0,
-               float group_threshold=0.6, int n_group=2, bint filter=True, bint group=True, 
-               float dilation=0.0, bint return_labels=False, unsigned int num_threads=1):
+               float group_threshold=0.6, bint filter=True, bint group=True, float dilation=0.0,
+               bint return_labels=False, unsigned int num_threads=1):
         if image.ndim < 2:
             raise ValueError('Image must be a 2D array.')
         image = check_array(image, np.NPY_FLOAT32)
@@ -87,7 +87,7 @@ cdef class LSD:
             free(_outs); free(_ns); free(_regs); free(_reg_xs)
             raise MemoryError('not enough memory')
 
-        cdef int fail = 0, i, j
+        cdef int fail = 0, i
         cdef dict line_dict = {}, reg_dict = {}, out_dict = {}
         cdef np.npy_intp *out_dims = [0, LINE_SIZE]
         cdef unsigned long *ldims
@@ -109,9 +109,8 @@ cdef class LSD:
                 ldims[0] = _ns[i]
 
                 if group:
-                    for j in range(n_group):
-                        fail |= group_line(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
-                                            ldims, cutoff, group_threshold, dilation)
+                    fail |= group_line(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],
+                                        ldims, cutoff, group_threshold, dilation)
 
                 if filter:
                     fail |= filter_line(_outs[i], _masks[i], _img + i * _Y * _X, _Y, _X, _outs[i],

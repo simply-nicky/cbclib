@@ -20,9 +20,12 @@ cdef extern from "sgn_proc.h":
                       unsigned **iidxs, unsigned long *ipts, unsigned *frames, unsigned *indices,
                       unsigned long npts) nogil
 
-    int update_sf_c "update_sf" (float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal,
+    int update_sf_c "update_sf" (float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, float *xtal,
                     unsigned long *ddims, unsigned *hkl_idxs, unsigned long hkl_size, unsigned *iidxs,
                     unsigned long isize, unsigned threads) nogil
 
     float scale_crit(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, unsigned long *ddims,
                      unsigned *iidxs, unsigned long isize, unsigned threads) nogil
+
+    int xtal_interp(float *xtal_bi, unsigned *xidx, float *xmap, float *xtal, unsigned long *ddims,
+                    unsigned long isize, unsigned threads) nogil

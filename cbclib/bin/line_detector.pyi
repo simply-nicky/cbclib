@@ -43,8 +43,8 @@ class LSD:
         ...
 
     def detect(self, image: np.ndarray, cutoff: float, filter_threshold: float=0.0,
-               group_threshold: float=0.6, n_group: int=2, filter: bool=True,
-               group: bool=True, dilation: float=0.0, return_labels: bool=False,
+               group_threshold: float=0.6, filter: bool=True, group: bool=True,
+               dilation: float=0.0, return_labels: bool=False,
                num_threads: int=1) -> Dict[str, Dict[int, np.ndarray]]:
         """Perform the LSD streak detection on an input array `image`. The Streak detection
         comprises three steps: an initial LSD detection of lines, a grouping of the detected
@@ -59,7 +59,6 @@ class LSD:
                 moment is lower than ``filter_threshold``. 
             group_threshold : Grouping threshold. The lines are merged if the cross-correlation
                 value of a pair of lines is higher than ``group_threshold``.
-            n_group : Number of grouping iterations to perform.
             filter : Perform filtering if True.
             group : Perform grouping if True.
             dilation : Line mask dilation value in pixels.

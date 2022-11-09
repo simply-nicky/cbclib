@@ -1,5 +1,6 @@
 #include "img_proc.h"
 #include "array.h"
+#include "kd_tree.h"
 
 #define TOL 3.1425926535897937e-05
 
@@ -532,99 +533,86 @@ int group_line(float *olines, unsigned char *proc, float *data, size_t Y, size_t
     if (ldims[0] == 0) return 0;
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
 
-    int i, j, n_pairs = 0;
-    float dist, corr, M0;
+    int i, j, counter;
+    float corr, M0;
     float *ln0, *ln1;
+    // Coordinates and indices for the tree
+    float *coords = MALLOC(float, 2 * ldims[0]);
+    int *idxs = MALLOC(int, ldims[0]);
+    // Mask of the lines which have been already used
+    unsigned char *used = calloc(ldims[0], sizeof(unsigned char));
 
-    /* Find the closest line */
-    size_t max_pairs = ldims[0];
-    unsigned int *pairs = MALLOC(unsigned int, 2 * max_pairs);
-    float *ds = MALLOC(float, max_pairs);
     for (i = 0, ln0 = olines; i < (int)ldims[0]; i++, ln0 += ldims[1])
     {
-        /* check if processed already */
-        if (proc[i] == 0) continue;
-
-        for (j = 0, ln1 = olines; j < (int)ldims[0]; j++, ln1 += ldims[1])
-        {
-            /* check if processed already */
-            if (i == j || proc[j] == 0) continue;
-
-            /* calculate the distance between two lines */
-            dist = 0.5f * sqrtf(SQ(ln0[0] + ln0[2] - ln1[0] - ln1[2]) +
-                                SQ(ln0[1] + ln0[3] - ln1[1] - ln1[3]));
-
-            /* if the pair of line is close enough, add to the list of pairs */
-            if (dist < cutoff)
-            {
-                pairs[2 * n_pairs] = i;
-                pairs[2 * n_pairs + 1] = j;
-                ds[n_pairs] = dist; n_pairs++;
-            }
-
-            /* expand the list if necessary */
-            if ((int)max_pairs == n_pairs)
-            {
-                max_pairs += ldims[0];
-                pairs = REALLOC(pairs, unsigned int, 2 * max_pairs);
-                ds = REALLOC(ds, float, max_pairs);
-            }
-        }
+        coords[2 * i] = 0.5f * (ln0[0] + ln0[2]);
+        coords[2 * i + 1] = 0.5f * (ln0[1] + ln0[3]);
+        idxs[i] = i;
     }
 
-    /* Exit if no pairs have been found */
-    if (!n_pairs) {DEALLOC(pairs); DEALLOC(ds); return 0;}
-
-    size_t *inds = MALLOC(size_t, n_pairs);
-    for (i = 0; i < n_pairs; i++) inds[i] = i;
-
-    /* Sort the pairs based on the distance */
-    POSIX_QSORT_R(inds, n_pairs, sizeof(size_t), indirect_compare_float, (void *)ds);
-    DEALLOC(ds);
-
-    float *oln = MALLOC(float, ldims[1]);
+    kd_tree tree = kd_build(coords, ldims[0], 2, idxs, sizeof(int));
     unsigned int *img_pair, *img_oln;
     rect rt_pair = (rect)malloc(sizeof(struct rect_s));
     rect ort = (rect)malloc(sizeof(struct rect_s));
+    float *oln = MALLOC(float, ldims[1]);
 
-    /* Collapse the pairs */
-    for (i = 0; i < n_pairs; i++)
+    do
     {
-
-        ln0 = olines + ldims[1] * pairs[2 * inds[i]];
-        ln1 = olines + ldims[1] * pairs[2 * inds[i] + 1];
-
-        if (proc[pairs[2 * inds[i]]] && proc[pairs[2 * inds[i] + 1]])
+        counter = 0;
+        for (i = 0, ln0 = olines; i < (int)ldims[0]; i++, ln0 += ldims[1])
         {
-            /* Create an image of a pair */
-            create_line_image_pair(&img_pair, rt_pair, Y, X, 1, ln0, ln1, dilation);
-            
-            /* Collapse a pair of lines */
-            M0 = collapse_pair(oln, img_pair, rt_pair, data, Y, X, ln0, ln1, ldims[1]);
+            /* check if processed already */
+            if (!proc[i]) continue;
 
-            if (M0 > 0.0f)
+            /* check if the line should be updated */
+            if (!used[i])
             {
-                /* Create an image of oln */
-                create_line_image(&img_oln, ort, Y, X, 1, oln, dilation);
+                used[i] = 1;
+                /* find all the lines in a range */
+                query_stack stack = kd_find_range(tree, coords + 2 * i, cutoff);
 
-                /* Find overlap between imp_pair and imp_oln */
-                corr = find_overlap(img_pair, rt_pair, img_oln, ort, data, Y, X);
-
-                if (corr > threshold)
+                for (query_stack node = stack; node; node = node->next)
                 {
-                    memcpy(ln0, oln, ldims[1] * sizeof(float));
-                    memset(ln1, 0, ldims[1] * sizeof(float));
-                    proc[pairs[2 * inds[i] + 1]] = 0;
+                    j = *(int *)node->query->node->data;
+                    ln1 = olines + j * ldims[1];
+                    if (proc[j] && i != j)
+                    {
+                        /* Create an image of a pair */
+                        create_line_image_pair(&img_pair, rt_pair, Y, X, 1, ln0, ln1, dilation);
+                        
+                        /* Collapse a pair of lines */
+                        M0 = collapse_pair(oln, img_pair, rt_pair, data, Y, X, ln0, ln1, ldims[1]);
+
+                        if (M0 > 0.0f)
+                        {
+                            /* Create an image of oln */
+                            create_line_image(&img_oln, ort, Y, X, 1, oln, dilation);
+
+                            /* Find overlap between imp_pair and imp_oln */
+                            corr = find_overlap(img_pair, rt_pair, img_oln, ort, data, Y, X);
+
+                            if (corr > threshold)
+                            {
+                                memcpy(ln0, oln, ldims[1] * sizeof(float));
+                                memset(ln1, 0, ldims[1] * sizeof(float));
+                                kd_delete(tree, node->query->node->pos);
+                                proc[j] = 0; used[i] = 0; counter++;
+
+                                break;
+                            }
+
+                            DEALLOC(img_oln);
+                        }
+
+                        DEALLOC(img_pair);
+                    }
                 }
 
-                DEALLOC(img_oln);
+                free_stack(stack);
             }
-
-            DEALLOC(img_pair);
         }
-    }
+    } while (counter);
 
-    DEALLOC(pairs);
+    kd_free(tree); DEALLOC(coords); DEALLOC(idxs); DEALLOC(used);
     DEALLOC(rt_pair); DEALLOC(ort); DEALLOC(oln);
 
     return 0;

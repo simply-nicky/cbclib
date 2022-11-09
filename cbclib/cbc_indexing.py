@@ -9,7 +9,8 @@ from tqdm.auto import tqdm
 
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
                   gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl,
-                  unique_indices, find_kins, kr_grid, update_sf, scaling_criterion)
+                  unique_indices, find_kins, kr_grid, update_sf, scaling_criterion,
+                  xtal_interpolate)
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks
 from .cxi_protocol import Indices
 from .data_container import DataContainer, Transform, Crop, ReferenceType
@@ -956,23 +957,10 @@ class IntensityScaler(DataContainer):
         num_threads : Number of threads used in the calculations.
         parent : Reference to the parent CBC table.
         sfac : Crystal structure factors.
+        sfac_err : Crystal structure factor uncertainties.
         signal : Diffraction signal.
         xidx : Set of crystal diffraction map frame indices.
         xtal : Crystal diffraction efficiency mapping.
-        xtal_map : Mapping of diffraction signal into the crystal plane grid.
-
-    Attributes:
-        fidxs : Array of CBC table first row indices pertaining to different CBC patterns.
-        frames : Array of unique frame indices stored in the table.
-        hkl : Array of unique Miller indices stored inside the CBC table.
-        hkl_idxs : Array of output hkl list indices.
-        iidxs : Array of CBC table first row indices pertaining to different CBC streaks.
-        num_threads : Number of threads used in the calculations.
-        parent : Reference to the parent CBC table.
-        sfac : Crystal structure factors.
-        signal : Diffraction signal.
-        xidx : Set of crystal diffraction map frame indices.
-        xtal : Crystal diffraction efficiency map.
         xtal_map : Mapping of diffraction signal into the crystal plane grid.
     """
     parent      : ReferenceType[CBCTable]
@@ -988,6 +976,7 @@ class IntensityScaler(DataContainer):
     xidx        : Optional[np.ndarray] = None
     xtal        : Optional[np.ndarray] = None
     sfac        : Optional[np.ndarray] = None
+    sfac_err    : Optional[np.ndarray] = None
 
     step        : ClassVar[np.ndarray] = np.ones(2)
 
@@ -1020,6 +1009,24 @@ class IntensityScaler(DataContainer):
                                  xmap=self.xtal_map, xtal=self.xtal, iidxs=self.iidxs,
                                  num_threads=self.num_threads)
 
+    def export_sfac(self, path: str):
+        """Export structure factors to a text hkl file.
+
+        Args:
+            path : Path to the output file.
+        """
+        if self.sfac is None:
+            raise AttributeError("'sfac' attribute is not defined")
+        sfac = np.empty(self.hkl.shape[0])
+        sfac[self.hkl_idxs] = self.sfac[self.iidxs[:-1]]
+        sfac_err = np.empty(self.hkl.shape[0])
+        sfac_err[self.hkl_idxs] = self.sfac_err[self.iidxs[:-1]]
+        norm = sfac_err.min()
+        idxs = np.lexsort(np.abs(self.hkl.T)[::-1])
+        np.savetxt(path, np.concatenate((self.hkl[idxs], sfac[idxs, None] / norm,
+                                         sfac_err[idxs, None] / norm), axis=1),
+                   ' %4d %4d %4d %10.2f %10.2f')
+
     def update_xtal(self, bandwidth: float) -> IntensityScaler:
         """Generate a new crystal map using the kernel regression.
 
@@ -1037,7 +1044,8 @@ class IntensityScaler(DataContainer):
                                   step=self.step, sigma=bandwidth, cutoff=3.0 * bandwidth,
                                   num_threads=self.num_threads))
         norm = np.mean(pupils)
-        return self.replace(xtal=np.stack(pupils) / norm, sfac=self.sfac * norm)
+        return self.replace(xtal=np.stack(pupils) / norm, sfac=self.sfac * norm,
+                            sfac_err=self.sfac_err * norm)
 
     def update_sfac(self) -> IntensityScaler:
         """Generate new crystal structure factors.
@@ -1047,10 +1055,21 @@ class IntensityScaler(DataContainer):
         """
         if self.xtal is None:
             raise AttributeError("'xtal' attribute is not defined")
-        sfac = update_sf(sgn=self.signal, xidx=self.xidx, xmap=self.xtal_map,
-                         xtal=self.xtal, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
-                         num_threads=self.num_threads)
-        return self.replace(sfac=sfac)
+        sfac, sfac_err = update_sf(sgn=self.signal, xidx=self.xidx, xmap=self.xtal_map,
+                                   xtal=self.xtal, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
+                                   num_threads=self.num_threads)
+        return self.replace(sfac=sfac, sfac_err=sfac_err)
+
+    def update_table(self):
+        """Update the parent :class:`cbclib.CBCTable`.
+        """
+        if self.sfac is None:
+            raise AttributeError("'sfac' attribute is not defined")
+        if self.xtal is None:
+            raise AttributeError("'xtal' attribute is not defined")
+        self.parent().table['sfac'] = self.sfac
+        self.parent().table['xtal'] = xtal_interpolate(xidx=self.xidx, xmap=self.xtal_map,
+                                                       xtal=self.xtal, num_threads=self.num_threads)
 
     def train(self, bandwidth: float, n_iter: int=10, f_tol: float=1e-3,
               return_extra: bool=False, verbose: bool=True) -> IntensityScaler:

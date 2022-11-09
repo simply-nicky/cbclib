@@ -32,6 +32,7 @@ Content
     transform_ref
     data_proc_ref
     exp_geom
+    log_ref
     indexing_ref
     func_api
     misc_types

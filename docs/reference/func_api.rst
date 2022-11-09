@@ -71,3 +71,4 @@ A set of functions used in the CBC intensity scaling and the estimation of a cry
     funcs/scaling_criterion
     funcs/kr_predict
     funcs/kr_grid
+    funcs/xtal_interpolate

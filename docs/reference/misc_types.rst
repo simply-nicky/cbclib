@@ -18,3 +18,6 @@ Here is the list of :class:`typing.TypeVar` and :class:`typing.Generic` types us
 
 .. autotypevar:: cbclib.data_container.I
     :no-type:
+
+.. autotypevar:: cbclib.log_protocol.L
+    :no-type:

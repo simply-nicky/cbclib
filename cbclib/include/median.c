@@ -19,7 +19,7 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned cha
     fpt->coordinates = MALLOC(int, fpt->npts * fpt->ndim);
 
     fpt->item_size = item_size;
-    fpt->data = malloc((fpt->npts + 1) * fpt->item_size);
+    fpt->data = malloc(fpt->npts * fpt->item_size);
     
     if (!fpt || !fpt->offsets || !fpt->coordinates || !fpt->data)
     {ERROR("new_footprint: not enough memory."); return NULL;}
@@ -80,52 +80,6 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
     }
 }
 
-/*----------------------------------------------------------------------------*/
-/*------------------------------- Wirth select -------------------------------*/
-/*----------------------------------------------------------------------------*/
-
-/*---------------------------------------------------------------------------
-    Function :  kth_smallest()
-    In       :  array of elements, n + 1 elements in the array, rank k 
-    Out      :  one element
-    Job      :  find the kth smallest element in the array
-    Notice   :  Buffer must be of size n + 1, n-th element is reserved
-
-    Reference:
-        Author: Wirth, Niklaus
-        Title: Algorithms + data structures = programs
-        Publisher: Englewood Cliffs: Prentice-Hall, 1976 Physical description: 366 p.
-        Series: Prentice-Hall Series in Automatic Computation
----------------------------------------------------------------------------*/
-
-static void * wirthselect(void *inp, int k, int n, size_t size,
-    int (*compar)(const void*, const void*))
-{
-    int i, j, l = 0, m = n - 1;
-    while (l < m)
-    {
-        memcpy(inp + n * size, inp + k * size, size);
-        i = l; j = m;
-
-        do
-        {
-            while (compar(inp + n * size, inp + i * size) > 0) i++;
-            while (compar(inp + n * size, inp + j * size) < 0) j--;
-            if (i <= j) 
-            {
-                SWAP_BUF(inp + i * size, inp + j * size, size);
-                i++; j--;
-            }
-        } while (i <= j);
-        if (j < k) l = i;
-        if (k < i) m = j;
-    }
-    
-    return inp + k * size;
-}
-
-#define wirthmedian(a, n, size, compar) wirthselect(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar)
-
 int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *dims, size_t item_size, int axis,
     int (*compar)(const void*, const void*), unsigned threads)
 {
@@ -145,7 +99,7 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *di
 
     #pragma omp parallel num_threads(threads)
     {
-        void *buffer = malloc((iarr->dims[axis] + 1) * iarr->item_size);
+        void *buffer = malloc(iarr->dims[axis] * iarr->item_size);
         void *key;
 
         line iline = init_line(iarr, axis);
@@ -162,7 +116,7 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *di
             {
                 if (((unsigned char *)mline->data)[n * mline->stride])
                 {memcpy(buffer + len++ * iline->item_size,
-                    iline->data + n * iline->stride * iline->item_size, iline->item_size);}
+                        iline->data + n * iline->stride * iline->item_size, iline->item_size);}
             }
 
             if (len) 

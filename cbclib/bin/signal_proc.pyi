@@ -44,7 +44,7 @@ def find_kins(x: np.ndarray, y: np.ndarray, hkl: np.ndarray, fidxs: np.ndarray,
     ...
 
 def update_sf(sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray, hkl_idxs: np.ndarray,
-              iidxs: np.ndarray, num_threads: int=1) -> np.ndarray:
+              iidxs: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate crystal structure factors by using the ordinary least squares solution.
 
     Args:
@@ -61,7 +61,7 @@ def update_sf(sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndar
         ValueError : If ``iiidxs`` last index is not equal to ``sgn`` size.
 
     Returns:
-        A new set of crystal structure factors.
+        A new set of crystal structure factors and structure factor uncertainties.
     """
     ...
 
@@ -143,5 +143,22 @@ def kr_grid(y: np.ndarray, x: np.ndarray, shape: Tuple[int, int], step: Tuple[fl
 
     Returns:
         The regression result.
+    """
+    ...
+
+def xtal_interpolate(xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Find the crystal efficiency values at the given coordinates by using the bilinear
+    interpolation.
+
+    Args:
+        xidx : Crystal diffraction map frame indices.
+        xmap : Mapping of diffraction signal into the crystal plane grid.
+        xtal : Crystal diffraction efficiency map.
+
+    Raises:
+        ValueError : If ``xidx`` and ``xmap`` have incompatible shapes.
+
+    Returns:
+        Interpolated crystall efficiency values.
     """
     ...

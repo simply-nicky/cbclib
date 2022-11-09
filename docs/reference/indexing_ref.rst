@@ -20,6 +20,9 @@ CBC datasets:
   pattern prediction to find sample position and alignment, that yields the best fit with the experimentally
   measured pattern. The criterion calculates the marginal log-likelihood, that the experimentally measured
   pattern corresponds to the predicted one.
+* :class:`cbclib.ScanSamples` is a data container that stores the results of the sample refinement. It provides
+  an interface to save and load the results to a :class:`pandas.DataFrame`. Also, one can regularise the sample
+  positions through the scan by using `the gaussian processes <https://scikit-learn.org/stable/modules/gaussian_process.html>`_.
 
 Contents
 --------

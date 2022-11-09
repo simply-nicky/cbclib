@@ -7,4 +7,5 @@ from .image_proc import (next_fast_len, fft_convolve, gaussian_filter, gaussian_
                          project_effs, normalise_pattern)
 from .line_detector import LSD
 from .pyfftw import byte_align, is_byte_aligned, empty_aligned, zeros_aligned, ones_aligned, FFTW
-from .signal_proc import unique_indices, find_kins, update_sf, scaling_criterion, kr_predict, kr_grid
+from .signal_proc import (unique_indices, find_kins, update_sf, scaling_criterion, kr_predict,
+                          kr_grid, xtal_interpolate)

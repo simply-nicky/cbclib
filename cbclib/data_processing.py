@@ -1011,7 +1011,7 @@ class LSDetector(Detector):
     bgd_mask        : Optional[np.ndarray] = None
 
     def detect(self, cutoff: float, filter_threshold: float, group_threshold: float=0.7,
-               n_group: int=2, dilation: float=0.0) -> LSDetectorFull:
+               dilation: float=0.0) -> LSDetectorFull:
         """Perform the streak detection. The streak detection comprises three steps: an
         initial LSD detection of lines, a grouping of the detected lines and merging, if
         the normalized cross-correlation value if higher than the ``group_threshold``,
@@ -1023,7 +1023,6 @@ class LSDetector(Detector):
                 moment is lower than ``filter_threshold``.
             group_threshold : Grouping threshold. The lines are merged if the cross-correlation
                 value of a pair of lines is higher than ``group_threshold``.
-            n_group : Number of grouping iterations to perform.
             dilation : Line mask dilation value in pixels.
 
         Raises:
@@ -1038,8 +1037,7 @@ class LSDetector(Detector):
         out_dict = self.lsd_obj.detect(self.pattern, cutoff=cutoff,
                                        filter_threshold=filter_threshold,
                                        group_threshold=group_threshold,
-                                       n_group=n_group, dilation=dilation,
-                                       num_threads=self.num_threads)
+                                       dilation=dilation, num_threads=self.num_threads)
         streaks = {idx: Streaks(*np.around(lines[:, :5], 2).T)
                    for idx, lines in out_dict['lines'].items() if lines.size}
         idxs = [idx for idx, lines in out_dict['lines'].items() if lines.size]

@@ -209,9 +209,9 @@ def median_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]]=N
             from the input array, at every element position, to define the input to the filter
             function. footprint is a boolean array that specifies (implicitly) a shape, but also
             which of the elements within this shape will get passed to the filter function. Thus
-            size=(n,m) is equivalent to footprint=np.ones((n,m)). We adjust size to the number of
-            dimensions of the input array, so that, if the input array is shape (10,10,10), and
-            size is 2, then the actual size used is (2,2,2). When footprint is given, size is
+            size=(n, m) is equivalent to footprint=np.ones((n, m)). We adjust size to the number of
+            dimensions of the input array, so that, if the input array is shape (10, 10, 10), and
+            size is 2, then the actual size used is (2, 2, 2). When footprint is given, size is
             ignored.
         mask : Output mask. Median is calculated only where `mask` is True, output array set to 0
             otherwise. Median is calculated over the whole input array by default.
@@ -260,9 +260,9 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
             from the input array, at every element position, to define the input to the filter
             function. footprint is a boolean array that specifies (implicitly) a shape, but also
             which of the elements within this shape will get passed to the filter function. Thus
-            size=(n,m) is equivalent to footprint=np.ones((n,m)). We adjust size to the number of
-            dimensions of the input array, so that, if the input array is shape (10,10,10), and
-            size is 2, then the actual size used is (2,2,2). When footprint is given, size is
+            size=(n, m) is equivalent to footprint=np.ones((n, m)). We adjust size to the number of
+            dimensions of the input array, so that, if the input array is shape (10, 10, 10), and
+            size is 2, then the actual size used is (2, 2, 2). When footprint is given, size is
             ignored.
         mask : Output mask. Median is calculated only where `mask` is True, output array set to 0
             otherwise. Median is calculated over the whole input array by default.

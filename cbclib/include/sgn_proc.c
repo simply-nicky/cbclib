@@ -288,67 +288,79 @@ int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **
     return 0;
 }
 
-int update_sf(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
+static float xtal_bilinear(unsigned xidx, float xmap_x, float xmap_y, float *xtal, const size_t *ddims)
+{
+    float dx, dy, xtal_bi;
+    int x0, x1, y0, y1;
+    if (xmap_x <= 0.0f)
+    {
+        dx = 0.0f; x0 = 0; x1 = 0;
+    }
+    else if (xmap_x >= ddims[1] - 1.0f)
+    {
+        dx = 0.0f; x0 = ddims[1] - 1; x1 = ddims[1] - 1;
+    }
+    else
+    {
+        dx = xmap_x - floorf(xmap_x);
+        x0 = (int)floorf(xmap_x); x1 = x0 + 1;
+    }
+
+    if (xmap_y <= 0.0f)
+    {
+        dy = 0.0f; y0 = 0; y1 = 0;
+    }
+    else if (xmap_y >= ddims[2] - 1.0f)
+    {
+        dy = 0.0f; y0 = ddims[2] - 1; y1 = ddims[2] - 1;
+    }
+    else
+    {
+        dy = xmap_y - floorf(xmap_y);
+        y0 = (int)floorf(xmap_y); y1 = y0 + 1;
+    }
+
+    // Calculate bilinear interpolation
+    xtal_bi = (1.0f - dx) * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + x0 * ddims[2] + y0] +
+                      dx  * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + x1 * ddims[2] + y0] +
+              (1.0f - dx) *         dy  * xtal[xidx * ddims[1] * ddims[2] + x0 * ddims[2] + y1] +
+                      dx  *         dy  * xtal[xidx * ddims[1] * ddims[2] + x1 * ddims[2] + y1];
+    return xtal_bi;
+}
+
+int update_sf(float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
               unsigned *hkl_idxs, size_t hkl_size, unsigned *iidxs, size_t isize, unsigned threads)
 {
     /* check parameters */
-    if (!sf || !xidx || !xmap || !xtal || !hkl_idxs || !iidxs)
+    if (!sf || !dsf || !xidx || !xmap || !xtal || !hkl_idxs || !iidxs)
     {ERROR("update_sf: one of the arguments is NULL."); return -1;}
-    if (hkl_size == 0 || isize == 0) {return 0;}
+    if (hkl_size == 0 || isize == 0) return 0;
 
     float *Ibuf = MALLOC(float, isize);
+    float *dIbuf = MALLOC(float, isize);
     float *Wbuf = MALLOC(float, isize);
 
     float *Isum = calloc(hkl_size, sizeof(float));
+    float *dIsum = calloc(hkl_size, sizeof(float));
     float *Wsum = calloc(hkl_size, sizeof(float));
 
     #pragma omp parallel num_threads(threads)
     {
-        int i, j, x0, x1, y0, y1;
-        float dx, dy, d_bi, F;
+        int i, j;
+        float xtal_bi, F, dF;
 
         #pragma omp for
         for (i = 0; i < (int)isize; i++)
         {
-            Ibuf[i] = 0.0f; Wbuf[i] = 0.0f;
+            Ibuf[i] = 0.0f; Wbuf[i] = 0.0f; dIbuf[i] = 0.0f;
+            
             for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
             {
-                if (xmap[2 * j] <= 0.0f)
-                {
-                    dx = 0.0f; x0 = 0; x1 = 0;
-                }
-                else if (xmap[2 * j] >= ddims[1] - 1.0f)
-                {
-                    dx = 0.0f; x0 = ddims[1] - 1; x1 = ddims[1] - 1;
-                }
-                else
-                {
-                    dx = xmap[2 * j] - floorf(xmap[2 * j]);
-                    x0 = (int)floorf(xmap[2 * j]); x1 = x0 + 1;
-                }
+                // Calculate xtal at given position xmap
+                xtal_bi = xtal_bilinear(xidx[j], xmap[2 * j], xmap[2 * j + 1], xtal, ddims);
 
-                if (xmap[2 * j + 1] <= 0.0f)
-                {
-                    dy = 0.0f; y0 = 0; y1 = 0;
-                }
-                else if (xmap[2 * j + 1] >= ddims[2] - 1.0f)
-                {
-                    dy = 0.0f; y0 = ddims[2] - 1; y1 = ddims[2] - 1;
-                }
-                else
-                {
-                    dy = xmap[2 * j + 1] - floorf(xmap[2 * j + 1]);
-                    y0 = (int)floorf(xmap[2 * j + 1]); y1 = y0 + 1;
-                }
-
-                // Calculate bilinear interpolation
-                d_bi = (1.0f - dx) * (1.0f - dy) * xtal[xidx[j] * ddims[1] * ddims[2] + x0 * ddims[2] + y0] +
-                               dx  * (1.0f - dy) * xtal[xidx[j] * ddims[1] * ddims[2] + x1 * ddims[2] + y0] +
-                       (1.0f - dx) *         dy  * xtal[xidx[j] * ddims[1] * ddims[2] + x0 * ddims[2] + y1] +
-                               dx  *         dy  * xtal[xidx[j] * ddims[1] * ddims[2] + x1 * ddims[2] + y1];
-
-                // Calculate weighted least squares slope betta: sgn = betta * d_bi
-                Ibuf[i] += sgn[j] * d_bi; Wbuf[i] += SQ(d_bi);
+                // Calculate weighted least squares slope betta: sgn = betta * xtal_bi
+                Ibuf[i] += sgn[j] * xtal_bi; Wbuf[i] += SQ(xtal_bi); dIbuf[i] += sgn[j] * SQ(xtal_bi);
             }
         }
 
@@ -358,6 +370,8 @@ int update_sf(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, c
             #pragma omp atomic
             Isum[hkl_idxs[i]] += Ibuf[i];
             #pragma omp atomic
+            dIsum[hkl_idxs[i]] += dIbuf[i];
+            #pragma omp atomic
             Wsum[hkl_idxs[i]] += Wbuf[i];
         }
 
@@ -365,12 +379,13 @@ int update_sf(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, c
         for (i = 0; i < (int)isize; i++)
         {
             F = (Wsum[hkl_idxs[i]] > 0.0f) ? Isum[hkl_idxs[i]] / Wsum[hkl_idxs[i]] : 0.0f;
-            for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++) sf[j] = F;
+            dF = (Wsum[hkl_idxs[i]] > 0.0f) ? sqrtf(dIsum[hkl_idxs[i]]) / Wsum[hkl_idxs[i]] : 0.0f;
+            for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++) {sf[j] = F; dsf[j] = dF;}
         }
     }
 
-    DEALLOC(Ibuf); DEALLOC(Wbuf);
-    DEALLOC(Isum); DEALLOC(Wsum);
+    DEALLOC(Ibuf); DEALLOC(Wbuf); DEALLOC(dIbuf);
+    DEALLOC(Isum); DEALLOC(Wsum); DEALLOC(dIsum);
 
     return 0;
 }
@@ -380,64 +395,43 @@ float scale_crit(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal
 {
     /* check parameters */
     if (!sf || !xidx || !xmap || !xtal || !iidxs) {ERROR("scale_crit: one of the arguments is NULL."); return 0.0f;}
-    if (isize == 0) {return 0.0f;}
+    if (isize == 0) return 0.0f;
 
-    float *Ibuf = MALLOC(float, isize);
-    float *Wbuf = MALLOC(float, isize);
     double err = 0.0;
 
     #pragma omp parallel num_threads(threads) reduction(+:err)
     {
-        int i, j, x0, x1, y0, y1;
-        float dx, dy, d_bi;
+        int i, j;
+        float xtal_bi;
 
         #pragma omp for
         for (i = 0; i < (int)isize; i++)
         {
-            Ibuf[i] = 0.0f; Wbuf[i] = 0.0f;
             for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
             {
-                if (xmap[2 * j] <= 0.0f)
-                {
-                    dx = 0.0f; x0 = 0; x1 = 0;
-                }
-                else if (xmap[2 * j] >= ddims[1] - 1.0f)
-                {
-                    dx = 0.0f; x0 = ddims[1] - 1; x1 = ddims[1] - 1;
-                }
-                else
-                {
-                    dx = xmap[2 * j] - floorf(xmap[2 * j]);
-                    x0 = (int)floorf(xmap[2 * j]); x1 = x0 + 1;
-                }
-
-                if (xmap[2 * j + 1] <= 0.0f)
-                {
-                    dy = 0.0f; y0 = 0; y1 = 0;
-                }
-                else if (xmap[2 * j + 1] >= ddims[2] - 1.0f)
-                {
-                    dy = 0.0f; y0 = ddims[2] - 1; y1 = ddims[2] - 1;
-                }
-                else
-                {
-                    dy = xmap[2 * j + 1] - floorf(xmap[2 * j + 1]);
-                    y0 = (int)floorf(xmap[2 * j + 1]); y1 = y0 + 1;
-                }
-
-                // Calculate bilinear interpolation
-                d_bi = (1.0f - dx) * (1.0f - dy) * xtal[xidx[j] * ddims[1] * ddims[2] + x0 * ddims[2] + y0] +
-                               dx  * (1.0f - dy) * xtal[xidx[j] * ddims[1] * ddims[2] + x1 * ddims[2] + y0] +
-                       (1.0f - dx) *         dy  * xtal[xidx[j] * ddims[1] * ddims[2] + x0 * ddims[2] + y1] +
-                               dx  *         dy  * xtal[xidx[j] * ddims[1] * ddims[2] + x1 * ddims[2] + y1];
+                // Calculate xtal at given position xmap
+                xtal_bi = xtal_bilinear(xidx[j], xmap[2 * j], xmap[2 * j + 1], xtal, ddims);
 
                 // Calculate weighted least squares slope betta: sgn = betta * d_bi
-                err += fabsf(sgn[j] - d_bi * sf[j]);
+                err += fabsf(sgn[j] - xtal_bi * sf[j]);
             }
         }
     }
 
-    DEALLOC(Ibuf); DEALLOC(Wbuf);
-
     return err / iidxs[isize];
+}
+
+int xtal_interp(float *xtal_bi, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims, size_t isize, unsigned threads)
+{
+    /* check parameters */
+    if (!xidx || !xmap || !xtal) {ERROR("xtal_interp: one of the arguments is NULL."); return -1;}
+    if (isize == 0) return 0;
+
+    #pragma omp parallel for num_threads(threads)
+    for (int i = 0; i < (int)isize; i++)
+    {
+        // Calculate xtal at given position xmap
+        xtal_bi[i] = xtal_bilinear(xidx[i], xmap[2 * i], xmap[2 * i + 1], xtal, ddims);
+    }
+    return 0;
 }

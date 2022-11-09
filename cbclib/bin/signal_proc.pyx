@@ -98,6 +98,8 @@ def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap
 
     cdef np.ndarray sf = np.PyArray_SimpleNew(1, sgn.shape, np.NPY_FLOAT32)
     cdef float *_sf = <float *>np.PyArray_DATA(sf)
+    cdef np.ndarray dsf = np.PyArray_SimpleNew(1, sgn.shape, np.NPY_FLOAT32)
+    cdef float *_dsf = <float *>np.PyArray_DATA(dsf)
     cdef float *_sgn = <float *>np.PyArray_DATA(sgn)
     cdef unsigned *_xidx = <unsigned *>np.PyArray_DATA(xidx)
     cdef float *_xmap = <float *>np.PyArray_DATA(xmap)
@@ -106,13 +108,13 @@ def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap
     cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
 
     with nogil:
-        fail = update_sf_c(_sf, _sgn, _xidx, _xmap, _xtal, _ddims,
+        fail = update_sf_c(_sf, _dsf, _sgn, _xidx, _xmap, _xtal, _ddims,
                            _hkl_idxs, _hkl_size, _iidxs, _isize, num_threads)
 
     if fail:
         raise RuntimeError('C backend exited with error.')
 
-    return sf
+    return sf, dsf
 
 def scaling_criterion(np.ndarray sf not None, np.ndarray sgn not None, np.ndarray xidx not None,
                       np.ndarray xmap not None, np.ndarray xtal not None, np.ndarray iidxs, unsigned num_threads):
@@ -246,3 +248,30 @@ def kr_grid(np.ndarray y not None, np.ndarray x not None, object step not None,
         raise RuntimeError('C backend exited with error.')
 
     return y_hat
+
+def xtal_interpolate(np.ndarray xidx not None, np.ndarray xmap not None,
+                     np.ndarray xtal not None, unsigned num_threads=1):
+    if xidx.size != xmap.shape[0]:
+        raise ValueError('Input arrays have incompatible shapes')
+    
+    xidx = check_array(xidx, np.NPY_UINT32)
+    xmap = check_array(xmap, np.NPY_FLOAT32)
+    xtal = check_array(xtal, np.NPY_FLOAT32)
+
+    cdef int fail = 0
+    cdef unsigned long *_ddims = <unsigned long *>xtal.shape
+    cdef unsigned long _isize = xidx.size
+
+    cdef np.ndarray xtal_bi = np.PyArray_SimpleNew(1, xidx.shape, np.NPY_FLOAT32)
+    cdef float *_xtal_bi = <float *>np.PyArray_DATA(xtal_bi)
+    cdef unsigned *_xidx = <unsigned *>np.PyArray_DATA(xidx)
+    cdef float *_xmap = <float *>np.PyArray_DATA(xmap)
+    cdef float *_xtal = <float *>np.PyArray_DATA(xtal)
+
+    with nogil:
+        fail = xtal_interp(_xtal_bi, _xidx, _xmap, _xtal, _ddims, _isize, num_threads)
+
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+
+    return xtal_bi
