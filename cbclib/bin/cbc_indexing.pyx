@@ -1,4 +1,5 @@
 cimport numpy as np
+cimport openmp
 import numpy as np
 import cython
 from libc.stdlib cimport free, calloc, malloc, realloc
@@ -11,6 +12,8 @@ from .line_detector cimport ArrayWrapper
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
+
+DEF CUTOFF = 3.0
 
 def euler_angles(np.ndarray rot_mats not None):
     rot_mats = check_array(rot_mats, np.NPY_FLOAT64)
@@ -271,109 +274,125 @@ def spherical_to_cartesian(np.ndarray vecs not None):
         return out[0]
     return out
 
-def gaussian_grid(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] z_arr,
-                  np.float64_t[:, ::1] basis, double envelope, double sigma, unsigned int threads=1):
-    cdef int Nx = x_arr.size, Ny = y_arr.size, Nz = z_arr.size
-    cdef double a_abs = basis[0, 0]**2 + basis[0, 1]**2 + basis[0, 2]**2
-    cdef int na_min = <int>(((x_arr[0] if basis[0, 0] > 0.0 else x_arr[Nx - 1]) * basis[0, 0] + 
-                             (y_arr[0] if basis[0, 1] > 0.0 else y_arr[Ny - 1]) * basis[0, 1] + 
-                             (z_arr[0] if basis[0, 2] > 0.0 else z_arr[Nz - 1]) * basis[0, 2]) / a_abs)
-    cdef int na_max = <int>(((x_arr[0] if basis[0, 0] <= 0.0 else x_arr[Nx - 1]) * basis[0, 0] + 
-                             (y_arr[0] if basis[0, 1] <= 0.0 else y_arr[Ny - 1]) * basis[0, 1] + 
-                             (z_arr[0] if basis[0, 2] <= 0.0 else z_arr[Nz - 1]) * basis[0, 2]) / a_abs)
+def filter_direction(np.ndarray grid not None, object axis not None, double rng, double sigma, int num_threads=1):
+    grid = check_array(grid, np.NPY_FLOAT64)
 
-    cdef double b_abs = basis[1, 0]**2 + basis[1, 1]**2 + basis[1, 2]**2
-    cdef int nb_min = <int>(((x_arr[0] if basis[1, 0] > 0.0 else x_arr[Nx - 1]) * basis[1, 0] + 
-                             (y_arr[0] if basis[1, 1] > 0.0 else y_arr[Ny - 1]) * basis[1, 1] + 
-                             (z_arr[0] if basis[1, 2] > 0.0 else z_arr[Nz - 1]) * basis[1, 2]) / b_abs)
-    cdef int nb_max = <int>(((x_arr[0] if basis[1, 0] <= 0.0 else x_arr[Nx - 1]) * basis[1, 0] + 
-                             (y_arr[0] if basis[1, 1] <= 0.0 else y_arr[Ny - 1]) * basis[1, 1] + 
-                             (z_arr[0] if basis[1, 2] <= 0.0 else z_arr[Nz - 1]) * basis[1, 2]) / b_abs)
+    cdef np.ndarray ax = normalize_sequence(axis, 3, np.NPY_FLOAT64)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(grid.ndim - 1, grid.shape, np.NPY_FLOAT64)
 
-    cdef double c_abs = basis[2, 0]**2 + basis[2, 1]**2 + basis[2, 2]**2
-    cdef int nc_min = <int>(((x_arr[0] if basis[2, 0] > 0.0 else x_arr[Nx - 1]) * basis[2, 0] + 
-                             (y_arr[0] if basis[2, 1] > 0.0 else y_arr[Ny - 1]) * basis[2, 1] + 
-                             (z_arr[0] if basis[2, 2] > 0.0 else z_arr[Nz - 1]) * basis[2, 2]) / c_abs)
-    cdef int nc_max = <int>(((x_arr[0] if basis[2, 0] <= 0.0 else x_arr[Nx - 1]) * basis[2, 0] + 
-                             (y_arr[0] if basis[2, 1] <= 0.0 else y_arr[Ny - 1]) * basis[2, 1] + 
-                             (z_arr[0] if basis[2, 2] <= 0.0 else z_arr[Nz - 1]) * basis[2, 2]) / c_abs)
-
-    cdef np.npy_intp *odims = [Nx, Ny, Nz]
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(3, odims, np.NPY_FLOAT64, 0)
+    cdef np.float64_t[:, :, :, ::1] _grid = grid
     cdef np.float64_t[:, :, ::1] _out = out
+    cdef np.float64_t[::1] _axis = ax
+    cdef double norm = _axis[0] * _axis[0] + _axis[1] * _axis[1] + _axis[2] * _axis[2]
+    cdef double rng_sq = rng * rng
+    cdef double sgm_sq = sigma * sigma
+    cdef int i, j, k
+    cdef double prod, dx, dy, dz, val0, val1
 
-    cdef int *hkl = <int *>malloc(3 * (na_max - na_min) * (nb_max - nb_min) * (nc_max - nc_min) * sizeof(int))
-    cdef int na, nb, nc, n_max = 0
-    cdef double cnt_x, cnt_y, cnt_z
-    for na in range(na_min, na_max):
-        for nb in range(nb_min, nb_max):
-            for nc in range(nc_min, nc_max):
-                cnt_x = na * basis[0, 0] + nb * basis[1, 0] + nc * basis[2, 0]
-                cnt_y = na * basis[0, 1] + nb * basis[1, 1] + nc * basis[2, 1]
-                cnt_z = na * basis[0, 2] + nb * basis[1, 2] + nc * basis[2, 2]
-                if (cnt_x**2 + cnt_y**2 + cnt_z**2) < 9.0 * envelope**2:
-                    hkl[3 * n_max] = na; hkl[3 * n_max + 1] = nb; hkl[3 * n_max + 2] = nc; n_max += 1
-                
-    cdef int nx, ny, nz, n
-    for nx in prange(Nx, schedule='guided', num_threads=threads, nogil=True):
-        for ny in range(Ny):
-            for nz in range(Nz):
-                for n in range(n_max):
-                    cnt_x = hkl[3 * n] * basis[0, 0] + hkl[3 * n + 1] * basis[1, 0] + hkl[3 * n + 2] * basis[2, 0]
-                    cnt_y = hkl[3 * n] * basis[0, 1] + hkl[3 * n + 1] * basis[1, 1] + hkl[3 * n + 2] * basis[2, 1]
-                    cnt_z = hkl[3 * n] * basis[0, 2] + hkl[3 * n + 1] * basis[1, 2] + hkl[3 * n + 2] * basis[2, 2]
-                    _out[nx, ny, nz] = _out[nx, ny, nz] + exp(-0.5 * ((x_arr[nx] - cnt_x)**2 +
-                                                                      (y_arr[ny] - cnt_y)**2 +
-                                                                      (z_arr[nz] - cnt_z)**2) / (sigma * sigma))
-                _out[nx, ny, nz] = _out[nx, ny, nz] * exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (envelope * envelope))
-
-    hkl = <int *>realloc(hkl, 3 * n_max * sizeof(int))
-    cdef np.npy_intp *hkl_dims = [n_max, 3]
-    cdef np.ndarray hkl_arr = ArrayWrapper.from_ptr(<void *>hkl).to_ndarray(2, hkl_dims, np.NPY_INT32)
-
-    return out, hkl_arr
-
-def gaussian_grid_grad(np.float64_t[:] x_arr, np.float64_t[:] y_arr, np.float64_t[:] z_arr,
-                       np.float64_t[:, ::1] basis, np.int32_t[:, ::1] hkl, double envelope, double sigma,
-                       unsigned int threads=1):
-    cdef int Nx = x_arr.size, Ny = y_arr.size, Nz = z_arr.size
-    cdef np.npy_intp *odims = [9, Nx, Ny, Nz]
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(4, odims, np.NPY_FLOAT64, 0)
-    cdef np.float64_t[:, :, :, ::1] _out = out
-                
-    cdef int nx, ny, nz, n, n_max = hkl.shape[0], i
-    cdef double gauss, dr
-    cdef double *cnt
-    with nogil, parallel(num_threads=threads):
-        cnt = <double *>malloc(3 * sizeof(double))
-
-        for nx in prange(Nx, schedule='guided'):
-            for ny in range(Ny):
-                for nz in range(Nz):
-                    for n in range(n_max):
-                        cnt[0] = hkl[n, 0] * basis[0, 0] + hkl[n, 1] * basis[1, 0] + hkl[n, 2] * basis[2, 0]
-                        cnt[1] = hkl[n, 0] * basis[0, 1] + hkl[n, 1] * basis[1, 1] + hkl[n, 2] * basis[2, 1]
-                        cnt[2] = hkl[n, 0] * basis[0, 2] + hkl[n, 1] * basis[1, 2] + hkl[n, 2] * basis[2, 2]
-                        dr = (x_arr[nx] - cnt[0])**2 + (y_arr[ny] - cnt[1])**2 + (z_arr[nz] - cnt[2])**2
-                        gauss = exp(-0.5 * dr / (sigma * sigma))
-
-                        _out[0, nx, ny, nz] = _out[0, nx, ny, nz] + (x_arr[nx] - cnt[0]) * hkl[n, 0] * gauss / (sigma * sigma)
-                        _out[1, nx, ny, nz] = _out[1, nx, ny, nz] + (y_arr[ny] - cnt[1]) * hkl[n, 0] * gauss / (sigma * sigma)
-                        _out[2, nx, ny, nz] = _out[2, nx, ny, nz] + (z_arr[nz] - cnt[2]) * hkl[n, 0] * gauss / (sigma * sigma)
-                        _out[3, nx, ny, nz] = _out[3, nx, ny, nz] + (x_arr[nx] - cnt[0]) * hkl[n, 1] * gauss / (sigma * sigma)
-                        _out[4, nx, ny, nz] = _out[4, nx, ny, nz] + (y_arr[ny] - cnt[1]) * hkl[n, 1] * gauss / (sigma * sigma)
-                        _out[5, nx, ny, nz] = _out[5, nx, ny, nz] + (z_arr[nz] - cnt[2]) * hkl[n, 1] * gauss / (sigma * sigma)
-                        _out[6, nx, ny, nz] = _out[6, nx, ny, nz] + (x_arr[nx] - cnt[0]) * hkl[n, 2] * gauss / (sigma * sigma)
-                        _out[7, nx, ny, nz] = _out[7, nx, ny, nz] + (y_arr[ny] - cnt[1]) * hkl[n, 2] * gauss / (sigma * sigma)
-                        _out[8, nx, ny, nz] = _out[8, nx, ny, nz] + (z_arr[nz] - cnt[2]) * hkl[n, 2] * gauss / (sigma * sigma)
-                    
-                    gauss = exp(-0.5 * (x_arr[nx]**2 + y_arr[ny]**2 + z_arr[nz]**2) / (envelope * envelope))
-                    for i in range(9):
-                        _out[i, nx, ny, nz] = _out[i, nx, ny, nz] * gauss
-
-        free(cnt)
-
+    for i in prange(_out.shape[0], schedule='guided', num_threads=num_threads, nogil=True):
+        for j in range(_out.shape[1]):
+            for k in range(_out.shape[2]):
+                prod = _grid[i, j, k, 0] * _axis[0] + _grid[i, j, k, 1] * _axis[1] + _grid[i, j, k, 2] * _axis[2]
+                dx = _grid[i, j, k, 0] - prod * _axis[0] / norm
+                dy = _grid[i, j, k, 1] - prod * _axis[1] / norm
+                dz = _grid[i, j, k, 2] - prod * _axis[2] / norm
+                val0 = 1.0 / (1.0 + exp((rng_sq - dx * dx - dy * dy - dz * dz) / sgm_sq))
+                val1 = 1.0 / (1.0 + exp((_grid[i, j, k, 0] * _grid[i, j, k, 0] +
+                                         _grid[i, j, k, 1] * _grid[i, j, k, 1] +
+                                         _grid[i, j, k, 2] * _grid[i, j, k, 2] - rng_sq) / sgm_sq))
+                _out[i, j, k] = val0 if val0 > val1 else val1
     return out
+
+def gaussian_grid(np.float64_t[:, :, ::1] p_arr, np.float64_t[::1] x_arr, np.float64_t[::1] y_arr,
+                  np.float64_t[::1] z_arr, np.float64_t[::1] center, np.float64_t[:, ::1] basis, double sigma,
+                  double cutoff, unsigned int num_threads=1):
+    cdef int Nx = x_arr.size, Ny = y_arr.size, Nz = z_arr.size, i
+    cdef int n_min[3]
+    cdef int n_max[3]
+    cdef double vec_abs
+    for i in range(3):
+        vec_abs = basis[i, 0]**2 + basis[i, 1]**2 + basis[i, 2]**2
+        if vec_abs:
+            n_min[i] = <int>(((x_arr[0] if basis[i, 0] > 0.0 else x_arr[Nx - 1]) * basis[i, 0] + 
+                              (y_arr[0] if basis[i, 1] > 0.0 else y_arr[Ny - 1]) * basis[i, 1] + 
+                              (z_arr[0] if basis[i, 2] > 0.0 else z_arr[Nz - 1]) * basis[i, 2]) / vec_abs)
+            n_max[i] = <int>(((x_arr[0] if basis[i, 0] <= 0.0 else x_arr[Nx - 1]) * basis[i, 0] + 
+                              (y_arr[0] if basis[i, 1] <= 0.0 else y_arr[Ny - 1]) * basis[i, 1] + 
+                              (z_arr[0] if basis[i, 2] <= 0.0 else z_arr[Nz - 1]) * basis[i, 2]) / vec_abs)
+        else:
+            n_min[i] = 0
+            n_max[i] = 1
+
+    cdef int *hkl = <int *>malloc(3 * (n_max[0] - n_min[0]) *
+                                      (n_max[1] - n_min[1]) *
+                                      (n_max[2] - n_min[2]) * sizeof(int))
+    cdef double *qs = <double *>malloc(3 * (n_max[0] - n_min[0]) *
+                                           (n_max[1] - n_min[1]) *
+                                           (n_max[2] - n_min[2]) * sizeof(double))
+    cdef int na, nb, nc, hkl_max = 0
+    for na in range(n_min[0], n_max[0]):
+        for nb in range(n_min[1], n_max[1]):
+            for nc in range(n_min[2], n_max[2]):
+                qs[3 * hkl_max] = na * basis[0, 0] + nb * basis[1, 0] + nc * basis[2, 0] + center[0]
+                qs[3 * hkl_max + 1] = na * basis[0, 1] + nb * basis[1, 1] + nc * basis[2, 1] + center[1]
+                qs[3 * hkl_max + 2] = na * basis[0, 2] + nb * basis[1, 2] + nc * basis[2, 2] + center[2]
+                if (qs[3 * hkl_max]**2 + qs[3 * hkl_max + 1]**2 + qs[3 * hkl_max + 2]**2) < cutoff**2:
+                    hkl[3 * hkl_max] = na; hkl[3 * hkl_max + 1] = nb; hkl[3 * hkl_max + 2] = nc; hkl_max += 1
+                
+    cdef int nx, ny, nz, t
+    cdef double q, x_min, x_max, y_min, y_max, z_min, z_max, entropy = 0.0
+    cdef double grad_xx = 0.0, grad_xy = 0.0, grad_xz = 0.0
+    cdef double grad_yx = 0.0, grad_yy = 0.0, grad_yz = 0.0
+    cdef double grad_zx = 0.0, grad_zy = 0.0, grad_zz = 0.0
+    cdef np.ndarray grad = np.PyArray_SimpleNew(1, [9,], np.NPY_FLOAT64)
+    cdef int *min_buf
+    cdef int *max_buf
+    with nogil, parallel(num_threads=num_threads):
+        min_buf = <int *>malloc(3 * sizeof(int))
+        max_buf = <int *>malloc(3 * sizeof(int))
+        t = openmp.omp_get_thread_num()
+
+        for i in prange(hkl_max):
+            x_min = qs[3 * i] - CUTOFF * sigma
+            x_max = qs[3 * i] + CUTOFF * sigma
+            y_min = qs[3 * i + 1] - CUTOFF * sigma
+            y_max = qs[3 * i + 1] + CUTOFF * sigma
+            z_min = qs[3 * i + 2] - CUTOFF * sigma
+            z_max = qs[3 * i + 2] + CUTOFF * sigma
+
+            min_buf[0] = searchsorted_c(&x_min, &x_arr[0], Nx, sizeof(double), SEARCH_LEFT, compare_double)
+            max_buf[0] = searchsorted_c(&x_max, &x_arr[0], Nx, sizeof(double), SEARCH_LEFT, compare_double)
+            min_buf[1] = searchsorted_c(&y_min, &y_arr[0], Ny, sizeof(double), SEARCH_LEFT, compare_double)
+            max_buf[1] = searchsorted_c(&y_max, &y_arr[0], Ny, sizeof(double), SEARCH_LEFT, compare_double)
+            min_buf[2] = searchsorted_c(&z_min, &z_arr[0], Nz, sizeof(double), SEARCH_LEFT, compare_double)
+            max_buf[2] = searchsorted_c(&z_max, &z_arr[0], Nz, sizeof(double), SEARCH_LEFT, compare_double)
+
+            for nx in range(min_buf[0], max_buf[0] + 1 if max_buf[0] < Nx else Nx):
+                for ny in range(min_buf[1], max_buf[1] + 1 if max_buf[1] < Ny else Ny):
+                    for nz in range(min_buf[2], max_buf[2] + 1 if max_buf[2] < Nz else Nz):
+                        q = exp(-0.5 * ((x_arr[nx] - qs[3 * i])**2 +
+                                        (y_arr[ny] - qs[3 * i + 1])**2 +
+                                        (z_arr[nz] - qs[3 * i + 2])**2) / (sigma * sigma))
+                        entropy -= p_arr[nx, ny, nz] * q
+                        grad_xx -= p_arr[nx, ny, nz] * (x_arr[nx] - qs[3 * i]) * hkl[3 * i] * q / (sigma * sigma)
+                        grad_xy -= p_arr[nx, ny, nz] * (y_arr[ny] - qs[3 * i + 1]) * hkl[3 * i] * q / (sigma * sigma)
+                        grad_xz -= p_arr[nx, ny, nz] * (z_arr[nz] - qs[3 * i + 2]) * hkl[3 * i] * q / (sigma * sigma)
+                        grad_yx -= p_arr[nx, ny, nz] * (x_arr[nx] - qs[3 * i]) * hkl[3 * i + 1] * q / (sigma * sigma)
+                        grad_yy -= p_arr[nx, ny, nz] * (y_arr[ny] - qs[3 * i + 1]) * hkl[3 * i + 1] * q / (sigma * sigma)
+                        grad_yz -= p_arr[nx, ny, nz] * (z_arr[nz] - qs[3 * i + 2]) * hkl[3 * i + 1] * q / (sigma * sigma)
+                        grad_zx -= p_arr[nx, ny, nz] * (x_arr[nx] - qs[3 * i]) * hkl[3 * i + 2] * q / (sigma * sigma)
+                        grad_zy -= p_arr[nx, ny, nz] * (y_arr[ny] - qs[3 * i + 1]) * hkl[3 * i + 2] * q / (sigma * sigma)
+                        grad_zz -= p_arr[nx, ny, nz] * (z_arr[nz] - qs[3 * i + 2]) * hkl[3 * i + 2] * q / (sigma * sigma)
+
+        free(min_buf); free(max_buf)
+
+    grad[0] = grad_xx; grad[1] = grad_xy; grad[2] = grad_xz
+    grad[3] = grad_yx; grad[4] = grad_yy; grad[5] = grad_yz
+    grad[6] = grad_zx; grad[7] = grad_zy; grad[8] = grad_zz
+
+    free(qs); free(hkl)
+
+    return entropy, grad
 
 cdef int find_intersection(double *t_int, double *q, double *e, double *s, double *tlim, double src_prd) nogil:
     # ----------------------------------
@@ -416,7 +435,7 @@ cdef int find_intersection(double *t_int, double *q, double *e, double *s, doubl
     return 0
 
 def calc_source_lines(np.float64_t[:, ::1] basis, np.int64_t[:, ::1] hkl, np.float64_t[::1] kin_min,
-                      np.float64_t[::1] kin_max, unsigned int threads=1):
+                      np.float64_t[::1] kin_max, unsigned int num_threads=1):
     cdef int n_max = hkl.shape[0], n, i, j
     cdef double[4][2] bs = [[kin_min[0], 0.0], [0.0, kin_min[1]], [0.0, kin_max[1]], [kin_max[0], 0.0]]
     cdef double[4][2] taus = [[0.0, 1.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
@@ -438,7 +457,7 @@ def calc_source_lines(np.float64_t[:, ::1] basis, np.int64_t[:, ::1] hkl, np.flo
     cdef double *q
     cdef double *q_sph
 
-    with nogil, parallel(num_threads=threads):
+    with nogil, parallel(num_threads=num_threads):
         q = <double *>malloc(3 * sizeof(double))
         q_sph = <double *>malloc(3 * sizeof(double))    # r, theta, phi
         t_int = 0.0
@@ -483,12 +502,12 @@ def cross_entropy(np.int64_t[::1] x, np.float64_t[::1] p, np.uint32_t[::1] q, in
     return entropy / n
 
 def filter_hkl(np.ndarray sgn not None, np.ndarray bgd not None, np.ndarray coord not None,
-               np.ndarray prob not None, np.ndarray idxs not None, double threshold,
+               np.ndarray prof not None, np.ndarray idxs not None, double threshold,
                unsigned int num_threads=1):
     sgn = check_array(sgn, np.NPY_FLOAT32)
     bgd = check_array(bgd, np.NPY_FLOAT32)
     coord = check_array(coord, np.NPY_UINT32)
-    prob = check_array(prob, np.NPY_FLOAT64)
+    prof = check_array(prof, np.NPY_FLOAT64)
     idxs = check_array(idxs, np.NPY_UINT64)
 
     cdef int i, i0, i1, n, n_max = np.PyArray_Max(idxs, 0, <np.ndarray>NULL)
@@ -498,11 +517,10 @@ def filter_hkl(np.ndarray sgn not None, np.ndarray bgd not None, np.ndarray coor
     cdef np.float32_t[:, ::1] _sgn = sgn
     cdef np.float32_t[:, ::1] _bgd = bgd
     cdef np.uint32_t[:, ::1] _coord = coord
-    cdef np.float64_t[::1] _prob = prob
+    cdef np.float64_t[::1] _prof = prof
     cdef void *_idxs = np.PyArray_DATA(idxs)
 
-    cdef np.npy_intp *shape = [n_max + 1,]
-    cdef np.ndarray out = np.PyArray_SimpleNew(1, shape, np.NPY_BOOL)
+    cdef np.ndarray out = np.PyArray_SimpleNew(1, [n_max + 1,], np.NPY_BOOL)
     cdef np.npy_bool[::1] _out = out
 
     for n in prange(n_max + 1, schedule='guided', num_threads=num_threads, nogil=True):
@@ -513,8 +531,8 @@ def filter_hkl(np.ndarray sgn not None, np.ndarray bgd not None, np.ndarray coor
 
         I_sgn = 0.0; I_bgd = 0.0
         for i in range(i0, i1):
-            I_sgn = I_sgn + fabs(_sgn[_coord[i, 1], _coord[i, 0]]) * _prob[i]
-            I_bgd = I_bgd + sqrt(_bgd[_coord[i, 1], _coord[i, 0]]) * _prob[i]
+            I_sgn = I_sgn + fabs(_sgn[_coord[i, 1], _coord[i, 0]]) * _prof[i]
+            I_bgd = I_bgd + sqrt(_bgd[_coord[i, 1], _coord[i, 0]]) * _prof[i]
         _out[n] = I_sgn > threshold * I_bgd
 
     return out

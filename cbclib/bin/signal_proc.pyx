@@ -1,5 +1,5 @@
 import numpy as np
-from libc.math cimport sqrt, atan, atan2, sin, cos
+from libc.math cimport sqrt, atan, atan2, sin, cos, floor, ceil
 from cython.parallel import prange
 
 # Numpy must be initialized. When using numpy from C or Cython you must
@@ -77,13 +77,14 @@ def find_kins(np.ndarray x not None, np.ndarray y not None, np.ndarray hkl not N
 
     return kin
 
-def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap not None,
+def update_sf(np.ndarray bp not None, np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap not None,
               np.ndarray xtal not None, np.ndarray hkl_idxs, np.ndarray iidxs, unsigned num_threads):
-    if sgn.size != xidx.size or sgn.size != xmap.shape[0]:
+    if sgn.size != bp.size or sgn.size != xidx.size or sgn.size != xmap.shape[0]:
         raise ValueError('Input arrays have incompatible sizes')
     if sgn.size != iidxs[iidxs.size - 1]:
         raise ValueError('Input indices are incompatible with the input arrays')
 
+    bp = check_array(bp, np.NPY_FLOAT32)
     sgn = check_array(sgn, np.NPY_FLOAT32)
     xidx = check_array(xidx, np.NPY_UINT32)
     xmap = check_array(xmap, np.NPY_FLOAT32)
@@ -100,6 +101,7 @@ def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap
     cdef float *_sf = <float *>np.PyArray_DATA(sf)
     cdef np.ndarray dsf = np.PyArray_SimpleNew(1, sgn.shape, np.NPY_FLOAT32)
     cdef float *_dsf = <float *>np.PyArray_DATA(dsf)
+    cdef float *_bp = <float *>np.PyArray_DATA(bp)
     cdef float *_sgn = <float *>np.PyArray_DATA(sgn)
     cdef unsigned *_xidx = <unsigned *>np.PyArray_DATA(xidx)
     cdef float *_xmap = <float *>np.PyArray_DATA(xmap)
@@ -108,7 +110,7 @@ def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap
     cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
 
     with nogil:
-        fail = update_sf_c(_sf, _dsf, _sgn, _xidx, _xmap, _xtal, _ddims,
+        fail = update_sf_c(_sf, _dsf, _bp, _sgn, _xidx, _xmap, _xtal, _ddims,
                            _hkl_idxs, _hkl_size, _iidxs, _isize, num_threads)
 
     if fail:
@@ -116,14 +118,15 @@ def update_sf(np.ndarray sgn not None, np.ndarray xidx not None, np.ndarray xmap
 
     return sf, dsf
 
-def scaling_criterion(np.ndarray sf not None, np.ndarray sgn not None, np.ndarray xidx not None,
+def scaling_criterion(np.ndarray sf not None, np.ndarray bp not None, np.ndarray sgn not None, np.ndarray xidx not None,
                       np.ndarray xmap not None, np.ndarray xtal not None, np.ndarray iidxs, unsigned num_threads):
-    if sf.size != sgn.size or sf.size != xidx.size or sf.size != xmap.shape[0]:
+    if sf.size != bp.size or sf.size != sgn.size or sf.size != xidx.size or sf.size != xmap.shape[0]:
         raise ValueError('Input arrays have incompatible sizes')
     if sf.size != iidxs[iidxs.size - 1]:
         raise ValueError('Input indices are incompatible with the input arrays')
 
     sf = check_array(sf, np.NPY_FLOAT32)
+    bp = check_array(bp, np.NPY_FLOAT32)
     sgn = check_array(sgn, np.NPY_FLOAT32)
     xidx = check_array(xidx, np.NPY_UINT32)
     xmap = check_array(xmap, np.NPY_FLOAT32)
@@ -150,6 +153,7 @@ def scaling_criterion(np.ndarray sf not None, np.ndarray sgn not None, np.ndarra
     cdef unsigned long _isize = iidxs.size - 1
 
     cdef float *_sf = <float *>np.PyArray_DATA(sf)
+    cdef float *_bp = <float *>np.PyArray_DATA(bp)
     cdef float *_sgn = <float *>np.PyArray_DATA(sgn)
     cdef unsigned *_xidx = <unsigned *>np.PyArray_DATA(xidx)
     cdef float *_xmap = <float *>np.PyArray_DATA(xmap)
@@ -157,7 +161,7 @@ def scaling_criterion(np.ndarray sf not None, np.ndarray sgn not None, np.ndarra
     cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
 
     with nogil:
-        err = scale_crit(_sf, _sgn, _xidx, _xmap, _xtal, _ddims, _iidxs, _isize, num_threads)
+        err = scale_crit(_sf, _bp, _sgn, _xidx, _xmap, _xtal, _ddims, _iidxs, _isize, num_threads)
 
     return err
 
@@ -203,7 +207,8 @@ def kr_predict(np.ndarray y not None, np.ndarray x not None, np.ndarray x_hat, d
     return y_hat
 
 def kr_grid(np.ndarray y not None, np.ndarray x not None, object step not None,
-            double sigma, double cutoff, np.ndarray w=None, unsigned int num_threads=1):
+            double sigma, double cutoff, np.ndarray w=None, bint return_roi=True,
+            unsigned int num_threads=1):
     y = check_array(y, np.NPY_FLOAT64)
     x = check_array(x, np.NPY_FLOAT64)
 
@@ -231,23 +236,34 @@ def kr_grid(np.ndarray y not None, np.ndarray x not None, object step not None,
 
     cdef np.ndarray x_min = np.PyArray_Min(x, 0, <np.ndarray>NULL)
     cdef np.ndarray x_max = np.PyArray_Max(x, 0, <np.ndarray>NULL)
-    cdef np.npy_intp *shape = [<int>((x_max[0] - x_min[0]) / step[0]) + 1,
-                               <int>((x_max[1] - x_min[1]) / step[1]) + 1]
-    cdef unsigned long *_dims = <unsigned long *>shape
+    cdef np.npy_intp *roi = <np.npy_intp *>malloc(2 * ndim * sizeof(np.npy_intp))
+    cdef np.npy_intp *shape = <np.npy_intp *>malloc(ndim * sizeof(np.npy_intp))
+    for i in range(ndim):
+        roi[2 * i] = <int>floor(x_min[ndim - 1 - i] / step[ndim - 1 - i])
+        roi[2 * i + 1] = <int>ceil((x_max[ndim - 1 - i] - x_min[ndim - 1 - i]) / step[ndim - 1 - i]) + 1
+        shape[i] = roi[2 * i + 1] - roi[2 * i]
 
     cdef np.ndarray y_hat = <np.ndarray>np.PyArray_SimpleNew(ndim, shape, np.NPY_FLOAT64)
     cdef double *_y_hat = <double *>np.PyArray_DATA(y_hat)
     cdef double *_y = <double *>np.PyArray_DATA(y)
     cdef double *_x = <double *>np.PyArray_DATA(x)
+    cdef unsigned long *_roi = <unsigned long *>roi
 
     with nogil:
-        fail = predict_grid(_y, _w, _x, npts, ndim, _y_hat, _dims, _step, rbf,
+        fail = predict_grid(_y, _w, _x, npts, ndim, _y_hat, _roi, _step, rbf,
                             sigma, cutoff, num_threads)
 
     if fail:
         raise RuntimeError('C backend exited with error.')
 
-    return y_hat
+    cdef np.ndarray roi_arr
+
+    if return_roi:
+        roi_arr = ArrayWrapper.from_ptr(<void *>_roi).to_ndarray(1, [2 * ndim,], np.NPY_INTP)
+        return y_hat, roi_arr
+    else:
+        free(roi)
+        return y_hat
 
 def xtal_interpolate(np.ndarray xidx not None, np.ndarray xmap not None,
                      np.ndarray xtal not None, unsigned num_threads=1):

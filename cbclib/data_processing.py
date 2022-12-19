@@ -22,7 +22,7 @@ from .cbc_indexing import CBDModel
 from .cxi_protocol import CXIStore, Indices
 from .data_container import DataContainer, Transform, ReferenceType
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  maximum_filter, normalise_pattern, draw_line_stack)
+                  normalise_pattern, draw_line_stack)
 
 C = TypeVar('C', bound='CrystData')
 
@@ -96,8 +96,8 @@ class CrystData(DataContainer):
             A new :class:`cbclib.CrystData` container.
         """
         dct = dict(self, **kwargs)
-        if isinstance(dct['data'], np.ndarray):
-            if isinstance(dct['whitefield'], np.ndarray):
+        if dct['data'] is not None:
+            if dct['whitefield'] is not None:
                 return CrystDataFull(**dct)
             return CrystDataPart(**dct)
         return CrystData(**dct)
@@ -115,6 +115,28 @@ class CrystData(DataContainer):
         if self.transform:
             return self.transform.backward_points(x, y)
         return x, y
+
+    def clear(self: C, attributes: Union[str, List[str], None]=None) -> C:
+        """Clear the data inside the container.
+
+        Args:
+            attributes : List of attributes to clear in the container.
+
+        Returns:
+            New :class:`CrystData` object with the attributes cleared.
+        """
+        if attributes is None:
+            attributes = self.contents()
+
+        data_dict = dict(self)
+        for attr in self.input_file.protocol.str_to_list(attributes):
+            if attr not in self.keys():
+                raise ValueError(f"Invalid attribute: '{attr}'")
+
+            if isinstance(self[attr], np.ndarray):
+                data_dict[attr] = None
+
+        return self.replace(**data_dict)
 
     def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Transform detector coordinates.
@@ -225,28 +247,6 @@ class CrystData(DataContainer):
                             data = self.transform.backward(data, out)
 
                     self.output_file.save_attribute(attr, np.asarray(data), mode=mode, idxs=idxs)
-
-    def clear(self: C, attributes: Union[str, List[str], None]=None) -> C:
-        """Clear the data inside the container.
-
-        Args:
-            attributes : List of attributes to clear in the container.
-
-        Returns:
-            New :class:`CrystData` object with the attributes cleared.
-        """
-        if attributes is None:
-            attributes = self.contents()
-
-        data_dict = dict(self)
-        for attr in self.input_file.protocol.str_to_list(attributes):
-            if attr not in self.keys():
-                raise ValueError(f"Invalid attribute: '{attr}'")
-
-            if isinstance(self[attr], np.ndarray):
-                data_dict[attr] = None
-
-        return self.replace(**data_dict)
 
     def update_output_file(self: C, output_file: CXIStore) -> C:
         """Return a new :class:`CrystData` object with the new output file handler.
@@ -383,6 +383,10 @@ class CrystData(DataContainer):
 
         Raises:
             ValueError : If there is no ``data`` inside the container.
+            ValueError : If ``method`` keyword is invalid.
+            ValueError : If ``update`` keyword is invalid.
+            ValueError : If ``vmin`` is larger than ``vmax``.
+            ValueError : If ``pmin`` is larger than ``pmax``.
 
         Returns:
             New :class:`CrystData` object with the updated ``mask``.
@@ -557,8 +561,8 @@ class CrystDataPart(CrystData):
         return self.replace(mask=mask)
 
     def mask_pupil(self: C, setup: ScanSetup, padding: float=0.0) -> C:
-        x0, y0 = self.forward_points(*setup.kin_to_detector(np.asarray(setup.kin_min)))
-        x1, y1 = self.forward_points(*setup.kin_to_detector(np.asarray(setup.kin_max)))
+        x0, y0 = self.forward_points(*setup.pupil_min)
+        x1, y1 = self.forward_points(*setup.pupil_max)
         return self.mask_region((int(y0 - padding), int(y1 + padding),
                                  int(x0 - padding), int(x1 + padding)))
 
@@ -661,8 +665,8 @@ class CrystDataFull(CrystDataPart):
                                                 num_threads=self.num_threads)
 
     def blur_pupil(self, setup: ScanSetup, padding: float=0.0, blur: float=0.0) -> CrystDataFull:
-        x0, y0 = self.forward_points(*setup.kin_to_detector(np.asarray(setup.kin_min)))
-        x1, y1 = self.forward_points(*setup.kin_to_detector(np.asarray(setup.kin_max)))
+        x0, y0 = self.forward_points(*setup.pupil_min)
+        x1, y1 = self.forward_points(*setup.pupil_max)
 
         i, j = np.indices(self.shape[1:])
         dtype = self.cor_data.dtype
@@ -718,12 +722,9 @@ class CrystDataFull(CrystDataPart):
 D = TypeVar('D', bound='Detector')
 
 class Detector(DataContainer):
-    footprint: ClassVar[np.ndarray] = np.array([[[False, False,  True, False, False],
-                                                 [False,  True,  True,  True, False],
-                                                 [ True,  True,  True,  True,  True],
-                                                 [False,  True,  True,  True, False],
-                                                 [False, False,  True, False, False]]])
-    _no_streaks_exc: ClassVar[ValueError] = ValueError('No streaks in the container')
+    max_val         : ClassVar[int] = 1000
+    profile         : ClassVar[str] = 'gauss'
+    _no_streaks_exc : ClassVar[ValueError] = ValueError('No streaks in the container')
 
     data            : np.ndarray
     frames          : np.ndarray
@@ -731,12 +732,7 @@ class Detector(DataContainer):
     parent          : ReferenceType[CrystData]
     streaks         : Dict[int, Streaks]
 
-    pattern         : Optional[np.ndarray]
-    streak_width    : Optional[float]
-    streak_dilation : Optional[float]
-    streak_mask     : Optional[np.ndarray]
-    bgd_dilation    : Optional[float]
-    bgd_mask        : Optional[np.ndarray]
+    patterns        : Optional[np.ndarray] = None
 
     @property
     def shape(self) -> Tuple[int, ...]:
@@ -772,40 +768,13 @@ class Detector(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Raises:
             ValueError : If there is no ``streaks`` inside the container.
 
         Returns:
             A pattern mask.
-        """
-        raise self._no_streaks_exc
-
-    def draw_streaks(self: D, dilation: float=0.0) -> D:
-        """Return a new detector object with updated ``streak_mask``.
-
-        Args:
-            dilation : Streak mask dilation in pixels.
-
-        Raises:
-            ValueError : If there is no ``streaks`` inside the container.
-
-        Returns:
-            A new detector object with udpated ``streak_mask``.
-        """
-        raise self._no_streaks_exc
-
-    def draw_background(self: D, dilation: float=8.0) -> D:
-        """Return a new detector object with updated ``bgd_mask``.
-
-        Args:
-            dilation : Background mask dilation in pixels.
-
-        Raises:
-            ValueError : If there is no ``streaks`` inside the container.
-
-        Returns:
-            A new detector object with udpated ``bgd_mask``.
         """
         raise self._no_streaks_exc
 
@@ -818,15 +787,14 @@ class Detector(DataContainer):
         """
         raise self._no_streaks_exc
 
-    def export_table(self, dilation: float=0.0, concatenate: bool=True,
-                     drop_duplicates: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
+    def export_table(self, dilation: float=0.0,
+                     concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         """Export normalised pattern into a :class:`pandas.DataFrame` table.
 
         Args:
             dilation : Line mask dilation in pixels.
             concatenate : Concatenate sets of patterns for each frame into a single table if
                 True.
-            drop_duplicates : Discard pixel data with duplicate x and y coordinates if True.
 
         Raises:
             ValueError : If there is no ``streaks`` inside the container.
@@ -839,21 +807,29 @@ class Detector(DataContainer):
             * `frames` : Frame index.
             * `x`, `y` : Pixel coordinates.
             * `p` : Normalised pattern values.
+            * `rp` : Reflection profiles.
             * `I_raw` : Measured intensity.
             * `sgn` : Background subtracted intensity.
             * `bgd` : Background values.
         """
         raise self._no_streaks_exc
 
-    def update_pattern(self: D) -> D:
-        """Return a new detector object with updated ``pattern``.
+    def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
+        """Return a new detector object with updated normalised CBC patterns. The image is
+        segmented into two region around each reflection to calculate the local background
+        and local peak intensity. The estimated values are used to normalise each diffraction
+        streak separately.
 
-        Raises:
-            ValueError : If there is no ``streaks`` inside the container.
-            ValueError : If there is no ``streak_mask`` inside the container.
+        Args:
+            dilations : A tuple of three dilations (`d0`, `d1`, `d2`) in pixels of the streak
+                mask that is used to define the inner and outer streak zones:
+
+                * The inner zone is based on the mask dilated by `d0`.
+                * The outer zone is based on the difference between a mask dilated by `d2` and
+                  by `d1`.
 
         Returns:
-            A new detector object with updated ``pattern``.
+            A new detector object with updated ``patterns``.
         """
         raise self._no_streaks_exc
 
@@ -881,48 +857,35 @@ class Detector(DataContainer):
         raise self._no_streaks_exc
 
 class DetectorFull(Detector):
-    def __post_init__(self) -> None:
-        if self.streak_width is None:
-            self.streak_width = np.mean([val.width.mean() for val in self.streaks.values()])
-
     def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
         streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
         mask = np.zeros(self.shape, dtype=np.uint32)
         return draw_line_stack(mask, lines=streaks, max_val=max_val, dilation=dilation,
                                profile=profile, num_threads=self.num_threads)
 
-    def draw_background(self: D, dilation: float=8.0) -> D:
-        bgd_mask = self.draw(dilation=dilation)
-        return self.replace(bgd_dilation=dilation, bgd_mask=bgd_mask)
-
-    def draw_streaks(self: D, dilation: float=0.0) -> D:
-        streak_mask = self.draw(dilation=dilation)
-        return self.replace(streak_dilation=dilation, streak_mask=streak_mask)
-
     def export_streaks(self):
-        if self.streak_mask is None:
-            raise ValueError('No streak_mask in the container')
         if self.parent() is None:
             raise ValueError('Invalid parent: the parent data container was deleted')
 
         streak_mask = np.zeros(self.parent().shape, dtype=bool)
-        streak_mask[self.parent().good_frames] = self.streak_mask
+        streak_mask[self.parent().good_frames] = self.draw()
         self.parent().streak_mask = streak_mask
 
-    def export_table(self, dilation: float=0.0, concatenate: bool=True,
-                     drop_duplicates: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
+    def export_table(self, dilation: float=0.0, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         if self.parent() is None:
             raise ValueError('Invalid parent: the parent data container was deleted')
+        if self.patterns is None:
+            raise ValueError('No patterns in the container')
 
         dataframes, frames = [], []
         for idx, streaks in self.streaks.items():
-            df = streaks.pattern_dataframe(shape=self.shape[1:], dilation=dilation,
-                                           drop_duplicates=drop_duplicates)
+            df = streaks.pattern_dataframe(shape=self.shape[1:], dp=1.0 / self.max_val,
+                                           dilation=dilation, profile=self.profile)
             df['frames'] = self.frames[idx] * np.ones(df.shape[0], dtype=df['index'].dtype)
 
             index = self.parent().good_frames[idx]
             raw_data = self.parent().data[index] * self.parent().mask[index]
-            df['p'] = self.pattern[idx][df['y'], df['x']]
+            df['p'] = self.patterns[idx][df['y'], df['x']]
             df = df[df['p'] > 0.0]
             df['I_raw'] = raw_data[df['y'], df['x']]
             df['sgn'] = self.parent().cor_data[index][df['y'], df['x']]
@@ -938,26 +901,11 @@ class DetectorFull(Detector):
             return pd.concat(dataframes, ignore_index=True)
         return dataframes
 
-    def update_pattern(self: D) -> D:
-        if self.streak_mask is None:
-            raise ValueError('No streak_mask in the container')
-
-        divisor = self.data
-        for _ in range(int(self.streak_width + self.streak_dilation)):
-            divisor = maximum_filter(divisor, mask=self.streak_mask, footprint=self.footprint,
-                                     num_threads=self.num_threads)
-
-        if self.bgd_mask is None:
-            bgd = np.zeros(self.shape, dtype=self.data.dtype)
-        else:
-            bgd = np.abs(self.data * np.subtract(self.bgd_mask, self.streak_mask, dtype=int))
-            for _ in range(int(self.streak_width + self.bgd_dilation)):
-                bgd = median_filter(bgd, mask=self.bgd_mask, inp_mask=bgd,
-                                    footprint=self.footprint, num_threads=self.num_threads)
-
-        pattern = normalise_pattern(self.data, bgd=bgd, divisor=divisor,
-                                    num_threads=self.num_threads)
-        return self.replace(pattern=pattern)
+    def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
+        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
+        patterns = normalise_pattern(inp=self.data, lines=streaks, dilations=dilations,
+                                     profile=self.profile, num_threads=self.num_threads)
+        return self.replace(patterns=patterns)
 
     def to_dataframe(self, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         dataframes = []
@@ -989,29 +937,19 @@ class LSDetector(Detector):
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         lsd_obj : a Line Segment Detector object.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
-        pattern : Normalized diffraction patterns.
-        streak_width : Average width of detected streaks.
-        streak_dilation : A streak mask dilation in pixels.
-        streak_mask : A set of streak masks.
-        bgd_dilation : A background mask dilation in pixels.
-        bgd_mask : A set of background masks.
+        patterns : Normalized diffraction patterns.
     """
     data            : np.ndarray
     frames          : np.ndarray
     num_threads     : int
     parent          : ReferenceType[CrystData]
-    lsd_obj         : LSD = field(default=LSD(0.9, 0.9, 0.0, 60.0, 0.5, 2e-2))
+    lsd_obj         : LSD = field(default=LSD(0.9, 0.9, 0.0, 45.0, 0.5, 2e-2))
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    pattern         : Optional[np.ndarray] = None
-    streak_width    : Optional[float] = None
-    streak_dilation : Optional[float] = None
-    streak_mask     : Optional[np.ndarray] = None
-    bgd_dilation    : Optional[float] = None
-    bgd_mask        : Optional[np.ndarray] = None
+    patterns        : Optional[np.ndarray] = None
 
-    def detect(self, cutoff: float, filter_threshold: float, group_threshold: float=0.7,
-               dilation: float=0.0) -> LSDetectorFull:
+    def detect(self, cutoff: float, filter_threshold: float=0.0, group_threshold: float=1.0,
+               dilation: float=0.0, profile: str='linear') -> LSDetectorFull:
         """Perform the streak detection. The streak detection comprises three steps: an
         initial LSD detection of lines, a grouping of the detected lines and merging, if
         the normalized cross-correlation value if higher than the ``group_threshold``,
@@ -1024,27 +962,34 @@ class LSDetector(Detector):
             group_threshold : Grouping threshold. The lines are merged if the cross-correlation
                 value of a pair of lines is higher than ``group_threshold``.
             dilation : Line mask dilation value in pixels.
+            profile : Line width profiles. The following keyword values are allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Raises:
-            ValueError : If there is no ``pattern`` inside the container.
+            ValueError : If there is no ``patterns`` inside the container.
 
         Returns:
             A new :class:`LSDetector` container with ``streaks`` updated.
         """
-        if self.pattern is None:
+        if self.patterns is None:
             raise ValueError('No pattern in the container')
 
-        out_dict = self.lsd_obj.detect(self.pattern, cutoff=cutoff,
+        out_dict = self.lsd_obj.detect(self.patterns, cutoff=cutoff,
                                        filter_threshold=filter_threshold,
                                        group_threshold=group_threshold,
-                                       dilation=dilation, num_threads=self.num_threads)
+                                       dilation=dilation, profile=profile,
+                                       num_threads=self.num_threads)
         streaks = {idx: Streaks(*np.around(lines[:, :5], 2).T)
                    for idx, lines in out_dict['lines'].items() if lines.size}
         idxs = [idx for idx, lines in out_dict['lines'].items() if lines.size]
         return LSDetectorFull(**dict(self.mask_frames(idxs), streaks=streaks))
 
     def update_lsd(self: D, scale: float=0.9, sigma_scale: float=0.9, log_eps: float=0.0,
-                   ang_th: float=60.0, density_th: float=0.5, quant: float=2e-2) -> D:
+                   ang_th: float=45.0, density_th: float=0.5, quant: float=2e-2) -> D:
         """Return a new :class:`LSDetector` object with updated :class:`cbclib.bin.LSD` detector.
 
         Args:
@@ -1074,9 +1019,9 @@ class LSDetector(Detector):
                                         log_eps=log_eps, ang_th=ang_th,
                                         density_th=density_th, quant=quant))
 
-    def generate_pattern(self: D, vmin: float, vmax: float,
-                         size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> D:
-        """Generate a set of normalised diffraction patterns ``pattern`` based on
+    def generate_patterns(self: D, vmin: float, vmax: float,
+                          size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> D:
+        """Generate a set of normalised diffraction patterns ``patterns`` based on
         taking a 2D median filter of background corrected detector images ``data`` and
         clipping the values to a (``vmin``, ``vmax``) interval.
 
@@ -1089,13 +1034,13 @@ class LSDetector(Detector):
             ValueError : If ``vmax`` is less than ``vmin``.
 
         Returns:
-            A new :class:`cbclib.LSDetector` container with ``pattern`` updated.
+            A new :class:`cbclib.LSDetector` container with ``patterns`` updated.
         """
         if vmin >= vmax:
             raise ValueError('vmin must be less than vmax')
-        pattern = median_filter(self.data, size=size, num_threads=self.num_threads)
-        pattern = np.divide(np.clip(pattern, vmin, vmax) - vmin, vmax - vmin)
-        return self.replace(pattern=np.asarray(pattern, dtype=np.float32))
+        patterns = median_filter(self.data, size=size, num_threads=self.num_threads)
+        patterns = np.divide(np.clip(patterns, vmin, vmax) - vmin, vmax - vmin)
+        return self.replace(patterns=np.asarray(patterns, dtype=np.float32))
 
 @dataclass
 class LSDetectorFull(DetectorFull, LSDetector):
@@ -1106,12 +1051,7 @@ class LSDetectorFull(DetectorFull, LSDetector):
     lsd_obj         : LSD = field(default=LSD(0.9, 0.9, 0.0, 60.0, 0.5, 2e-2))
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    pattern         : Optional[np.ndarray] = None
-    streak_width    : Optional[float] = None
-    streak_dilation : Optional[float] = None
-    streak_mask     : Optional[np.ndarray] = None
-    bgd_dilation    : Optional[float] = None
-    bgd_mask        : Optional[np.ndarray] = None
+    patterns        : Optional[np.ndarray] = None
 
 @dataclass
 class ModelDetector(Detector):
@@ -1127,12 +1067,7 @@ class ModelDetector(Detector):
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         models : A dictionary of CBD models.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
-        pattern : Normalized diffraction patterns.
-        streak_width : Average width of detected streaks.
-        streak_dilation : A streak mask dilation in pixels.
-        streak_mask : A set of streak masks.
-        bgd_dilation : A background mask dilation in pixels.
-        bgd_mask : A set of background masks.
+        patterns : Normalized diffraction patterns.=
     """
     data            : np.ndarray
     frames          : np.ndarray
@@ -1141,15 +1076,9 @@ class ModelDetector(Detector):
     models          : Dict[int, CBDModel]
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    pattern         : Optional[np.ndarray] = None
-    streak_width    : Optional[float] = None
-    streak_dilation : Optional[float] = None
-    streak_mask     : Optional[np.ndarray] = None
-    bgd_dilation    : Optional[float] = None
-    bgd_mask        : Optional[np.ndarray] = None
+    patterns        : Optional[np.ndarray] = None
 
-    def detect(self, q_abs: float=0.3, width: float=4.0, threshold: float=0.95,
-               dp: float=1e-3) -> ModelDetectorFull:
+    def detect(self, q_abs: float=0.3, width: float=4.0, threshold: float=0.95) -> ModelDetectorFull:
         """Perform the streak detection based on prediction. Generate a predicted pattern and
         filter out all the streaks, which signal-to-noise ratio is below the ``threshold``.
 
@@ -1172,10 +1101,10 @@ class ModelDetector(Detector):
             index = self.parent().good_frames[idx]
             stks = model.filter_streaks(hkl=hkl, signal=self.parent().cor_data[index],
                                         background=self.parent().background[index],
-                                        width=width, threshold=threshold, dp=dp,
-                                        profile='tophat', num_threads=self.num_threads)
+                                        width=width, threshold=threshold, dp=1.0 / self.max_val,
+                                        profile=self.profile, num_threads=self.num_threads)
             streaks[idx] = stks
-        return ModelDetectorFull(**dict(self, streaks=streaks, streak_width=width))
+        return ModelDetectorFull(**dict(self, streaks=streaks))
 
 @dataclass
 class ModelDetectorFull(DetectorFull, ModelDetector):
@@ -1188,9 +1117,4 @@ class ModelDetectorFull(DetectorFull, ModelDetector):
     indices         : Dict[int, int] = field(default_factory=dict)
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    pattern         : Optional[np.ndarray] = None
-    streak_width    : Optional[float] = None
-    streak_dilation : Optional[float] = None
-    streak_mask     : Optional[np.ndarray] = None
-    bgd_dilation    : Optional[float] = None
-    bgd_mask        : Optional[np.ndarray] = None
+    patterns        : Optional[np.ndarray] = None

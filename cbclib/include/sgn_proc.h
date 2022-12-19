@@ -55,10 +55,17 @@ int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, doub
 int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **iidxs, size_t *ipts, unsigned *frames,
                 unsigned *indices, size_t npts);
 
-int update_sf(float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
+int update_sf(float *sf, float *dsf, float *rp, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
               unsigned *hkl_idxs, size_t hkl_size, unsigned *iidxs, size_t isize, unsigned threads);
 
-float scale_crit(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims, unsigned *iidxs,
-                 size_t isize, unsigned threads);
+float scale_crit(float *sf, float *rp, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
+                 unsigned *iidxs, size_t isize, unsigned threads);
+
+/*----------------------------------------------------------------------------*/
+/*------------------------- Bilinear interpolation ---------------------------*/
+/*----------------------------------------------------------------------------*/
+int interp_bi(float *out, float *data, int ndim, const size_t *dims, float *crds, size_t ncrd);
+
+int xtal_interp(float *xtal_bi, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims, size_t isize, unsigned threads);
 
 #endif

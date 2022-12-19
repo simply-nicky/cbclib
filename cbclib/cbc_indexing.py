@@ -1,6 +1,6 @@
 from __future__ import annotations
-from typing import Any, ClassVar, Dict, List, Optional, Set, Tuple, Union
-from dataclasses import InitVar, dataclass, field
+from typing import Any, ClassVar, Dict, List, Optional, Sequence, Set, Tuple, Union
+from dataclasses import InitVar, dataclass, field, fields
 from weakref import ref
 import numpy as np
 import pandas as pd
@@ -8,9 +8,9 @@ from scipy.ndimage import label, center_of_mass, mean
 from tqdm.auto import tqdm
 
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
-                  gaussian_grid_grad, cross_entropy, calc_source_lines, filter_hkl,
-                  unique_indices, find_kins, kr_grid, update_sf, scaling_criterion,
-                  xtal_interpolate)
+                  cross_entropy, calc_source_lines, filter_hkl, unique_indices,
+                  find_kins, kr_grid, update_sf, scaling_criterion, xtal_interpolate,
+                  filter_direction)
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks
 from .cxi_protocol import Indices
 from .data_container import DataContainer, Transform, Crop, ReferenceType
@@ -24,10 +24,13 @@ class CBCTable():
     * `index` : Diffraction streak index.
     * `x`, `y` : x and y pixel coordinate.
     * `p` : Normalised pattern value. The value lies in (0.0 - 1.0) interval.
+    * `rp` : Reflection profiles.
     * `I_raw` : Raw photon count.
     * `sgn` : Background subtracted intensity.
     * `bgd` : Background intensity.
     * `h`, `k`, `l` : Miller indices.
+    * `sfac` : Crystal structure factors.
+    * `xtal` : Crystal diffraction efficiencies.
 
     Args:
         table : CBC tabular data.
@@ -77,11 +80,14 @@ class CBCTable():
     def dtype(self) -> np.dtype:
         return self.table.dtypes['sgn']
 
+    def __getitem__(self, idxs: Indices) -> CBCTable:
+        return CBCTable(self.table.loc[idxs], self.setup, self.crop)
+
     def _repr_html_(self) -> Optional[str]:
         return self.table._repr_html_()
 
     def create_qmap(self, samples: ScanSamples, qx_arr: np.ndarray, qy_arr: np.ndarray,
-                    qz_arr: np.ndarray) -> Map3D:
+                    qz_arr: np.ndarray, basis: Optional[Basis]=None) -> Map3D:
         """Map the measured normalised intensities to the reciprocal space. Returns a
         :class:`cbclib.Map3D` 3D data container capable of performing the auto Fourier indexing.
 
@@ -90,30 +96,62 @@ class CBCTable():
             qx_arr : Array of reciprocal x coordinates.
             qy_arr : Array of reciprocal y coordinates.
             qz_arr : Array of reciprocal z coordinates.
+            basis : Basis vectors of crystal lattice unit cell. Used to generate incoming
+                wave vectors.
 
         Returns:
             3D data container of measured normalised intensities.
         """
         q_map = np.zeros((qx_arr.size, qy_arr.size, qz_arr.size), dtype=self.dtype)
 
+        if basis and {'h', 'k', 'l'}.issubset(self.table.columns):
+            def kin(kout: np.ndarray, df_frame: pd.DataFrame, sample: Sample, basis: Basis):
+                kin = np.clip(kout - sample.rotation(df_frame[['h', 'k', 'l']].to_numpy().dot(basis.mat)),
+                              self.setup.kin_min, self.setup.kin_max)
+                kin[:, 2] = np.sqrt(1.0 - kin[:, 0]**2 - kin[:, 1]**2)
+                return kin
+        else:
+            def kin(kout: np.ndarray, df_frame: pd.DataFrame, sample: Sample, basis: Basis):
+                return self.setup.kin_center
+
         for frame, df_frame in self.table.groupby('frames'):
             kout = samples[frame].detector_to_kout(df_frame['x'], df_frame['y'], self.setup)
-            q_frame = kout - self.setup.kin_center
-            q_frame = samples[frame].rotation(q_frame)
+            q_frame = kout - kin(kout, df_frame, samples[frame], basis)
+            q_frame = samples[frame].rotation.reciprocate()(q_frame)
             x_idxs = np.searchsorted(qx_arr, q_frame[:, 0])
             y_idxs = np.searchsorted(qy_arr, q_frame[:, 1])
             z_idxs = np.searchsorted(qz_arr, q_frame[:, 2])
             mask = (x_idxs < qx_arr.size) & (y_idxs < qy_arr.size) & (z_idxs < qz_arr.size)
             np.add.at(q_map, (x_idxs[mask], y_idxs[mask], z_idxs[mask]), df_frame['p'][mask])
-        return Map3D(q_map, qx_arr, qy_arr, qz_arr)
+        return Map3D(val=q_map, x=qx_arr, y=qy_arr, z=qz_arr, num_threads=self.num_threads)
 
-    def drop_duplicates(self) -> pd.DataFrame:
+    def drop_duplicates(self, method: str='keep_best') -> pd.DataFrame:
         """Discard the pixel data, that has duplicate `x`, `y` coordinates.
+
+        Args:
+            method : Choose the policy of dealing with the pixel data that has duplicate x and
+                y coordinates:
+
+                * `keep_all` : Keep duplicated data.
+                * `keep_best` : Keep the pixels that have higher likelihood value `p`.
+                * `ignore` : Discard duplicated data.
 
         Returns:
             New CBC table with the duplicate data discarded.
         """
-        return CBCTable(self.table.drop_duplicates(['frames', 'x', 'y']), self.setup)
+        if method == 'keep_all':
+            table = self.table
+        elif method == 'keep_best':
+            mask = self.table.duplicated(['frames', 'x', 'y'], keep=False)
+            duplicates = self.table[mask].sort_values(['frames', 'x', 'y', 'p'])
+            duplicates = duplicates.drop_duplicates(['frames', 'x', 'y'])
+            table = pd.concat((self.table[~mask], duplicates)).sort_index()
+        elif method == 'ignore':
+            table = self.table.drop_duplicates(['frames', 'x', 'y'], keep=False)
+        else:
+            raise ValueError('Invalid duplicates keyword')
+
+        return CBCTable(table, self.setup)
 
     def get_crop(self) -> Crop:
         """Return the region of interest on the detector plane.
@@ -166,7 +204,8 @@ class CBCTable():
         mask = (self.crop.roi[0] < df_frame['y']) & (df_frame['y'] < self.crop.roi[1]) & \
                (self.crop.roi[2] < df_frame['x']) & (df_frame['x'] < self.crop.roi[3])
         df_frame = df_frame[mask]
-        df_frame['x'], df_frame['y'] = self.crop.forward_points(df_frame['x'], df_frame['y'])
+        pts = np.stack(self.crop.forward_points(df_frame['x'], df_frame['y']), axis=-1)
+        df_frame.loc[:, ['x', 'y']] = pts
         return df_frame
 
     def pattern_dict(self, frame: int) -> Dict[str, np.ndarray]:
@@ -198,8 +237,8 @@ class CBCTable():
         pattern[df_frame['y'], df_frame['x']] = df_frame['p']
         return pattern
 
-    def refine(self, frame: int, bounds: Tuple[float, float, float], basis: Basis,
-               sample: Sample, q_abs: float, width: float, alpha: float=0.0) -> SampleProblem:
+    def refine_sample(self, frame: int, bounds: Tuple[float, float, float], basis: Basis,
+                      sample: Sample, q_abs: float, width: float, alpha: float=0.0) -> SampleProblem:
         """Return a :class:`SampleProblem` problem designed to perform the sample refinement.
         Indexing refinement yields a :class:`Sample` object, that attains the best fit between the
         predicted pattern and the pattern from this CBC table.
@@ -266,11 +305,12 @@ class CBCTable():
         hkl = self.table.iloc[iidxs[:-1]][['h', 'k', 'l']]
         hkl, hkl_idxs = np.unique(hkl, return_inverse=True, axis=0)
         kins = self.generate_kins(basis, samples, num_threads)
-        xtal_map = (np.asarray(xtal_shape) - 1) * (kins - self.setup.kin_min[:2]) / \
-                   (self.setup.kin_max[:2] - self.setup.kin_min[:2])
+        kin_min, kin_max = kins.min(axis=0), kins.max(axis=0)
+        xtal_map = (np.asarray(xtal_shape[::-1]) - 1) * (kins - kin_min) / (kin_max - kin_min)
         return IntensityScaler(parent=ref(self), frames=frames, fidxs=fidxs, iidxs=iidxs,
-                               hkl=hkl, hkl_idxs=hkl_idxs, xtal_map=xtal_map,
-                               signal=self.table['sgn'].to_numpy(), num_threads=num_threads)
+                               prof=self.table['rp'].to_numpy(), hkl=hkl, hkl_idxs=hkl_idxs,
+                               xtal_map=xtal_map, signal=self.table['sgn'].to_numpy(),
+                               num_threads=num_threads)
 
     def update_crop(self, crop: Optional[Crop]=None) -> CBCTable:
         """Return a new CBC table with the updated region of interest.
@@ -295,30 +335,41 @@ class Map3D():
         x : x coordinates.
         y : y coordinates.
         z : z coordinates.
+        num_threads : Number of threads used in the calculations.
     """
-    val : np.ndarray
-    x   : np.ndarray
-    y   : np.ndarray
-    z   : np.ndarray
+    val         : np.ndarray
+    x           : np.ndarray
+    y           : np.ndarray
+    z           : np.ndarray
+    num_threads : int = field(default=1)
 
     @property
     def shape(self) -> Tuple[int, int, int]:
         return self.val.shape
 
     @property
-    def coordinate(self) -> np.ndarray:
-        return np.stack((self.x, self.y, self.z))
+    def coordinates(self) -> np.ndarray:
+        return np.stack((self.x, self.y, self.z), axis=-1)
+
+    @property
+    def grid(self) -> np.ndarray:
+        return np.stack(np.meshgrid(self.x, self.y, self.z), axis=-1)
 
     @staticmethod
     def _find_reduced(vectors: np.ndarray, basis: np.ndarray) -> np.ndarray:
-        """Find reduced vector to basis set.
+        """Return vector indices, that satisfy the first condition of
+        Lenstra-Lenstra-Lovász lattice basis reduction [LLL]_.
 
         Args:
             vectors : array of vectors of shape (N, 3).
             basis : basis set of shape (M, 3).
+
+        References:
+            .. [LLL]: "Lenstra–Lenstra–Lovász lattice basis reduction algorithm."
+                      Wikipedia, Wikimedia Foundation, 4 Jul. 2022.
         """
         prod = vectors.dot(basis.T)
-        mask = 2 * np.abs(prod) < (basis * basis).sum(axis=1)
+        mask = 2.0 * np.abs(prod) < (basis * basis).sum(axis=1)
         return np.where(mask.all(axis=1))[0]
 
     def __getitem__(self, idxs: Tuple[Indices, Indices, Indices]) -> Map3D:
@@ -328,48 +379,48 @@ class Map3D():
         for axis, size in zip(idxs, self.shape):
             if isinstance(idxs[axis], (int, slice)):
                 idxs[axis] = np.atleast_1d(np.arange(size)[idxs[axis]])
-        return Map3D(val=self.val[np.meshgrid(*idxs.values(), indexing='ij')],
-                     x=self.x[idxs[0]], y=self.y[idxs[1]], z=self.z[idxs[2]])
+        return self.replace(val=self.val[np.meshgrid(*idxs.values(), indexing='ij')],
+                            x=self.x[idxs[0]], y=self.y[idxs[1]], z=self.z[idxs[2]])
 
     def __add__(self, obj: Any) -> Map3D:
         if np.isscalar(obj):
-            return Map3D(self.val + obj, self.x, self.y, self.z)
+            return self.replace(val=self.val + obj)
         if isinstance(obj, Map3D):
             if not self.is_compatible(obj):
                 raise TypeError("Can't sum two incompatible Map3D objects")
-            return Map3D(self.val + obj.val, self.x, self.y, self.z)
+            return self.replace(val=self.val + obj.val)
         return NotImplemented
 
     def __sub__(self, obj: Any) -> Map3D:
         if np.isscalar(obj):
-            return Map3D(self.val - obj, self.x, self.y, self.z)
+            return self.replace(val=self.val - obj)
         if isinstance(obj, Map3D):
             if not self.is_compatible(obj):
                 raise TypeError("Can't subtract two incompatible Map3D objects")
-            return Map3D(self.val - obj.val, self.x, self.y, self.z)
+            return self.replace(val=self.val - obj.val)
         return NotImplemented
 
     def __rmul__(self, obj: Any) -> Map3D:
         if np.isscalar(obj):
-            return Map3D(obj * self.val, self.x, self.y, self.z)
+            return self.replace(val=obj * self.val)
         return NotImplemented
 
     def __mul__(self, obj: Any) -> Map3D:
         if np.isscalar(obj):
-            return Map3D(obj * self.val, self.x, self.y, self.z)
+            return self.replace(val=obj * self.val)
         if isinstance(obj, Map3D):
             if not self.is_compatible(obj):
                 raise TypeError("Can't multiply two incompatible Map3D objects")
-            return Map3D(self.val * obj.val, self.x, self.y, self.z)
+            return self.replace(val=self.val * obj.val)
         return NotImplemented
 
     def __truediv__(self, obj: Any) -> Map3D:
         if np.isscalar(obj):
-            return Map3D(self.val / obj, self.x, self.y, self.z)
+            return self.replace(val=self.val / obj)
         if isinstance(obj, Map3D):
             if self.is_compatible(obj):
                 raise TypeError("Can't divide two incompatible Map3D objects")
-            return Map3D(self.val / obj.val, self.x, self.y, self.z)
+            return self.replace(val=self.val / obj.val)
         return NotImplemented
 
     def clip(self, vmin: float, vmax: float) -> Map3D:
@@ -382,49 +433,11 @@ class Map3D():
         Returns:
             A new 3D data object.
         """
-        return Map3D(np.clip(self.val, vmin, vmax), self.x, self.y, self.z)
+        return self.replace(val=np.clip(self.val, vmin, vmax))
 
-    def criterion(self, x: np.ndarray, envelope: float, sigma: float, epsilon: float=1e-12,
-                  num_threads: int=1) -> Tuple[float, np.ndarray]:
-        """Return a marginal log-likelihood, that the 3D data is represented by a given set of
-        basis vectors.
-
-        Args:
-            x : Flattened matrix of basis vectors.
-            envelope : A width of the envelope gaussian function.
-            sigma : A width of diffraction orders.
-            epsilon : Epsilon value in the log term.
-            num_threads : Number of threads used in the computations.
-        """
-        y_hat, hkl = gaussian_grid(x_arr=self.x, y_arr=self.y, z_arr=self.z,
-                                   basis=x[:9].reshape((3, 3)), envelope=envelope,
-                                   sigma=sigma, threads=num_threads)
-        grad = gaussian_grid_grad(x_arr=self.x, y_arr=self.y, z_arr=self.z,
-                                  basis=x[:9].reshape((3, 3)), hkl=hkl, envelope=envelope,
-                                  sigma=sigma, threads=num_threads)
-        return (-np.sum(self.val * np.log(y_hat + epsilon)),
-                -np.sum(self.val / (y_hat + epsilon) * grad, axis=(1, 2, 3)))
-
-    def gaussian_blur(self, sigma: Union[float, Tuple[float, float, float]],
-                      num_threads: int=1) -> Map3D:
-        """Apply Gaussian blur to the 3D data.
-
-        Args:
-            sigma : width of the gaussian blur.
-            num_threads : Number of threads used in the calculations.
-
-        Returns:
-            A new 3D data object with blurred out data.
-        """
-        val = gaussian_filter(self.val, sigma, num_threads=num_threads)
-        return Map3D(val, self.x, self.y, self.z)
-
-    def fft(self, num_threads: int=1) -> Map3D:
+    def fft(self) -> Map3D:
         """Perform 3D Fourier transform. `FFTW <https://www.fftw.org>`_ C library is used to
         compute the transform.
-
-        Args:
-            num_threads : Number of threads used in the calculations.
 
         Returns:
             A 3Ddata object with the Fourier image data.
@@ -433,44 +446,72 @@ class Map3D():
             cbclib.bin.FFTW : Python wrapper of FFTW library.
         """
         val = empty_aligned(self.shape, dtype='complex64')
-        fft_obj = FFTW(self.val.astype(np.complex64), val, threads=num_threads,
+        fft_obj = FFTW(self.val.astype(np.complex64), val, threads=self.num_threads,
                        axes=(0, 1, 2), flags=('FFTW_ESTIMATE',))
 
         kx = np.fft.fftshift(np.fft.fftfreq(self.shape[0], d=self.x[1] - self.x[0]))
         ky = np.fft.fftshift(np.fft.fftfreq(self.shape[1], d=self.y[1] - self.y[0]))
         kz = np.fft.fftshift(np.fft.fftfreq(self.shape[2], d=self.z[1] - self.z[0]))
         val = np.fft.fftshift(np.abs(fft_obj())) / np.sqrt(np.prod(self.shape))
-        return Map3D(val, kx, ky, kz)
+        return self.replace(val=val, x=kx, y=ky, z=kz)
 
-    def find_peaks(self, val: float, reduce: bool=False) -> np.ndarray:
+    def filter_direction(self, axis: Sequence[float], rng: float, sigma: float) -> Map3D:
+        val = self.val * filter_direction(grid=self.grid, axis=axis, rng=rng, sigma=sigma,
+                                          num_threads=self.num_threads)
+        return self.replace(val=val)
+
+    def find_peaks(self, val: float, dmin: float=0.0, dmax: float=np.inf) -> np.ndarray:
         """Find a set of basis vectors, that correspond to the peaks in the 3D data, that lie
         above the threshold ``val``.
 
         Args:
             val : Threshold value.
-            reduce : Reduce a set of peaks to three basis vectors if True.
+            dmin : Minimum peak distance. All the peaks below the bound are discarded.
+            dmin : Maximum peak distance. All the peaks above the bound are discarded.
 
         Returns:
-            A set of peaks above the threshold if ``reduce`` is False, a set of three basis
-            vectors otherwise.
+            A set of peaks in the 3D data in order of distance.
         """
         mask = self.val > val
         peak_lbls, peak_num = label(mask)
         index = np.arange(1, peak_num + 1)
         peaks = np.array(center_of_mass(self.val, labels=peak_lbls, index=index))
-        means = np.array(mean(self.val, labels=peak_lbls, index=index))
-        idxs = np.argsort(means)[::-1]
-        peaks = peaks[idxs]
-
-        if reduce:
-            reduced = peaks[[1]] - peaks[0]
-            idxs = self._find_reduced(peaks - peaks[0], reduced)
-            reduced = np.concatenate((reduced, peaks[idxs[[1]]] - peaks[0]))
-            idxs = self._find_reduced(peaks - peaks[0], reduced)
-            reduced = np.concatenate((reduced, peaks[idxs[[1]]] - peaks[0]))
-            return self.index_to_coord(reduced + peaks[0])
-
+        dists = np.array(mean(np.sum(self.grid**2, axis=-1), labels=peak_lbls, index=index))
+        mask = (dists > dmin**2) & (dists < dmax**2)
+        idxs = np.argsort(dists[mask])
+        peaks = np.concatenate((peaks[[np.argmin(dists)]], peaks[mask][idxs]), axis=0)
         return self.index_to_coord(peaks)
+
+    def fitness(self, x: np.ndarray, center: np.ndarray, sigma: float,
+                cutoff: float) -> Tuple[float, np.ndarray]:
+        """Criterion function for Fourier autoindexing based on maximising the intersection
+        between the experimental mapping and a grid of guassian peaks defined by a
+        set of basis vectors ``x`` and lying in the sphere of radius ``cutoff``.
+
+        Args:
+            x : Flattened matrix of basis vectors.
+            center : Center of the modelled grid.
+            sigma : A width of diffraction orders.
+            cutoff : Distance cutoff for a modelled grid.
+
+        Returns:
+            The intersection criterion and the gradient.
+        """
+        return gaussian_grid(p_arr=self.val, x_arr=self.x, y_arr=self.y, z_arr=self.z,
+                             basis=x[:9].reshape((3, 3)), center=center, sigma=sigma,
+                             cutoff=cutoff, num_threads=self.num_threads)
+
+    def gaussian_blur(self, sigma: Union[float, Tuple[float, float, float]]) -> Map3D:
+        """Apply Gaussian blur to the 3D data.
+
+        Args:
+            sigma : width of the gaussian blur.
+
+        Returns:
+            A new 3D data object with blurred out data.
+        """
+        val = gaussian_filter(self.val, sigma, num_threads=self.num_threads)
+        return self.replace(val=val)
 
     def index_to_coord(self, index: np.ndarray) -> np.ndarray:
         """Transform a set of data indices to a set of coordinates.
@@ -481,9 +522,14 @@ class Map3D():
         Returns:
             An array of coordinates.
         """
-        idx = np.rint(index).astype(int)
-        crd = np.take(self.coordinate, idx)
-        return crd + (index - idx) * (np.take(self.coordinate, idx + 1) - crd)
+        idx0 = np.rint(index.reshape((-1, 3))).astype(int)
+        crd0 = np.take_along_axis(self.coordinates, idx0, axis=0)
+        idx1 = idx0 + np.array(~np.isclose(index, idx0), dtype=int)
+        crd1 = np.take_along_axis(self.coordinates, idx1, axis=0)
+        return crd0 + (index - idx0) * (crd1 - crd0)
+
+    def interpolate(self, points: np.ndarray) -> np.ndarray:
+        pass
 
     def is_compatible(self, map_3d: Map3D) -> bool:
         """Check if 3D data object has a compatible set of coordinates.
@@ -497,18 +543,54 @@ class Map3D():
         return ((self.x == map_3d.x).all() and (self.y == map_3d.y).all() and
                 (self.z == map_3d.z).all())
 
-    def white_tophat(self, structure: np.ndarray, num_threads: int=1) -> Map3D:
+    def reduce_peaks(self, center: np.ndarray, peaks: np.ndarray, sigma: float,
+                     cutoff: Optional[float]=None) -> Basis:
+        """Reduce a set of peaks ``peaks`` to three basis vectors, that maximise the intersection
+        between the experimental mapping and a grid of peaks formed by the basis. The grid of peaks
+        is confined in a sphere of radius ``cutoff``.
+
+        Args:
+            center : Center of the grid.
+            peaks : Set of peaks.
+            sigma : Width of a peak in the grid.
+            cutoff : A distance to the furthest peak in the grid. Defined by the distance to the
+                furthest peak in ``peaks`` if None.
+
+        Returns:
+
+        """
+        if cutoff is None:
+            cutoff = np.max(np.sum(peaks**2, axis=1))**0.5
+
+        basis = np.zeros((3, 3))
+        idxs = np.arange(peaks.shape[0])
+        for i in range(3):
+            criteria = []
+            for peak in peaks[idxs]:
+                basis[i] = peak
+                criteria.append(self.criterion(x=basis.ravel(), center=center, sigma=sigma,
+                                               cutoff=cutoff)[0])
+            basis[i] = peaks[idxs][np.argmin(criteria)]
+            idxs = self._find_reduced(peaks, basis[:i + 1])
+        return Basis.import_matrix(basis)
+
+    def replace(self, **kwargs: Any) -> Map3D:
+        return Map3D(**dict(self.to_dict(), **kwargs))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {field.name: getattr(self, field.name) for field in fields(self)}
+
+    def white_tophat(self, structure: np.ndarray) -> Map3D:
         """Perform 3-dimensional white tophat filtering.
 
         Args:
             structure : Structuring element used for the filter.
-            num_threads : Number of threads used in the calculations.
 
         Returns:
             New 3D data container with the filtered data.
         """
-        val = median_filter(self.val, footprint=structure, num_threads=num_threads)
-        return Map3D(self.val - val, self.x, self.y, self.z)
+        val = median_filter(self.val, footprint=structure, num_threads=self.num_threads)
+        return self.replace(val=self.val - val)
 
 @dataclass
 class CBDModel():
@@ -525,8 +607,8 @@ class CBDModel():
 
     References:
         .. [CBM] Ho, Joseph X et al. “Convergent-beam method in macromolecular crystallography”,
-                Acta crystallographica Section D, Biological crystallography vol. 58, Pt. 12
-                (2002): 2087-95, https://doi.org/10.1107/s0907444902017511.
+                 Acta crystallographica Section D, Biological crystallography vol. 58, Pt. 12
+                 (2002): 2087-95, https://doi.org/10.1107/s0907444902017511.
     """
     basis       : Basis
     sample      : Sample
@@ -562,9 +644,9 @@ class CBDModel():
         rec_vec = hkl.dot(self.basis.mat)
         rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
         rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
-        src_th = np.abs(np.sin(rec_th - np.arccos(0.5 * rec_abs)))
+        src_th = rec_th - np.arccos(0.5 * rec_abs)
 
-        mask = src_th < np.sqrt(self.setup.kin_max[0]**2 + self.setup.kin_max[1]**2)
+        mask = np.abs(np.sin(src_th)) < np.arccos(self.setup.kin_max[2])
         mask &= (rec_abs < q_abs)
         return hkl[mask]
 
@@ -596,7 +678,7 @@ class CBDModel():
                        width=width * np.ones(x.shape[0]))
 
     def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray,
-                       width: float,  threshold: float=0.95, dp: float=1e-3, profile: str='tophat',
+                       width: float,  threshold: float=0.95, dp: float=1e-3, profile: str='gauss',
                        num_threads: int=1) -> Streaks:
         """Generate a predicted pattern and filter out all the streaks, which signal-to-noise ratio
         is below the ``threshold``.
@@ -615,6 +697,7 @@ class CBDModel():
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
             num_threads : Number of threads used in the calculations.
 
@@ -622,14 +705,14 @@ class CBDModel():
             A set of filtered out streaks, SNR of which is above the ``threshold``.
         """
         streaks = self.generate_streaks(hkl, width)
-        pattern = streaks.pattern_dataframe(self.shape, dp=dp, profile=profile)
+        pattern = streaks.pattern_dataframe(self.shape, dp=dp, profile=profile, reduce=False)
         mask = filter_hkl(sgn=signal, bgd=background, coord=pattern[['x', 'y']].to_numpy(),
-                          prob=pattern['p'].to_numpy(), idxs=pattern['index'].to_numpy(),
+                          prof=pattern['rp'].to_numpy(), idxs=pattern['index'].to_numpy(),
                           threshold=threshold, num_threads=num_threads)
         return streaks.mask_streaks(mask)
 
     def pattern_dataframe(self, hkl: np.ndarray, width: float, dp: float=1e-3,
-                          profile: str='linear') -> pd.DataFrame:
+                          profile: str='gauss') -> pd.DataFrame:
         """Predict a CBD pattern and return in the :class:`pandas.DataFrame` format.
 
         Args:
@@ -641,6 +724,7 @@ class CBDModel():
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Returns:
             A pattern in :class:`pandas.DataFrame` format.
@@ -703,13 +787,14 @@ class SampleProblem():
     q_abs     : InitVar[float]
     width     : float
     pattern   : InitVar[Dict[str, np.ndarray]]
-    alpha     : float = field(default=0.0)
+    alpha     : float = 0.0
 
     crop      : Crop = field(init=False)
     hkl       : np.ndarray = field(init=False)
     setup     : ScanSetup = field(init=False)
 
     q_max     : ClassVar[int] = 1000
+    profile   : ClassVar[str] = 'gauss'
     epsilon   : ClassVar[float] = 1e-12
     footprint : ClassVar[np.ndarray] = np.array([[False, False,  True, False, False],
                                                  [False,  True,  True,  True, False],
@@ -820,7 +905,7 @@ class SampleProblem():
             A predicted CBD pattern.
         """
         return self.generate_model(x).pattern_dataframe(hkl=self.hkl, width=self.width,
-                                                        dp=1.0 / self.q_max, profile='linear')
+                                                        dp=1.0 / self.q_max, profile=self.profile)
 
     def pattern_image(self, x: np.ndarray) -> np.ndarray:
         """Generate a CBD pattern as an image array.
@@ -832,7 +917,7 @@ class SampleProblem():
             A predicted CBD pattern.
         """
         streaks = self.generate_streaks(x)
-        return streaks.pattern_image(self.shape, dp=1.0 / self.q_max, profile='linear')
+        return streaks.pattern_image(self.shape, dp=1.0 / self.q_max, profile=self.profile)
 
     def pattern_mask(self, x: np.ndarray) -> np.ndarray:
         """Generate a CBD pattern and return a mask where the streaks are located on the detector.
@@ -844,7 +929,7 @@ class SampleProblem():
             A predicted CBD pattern mask.
         """
         streaks = self.generate_streaks(x)
-        return streaks.pattern_mask(self.shape, max_val=self.q_max, profile='linear')
+        return streaks.pattern_mask(self.shape, max_val=self.q_max, profile=self.profile)
 
     def pattern_dict(self, x: np.ndarray) -> Dict[str, np.ndarray]:
         """Generate a CBD pattern in dictionary format.
@@ -856,7 +941,7 @@ class SampleProblem():
             A predicted CBD pattern.
         """
         streaks = self.generate_streaks(x)
-        return streaks.pattern_dict(self.shape, dp=1.0 / self.q_max, profile='linear')
+        return streaks.pattern_dict(self.shape, dp=1.0 / self.q_max, profile=self.profile)
 
     def fitness(self, x: np.ndarray) -> List[float]:
         """Calculate the marginal log-likelihood, that the experimentally measured pattern
@@ -918,7 +1003,7 @@ class SampleProblem():
         df_frame = df_frame.sort_values('ij')
 
         streaks = self.generate_streaks(x)
-        df = streaks.pattern_dataframe(self.shape, dp=1.0 / self.q_max, profile='linear')
+        df = streaks.pattern_dataframe(self.shape, dp=1.0 / self.q_max, profile=self.profile)
         df = df.sort_values('p', ascending=True)
         df['ij'] = self._pattern_to_ij_and_q(df)[0]
         df = df[np.in1d(df['ij'], df_frame['ij'])]
@@ -940,7 +1025,12 @@ class SampleProblem():
         df_idxs = df_frame.index[df_frame['ij'].searchsorted(df['ij'])]
         df_inst = df_frame.loc[df_idxs]
         df_inst.loc[:, ['h', 'k', 'l']] = df[['h', 'k', 'l']].values
-        return pd.concat((df_inst, df_diff)).drop('ij', axis=1)
+
+        pattern: pd.DataFrame = pd.concat((df_inst, df_diff))
+        pattern = pattern.drop('ij', axis=1).sort_values(['index', 'x', 'y'])
+        pts = np.stack(self.crop.backward_points(pattern['x'], pattern['y']), axis=-1)
+        pattern.loc[:, ['x', 'y']] = pts
+        return pattern
 
 @dataclass
 class IntensityScaler(DataContainer):
@@ -956,6 +1046,7 @@ class IntensityScaler(DataContainer):
         iidxs : Array of CBC table first row indices pertaining to different CBC streaks.
         num_threads : Number of threads used in the calculations.
         parent : Reference to the parent CBC table.
+        prof : Bragg reflection profile.
         sfac : Crystal structure factors.
         sfac_err : Crystal structure factor uncertainties.
         signal : Diffraction signal.
@@ -964,28 +1055,33 @@ class IntensityScaler(DataContainer):
         xtal_map : Mapping of diffraction signal into the crystal plane grid.
     """
     parent      : ReferenceType[CBCTable]
-    frames      : np.ndarray
     fidxs       : np.ndarray
-    iidxs       : np.ndarray
+    frames      : np.ndarray
     hkl         : np.ndarray
     hkl_idxs    : np.ndarray
-    xtal_map    : np.ndarray
+    iidxs       : np.ndarray
+    prof        : np.ndarray
     signal      : np.ndarray
+    xtal_map    : np.ndarray
     num_threads : int
 
     xidx        : Optional[np.ndarray] = None
     xtal        : Optional[np.ndarray] = None
+    xtal_shape  : Optional[Tuple[int, int]] = None
     sfac        : Optional[np.ndarray] = None
     sfac_err    : Optional[np.ndarray] = None
 
-    step        : ClassVar[np.ndarray] = np.ones(2)
+    step        : ClassVar[Tuple[float, float]] = (1.0, 1.0)
 
     def __post_init__(self):
         if self.xidx is None:
             frames = self.parent().table['frames']
             self.xidx = frames.map({f: idx for idx, f in enumerate(self.frames)}).to_numpy()
+        if self.xtal_shape is None:
+            shape = self.xtal_map.max(axis=0) - self.xtal_map.min(axis=0)
+            self.xtal_shape = (int(shape[1]) + 1, int(shape[0]) + 1)
 
-    def criterion(self) -> float:
+    def fitness(self) -> float:
         r"""Return the mean abolute error (MAE) of the intensity scaling problem.
 
         Notes:
@@ -1005,15 +1101,20 @@ class IntensityScaler(DataContainer):
             raise AttributeError("'sfac' attribute is not defined")
         if self.xtal is None:
             raise AttributeError("'xtal' attribute is not defined")
-        return scaling_criterion(sf=self.sfac, sgn=self.signal, xidx=self.xidx,
+        return scaling_criterion(sf=self.sfac, bp=self.prof, sgn=self.signal, xidx=self.xidx,
                                  xmap=self.xtal_map, xtal=self.xtal, iidxs=self.iidxs,
                                  num_threads=self.num_threads)
 
-    def export_sfac(self, path: str):
+    def export_sfac(self, path: str, symmetry: Optional[str]=None):
         """Export structure factors to a text hkl file.
 
         Args:
             path : Path to the output file.
+            symmetry : Symmetry of the crystal. Can be one of the following:
+
+                * `4mm` : (h, k, l) = (-h, -k, -l) = (k, h, l).
+                * `mmm` : (h, k, l) = (-h, -k, -l).
+                * None : No symmetry.
         """
         if self.sfac is None:
             raise AttributeError("'sfac' attribute is not defined")
@@ -1021,11 +1122,31 @@ class IntensityScaler(DataContainer):
         sfac[self.hkl_idxs] = self.sfac[self.iidxs[:-1]]
         sfac_err = np.empty(self.hkl.shape[0])
         sfac_err[self.hkl_idxs] = self.sfac_err[self.iidxs[:-1]]
-        norm = sfac_err.min()
+        norm = sfac_err.mean()
         idxs = np.lexsort(np.abs(self.hkl.T)[::-1])
-        np.savetxt(path, np.concatenate((self.hkl[idxs], sfac[idxs, None] / norm,
-                                         sfac_err[idxs, None] / norm), axis=1),
-                   ' %4d %4d %4d %10.2f %10.2f')
+
+        if symmetry == 'mmm':
+            hkl_sym = np.abs(self.hkl[idxs])
+        elif symmetry == '4mm':
+            hkl_sym = np.abs(self.hkl[idxs])
+            hkl_sym = np.concatenate((np.sort(hkl_sym[:, :2], axis=1), hkl_sym[:, 2:]), axis=1)
+        elif symmetry is None:
+            hkl_sym = self.hkl[idxs]
+        else:
+            raise ValueError('Invalid symmetry keyword')
+
+        hkl_mrg, inv, n_meas = np.unique(hkl_sym, axis=0, return_counts=True,
+                                         return_inverse=True)
+        sfac_mrg = np.zeros(hkl_mrg.shape[0])
+        dsfac_mrg = np.zeros(hkl_mrg.shape[0])
+        np.add.at(sfac_mrg, inv, sfac[idxs])
+        np.add.at(dsfac_mrg, inv, (sfac_err * sfac)[idxs])
+        dsfac_mrg = dsfac_mrg / sfac_mrg / norm
+        sfac_mrg = sfac_mrg / n_meas / norm
+
+        np.savetxt(path, np.concatenate((hkl_mrg, sfac_mrg[:, None], dsfac_mrg[:, None],
+                                         n_meas[:, None]), axis=1),
+                   ' %4d %4d %4d %10.2f %10.2f %4d')
 
     def update_xtal(self, bandwidth: float) -> IntensityScaler:
         """Generate a new crystal map using the kernel regression.
@@ -1038,13 +1159,15 @@ class IntensityScaler(DataContainer):
         """
         if self.sfac is None:
             raise AttributeError("'sfac' attribute is not defined")
-        pupils = []
-        for f0, f1 in zip(self.fidxs, self.fidxs[1:]):
-            pupils.append(kr_grid(y=self.signal[f0:f1] / self.sfac[f0:f1], x=self.xtal_map[f0:f1],
-                                  step=self.step, sigma=bandwidth, cutoff=3.0 * bandwidth,
-                                  num_threads=self.num_threads))
+        pupils = np.zeros((self.frames.size,) + self.xtal_shape, dtype=np.float32)
+        for index, (f0, f1) in enumerate(zip(self.fidxs, self.fidxs[1:])):
+            signal = np.where(self.sfac[f0:f1] > 0.0, self.signal[f0:f1] / self.sfac[f0:f1], 0.0)
+            pupil, roi = kr_grid(y=signal, x=self.xtal_map[f0:f1],
+                                 step=self.step, w=self.prof[f0:f1], sigma=bandwidth,
+                                 cutoff=3.0 * bandwidth, num_threads=self.num_threads)
+            pupils[index, roi[0]:roi[1], roi[2]:roi[3]] = pupil
         norm = np.mean(pupils)
-        return self.replace(xtal=np.stack(pupils) / norm, sfac=self.sfac * norm,
+        return self.replace(xtal=pupils / norm, sfac=self.sfac * norm,
                             sfac_err=self.sfac_err * norm)
 
     def update_sfac(self) -> IntensityScaler:
@@ -1055,8 +1178,8 @@ class IntensityScaler(DataContainer):
         """
         if self.xtal is None:
             raise AttributeError("'xtal' attribute is not defined")
-        sfac, sfac_err = update_sf(sgn=self.signal, xidx=self.xidx, xmap=self.xtal_map,
-                                   xtal=self.xtal, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
+        sfac, sfac_err = update_sf(bp=self.prof, sgn=self.signal, xidx=self.xidx, xtal=self.xtal,
+                                   xmap=self.xtal_map, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
                                    num_threads=self.num_threads)
         return self.replace(sfac=sfac, sfac_err=sfac_err)
 
@@ -1095,22 +1218,21 @@ class IntensityScaler(DataContainer):
             * `errors` : List of mean absolute errors for each iteration. Only if
               ``return_extra`` is True.
         """
-        shape = self.xtal_map.max(axis=0).astype(int) + 1
-        xtal = np.ones((self.frames.size, shape[0], shape[1]), dtype=np.float32)
+        xtal = np.ones((self.frames.size,) + self.xtal_shape, dtype=np.float32)
         obj = self.replace(xtal=xtal).update_sfac()
 
         itor = tqdm(range(1, n_iter + 1), disable=not verbose,
                     bar_format='{desc} {percentage:3.0f}% {bar} '\
                     'Iteration {n_fmt} / {total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]')
 
-        errors = [obj.criterion()]
+        errors = [obj.fitness()]
         if verbose:
             itor.set_description(f"Error = {errors[-1]:.6f}")
 
         for _ in itor:
             new_obj = obj.update_xtal(bandwidth=bandwidth)
             new_obj = new_obj.update_sfac()
-            errors.append(new_obj.criterion())
+            errors.append(new_obj.fitness())
 
             if verbose:
                 itor.set_description(f"Error = {errors[-1]:.6f}")

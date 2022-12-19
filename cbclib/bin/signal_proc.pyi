@@ -43,11 +43,12 @@ def find_kins(x: np.ndarray, y: np.ndarray, hkl: np.ndarray, fidxs: np.ndarray,
     """
     ...
 
-def update_sf(sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray, hkl_idxs: np.ndarray,
-              iidxs: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
+def update_sf(bp: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray,
+              hkl_idxs: np.ndarray, iidxs: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     """Calculate crystal structure factors by using the ordinary least squares solution.
 
     Args:
+        bp : Bragg profile.
         sgn : Diffraction signal.
         xidx : Crystal diffraction map frame indices.
         xmap : Mapping of diffraction signal into the crystal plane grid.
@@ -57,7 +58,7 @@ def update_sf(sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndar
         num_threads : Number of threads used in the calculations.
 
     Raises:
-        ValueError : If ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
+        ValueError : If ``bp``, ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
         ValueError : If ``iiidxs`` last index is not equal to ``sgn`` size.
 
     Returns:
@@ -65,12 +66,13 @@ def update_sf(sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndar
     """
     ...
 
-def scaling_criterion(sf: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray,
+def scaling_criterion(sf: np.ndarray, bp: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray,
                       xtal: np.ndarray, iidxs: np.ndarray, num_threads: int=1) -> float:
     r"""Return the mean abolute error (MAE) of the CBC dataset intensity scaling.
 
     Args:
         sf : Crystal structure factors.
+        bp : Bragg profile
         sgn : Diffraction signal.
         xidx : Crystal diffraction map frame indices.
         xmap : Mapping of diffraction signal into the crystal plane grid.
@@ -83,13 +85,14 @@ def scaling_criterion(sf: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: n
 
         .. math::
             L(I, D_{xtal}, F_{xtal}) = \frac{1}{N} \sum_{i = 0}^N \left| I - D_{xtal}(x_i, y_i)
-            F_{xtal}(hkl_i) \right|,
+            p_{bragg}(x_i, y_i) F_{xtal}(hkl_i) \right|,
 
-        where :math:`I` - diffraction signal, :math:`D_{xtal}` - crystal diffraction efficiency
-        map, and :math:`F_{xtal}` - crystal structure factors.
+        where :math:`I` - diffraction signal, :math:`p_{bragg}` - Bragg reflection profile,
+        :math:`D_{xtal}` - crystal diffraction efficiency map, and
+        :math:`F_{xtal}` - crystal structure factors.
 
     Raises:
-        ValueError : If ``sf``, ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
+        ValueError : If ``bp``, ``sf``, ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
         ValueError : If ``iiidxs`` last index is not equal to ``sf`` size.
 
     Returns:
@@ -123,26 +126,27 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float, cu
     """
     ...
 
-def kr_grid(y: np.ndarray, x: np.ndarray, shape: Tuple[int, int], step: Tuple[float, float],
-            sigma: float, cutoff: float, w: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+def kr_grid(y: np.ndarray, x: np.ndarray, step: Tuple[float, float], sigma: float,
+            cutoff: float, w: Optional[np.ndarray]=None, return_roi: bool=True,
+            num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     """Perform the multi-dimensional Nadaraya-Watson kernel regression [KerReg]_ over a grid of
     points.
 
     Args:
         y : The data to fit.
         x : Coordinates array.
-        shape : Grid shape.
         step : Grid sampling interval.
         sigma : Kernel bandwidth.
         cutoff : Distance cutoff used for the calculations.
         w : A set of weights, unitary weights are assumed if it's not provided.
+        return_roi : Return region of interest of the sampling grid if True.
         num_threads : Number of threads used in the calculations.
 
     Raises:
         ValueError : If ``step`` is negative.
 
     Returns:
-        The regression result.
+        The regression result and the region of interest if ``return_roi`` is True.
     """
     ...
 

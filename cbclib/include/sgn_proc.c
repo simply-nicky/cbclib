@@ -1,6 +1,91 @@
 #include "sgn_proc.h"
 #include "array.h"
 
+/*----------------------------------------------------------------------------*/
+/*------------------------- Bilinear interpolation ---------------------------*/
+/*----------------------------------------------------------------------------*/
+
+/* points (integer) follow the convention:      [..., k, j, i], where {i <-> x, j <-> y, k <-> z}
+   coordinates (float) follow the convention:   [x, y, z, ...]
+ */
+
+static float bilinearf(array obj, float *crd)
+{
+    int i, n, idx, size = 1;
+    float cf, v_bi = 0.0f;
+
+    float *dx = MALLOC(float, obj->ndim);
+    int *pt0 = MALLOC(int, obj->ndim);
+    int *pt1 = MALLOC(int, obj->ndim);
+    int *pt = MALLOC(int, obj->ndim);
+
+    for (n = 0; n < obj->ndim; n++)
+    {
+        if (crd[n] <= 0.0f)
+        {
+            dx[n] = 0.0f; pt0[obj->ndim - 1 - n] = pt1[obj->ndim - 1 - n] = 0;
+        }
+        else if (crd[n] >= obj->dims[obj->ndim - 1 - n] - 1)
+        {
+            dx[n] = 0.0f;
+            pt0[obj->ndim - 1 - n] = obj->dims[obj->ndim - 1 - n] - 1;
+            pt1[obj->ndim - 1 - n] = obj->dims[obj->ndim - 1 - n] - 1;
+        }
+        else
+        {
+            dx[n] = crd[n] - floorf(crd[n]);
+            pt0[obj->ndim - 1 - n] = (int)floorf(crd[n]);
+            pt1[obj->ndim - 1 - n] = pt0[obj->ndim - 1 - n] + 1;
+        }
+    }
+
+    for (n = 0; n < obj->ndim; n++) size <<= 1;
+    for (i = 0; i < size; i++)
+    {
+        cf = 1.0f;
+        for (n = 0; n < obj->ndim; n++)
+        {
+            if ((i >> n) & 1)
+            {
+                pt[obj->ndim - 1 - n] = pt1[obj->ndim - 1 - n];
+                cf *= 1.0f - dx[n];
+            }
+            else
+            {
+                pt[obj->ndim - 1 - n] = pt0[obj->ndim - 1 - n];
+                cf *= dx[n];
+            }
+        }
+        RAVEL_INDEX(pt, &idx, obj);
+        v_bi += cf * GET(obj, float, idx);
+    }
+
+    DEALLOC(dx); DEALLOC(pt0); DEALLOC(pt1); DEALLOC(pt);
+    return v_bi;
+}
+
+int interp_bi(float *out, float *data, int ndim, const size_t *dims, float *crds, size_t ncrd)
+{
+    if (!data || !dims || !crds) {ERROR("interp_bi: one of the arguments is NULL."); return -1;}
+    if (ndim == 0) {ERROR("interp_bi: ndim must be a positive number"); return -1;}
+
+    if (ncrd == 0) return 0;
+
+    int i;
+    float *crd;
+
+    array obj = new_array(ndim, dims, sizeof(float), data);
+
+    for (i = 0, crd = crds; i < (int)ncrd; i++, crd += ndim)
+    {
+        out[i] = bilinearf(obj, crd);
+    }
+
+    free_array(obj);
+
+    return 0;
+}
+
 double rbf(double dist, double sigma)
 {
     return exp(-0.5 * SQ(dist) / SQ(sigma)) * M_1_SQRT2PI;
@@ -69,8 +154,8 @@ int predict_kerreg(double *y, double *w, double *x, size_t npts, size_t ndim, do
             UPDATE_LINE(xval, i);
 
             axis = 0;
-            x_left = ((double *)xval->data)[axis] - cutoff;
-            x_right = ((double *)xval->data)[axis] + cutoff;
+            x_left = GET(xval, double, axis) - cutoff;
+            x_right = GET(xval, double, axis) + cutoff;
             size_t left_end = searchsorted_r(&x_left, idxs, npts, sizeof(size_t), SEARCH_LEFT, indirect_search_double, x);
             size_t right_end = searchsorted_r(&x_right, idxs, npts, sizeof(size_t), SEARCH_LEFT, indirect_search_double, x);
 
@@ -87,8 +172,8 @@ int predict_kerreg(double *y, double *w, double *x, size_t npts, size_t ndim, do
             {
                 for (j = 0; j < (int)wsize; j++) window[j]++;
                 POSIX_QSORT_R(window, wsize, sizeof(size_t), indirect_compare_double, (void *)x);
-                x_left = ((double *)xval->data)[axis] - cutoff;
-                x_right = ((double *)xval->data)[axis] + cutoff;
+                x_left = GET(xval, double, axis) - cutoff;
+                x_right = GET(xval, double, axis) + cutoff;
                 update_window(x, window, &wsize, x_left, x_right);
             }
 
@@ -110,63 +195,11 @@ int predict_kerreg(double *y, double *w, double *x, size_t npts, size_t ndim, do
     return 0;
 }
 
-typedef struct rect_iter_s
-{
-    int ndim;
-    size_t size;
-    int *coord;
-    size_t *strides;
-    int index;
-} rect_iter_s;
-typedef struct rect_iter_s *rect_iter;
-
-static void ri_del(rect_iter ri)
-{
-    if (ri == NULL) ERROR("ri_del: NULL iterator.");
-    DEALLOC(ri->coord); DEALLOC(ri->strides); DEALLOC(ri);
-}
-
-static rect_iter ri_ini(int ndim, int *pt0, int *pt1)
-{
-    /* check parameters */
-    if(ndim <= 0) {ERROR("new_ri: ndim must be positive."); return NULL;}
-
-    rect_iter ri = (rect_iter)malloc(sizeof(struct rect_iter_s));
-    if (!ri) {ERROR("new_ri: not enough memory."); return NULL;}
-    
-    ri->index = 0;
-    ri->ndim = ndim;
-    ri->size = 1;
-    ri->coord = calloc(ri->ndim, sizeof(int));
-    ri->strides = MALLOC(size_t, ri->ndim);
-
-    for (int n = ri->ndim - 1; n >= 0; n--)
-    {
-        if (pt1[n] < pt0[n])
-        {
-            ERROR("new_ri: pt1 must be larger than pt0");
-            ri_del(ri); return NULL;
-        }
-        ri->strides[n] = ri->size;
-        ri->size *= pt1[n] - pt0[n] + 1;
-    }
-
-    return ri;
-}
-
-static int ri_end(rect_iter ri)
-{
-    return ri->index >= (int)ri->size;
-}
-
-static void ri_inc(rect_iter ri)
-{
-    if (!ri_end(ri)) ri->index++;
-    UNRAVEL_INDEX(ri->coord, &ri->index, ri);
-}
-
-int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, double *y_hat, const size_t *dims, double *step,
-                 kernel krn, double sigma, double cutoff, unsigned threads)
+/* points (integer) follow the convention:      [..., k, j, i], where {i <-> x, j <-> y, k <-> z}
+   coordinates (float) follow the convention:   [x, y, z, ...]
+ */
+int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, double *y_hat, const size_t *roi,
+                 double *step, kernel krn, double sigma, double cutoff, unsigned threads)
 {
     /* check parameters */
     if (!y || !w || !x || !y_hat || !step) {ERROR("predict_grid: one of the arguments is NULL."); return -1;}
@@ -174,16 +207,16 @@ int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, doub
 
     size_t size = 1;
     int *cutoffs = MALLOC(int, ndim);
+    size_t *dims = MALLOC(size_t, ndim);
     for (int i = 0; i < (int)ndim; i++)
     {
+        dims[i] = roi[2 * i + 1] - roi[2 * i];
         size *= dims[i];
-        cutoffs[i] = (int)((cutoff * sigma) / step[i]);
+        cutoffs[i] = (int)((cutoff * sigma) / step[ndim - 1 - i]);
     }
 
     array Iarr = new_array(ndim, dims, sizeof(double), calloc(threads * size, sizeof(double)));
     array Warr = new_array(ndim, dims, sizeof(double), calloc(threads * size, sizeof(double)));
-    double *Iptr = (double *)Iarr->data;
-    double *Wptr = (double *)Warr->data;
 
     #pragma omp parallel num_threads(threads)
     {
@@ -199,22 +232,29 @@ int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, doub
         {
             for (n = 0; n < (int)ndim; n++)
             {
-                idx = (int)(x[i * ndim + n] / step[n]) + 1;
-                pt0[n] = idx - cutoffs[n]; CLIP(pt0[n], 0, (int)dims[n] - 1);
-                pt1[n] = idx + cutoffs[n]; CLIP(pt1[n], 0, (int)dims[n] - 1);
+                idx = (int)ceilf(x[i * ndim + ndim - 1 - n] / step[ndim - 1 - n]);
+                pt0[n] = idx - cutoffs[n];
+                CLIP(pt0[n], (int)roi[2 * n], (int)roi[2 * n + 1]);
+                pt1[n] = idx + cutoffs[n];
+                CLIP(pt1[n], (int)roi[2 * n], (int)roi[2 * n + 1]);
             }
 
             for (ri = ri_ini(ndim, pt0, pt1); !ri_end(ri); ri_inc(ri))
             {
-                for (n = 0; n < ri->ndim; n++) pt[n] = ri->coord[n] + pt0[n];
+                // Calculate the coordinate of the buffer array
+                for (n = 0; n < ri->ndim; n++) pt[n] = ri->coord[n] + pt0[n] - roi[2 * n];
                 RAVEL_INDEX(pt, &idx, Iarr);
 
+                // Calculate the distance
                 dist = 0.0;
-                for (n = 0; n < ri->ndim; n++) dist += SQ(pt[n] * step[n] - x[i * ndim + n]);
+                for (n = 0; n < ri->ndim; n++)
+                {
+                    dist += SQ((pt[n] + roi[2 * n]) * step[ndim - 1 - n] - x[i * ndim + ndim - 1 - n]);
+                }
                 rbf = krn(sqrt(dist), sigma);
 
-                Iptr[t * size + idx] += y[i] * w[i] * rbf;
-                Wptr[t * size + idx] += w[i] * w[i] * rbf;
+                GET(Iarr, double, t * size + idx) += y[i] * w[i] * rbf;
+                GET(Warr, double, t * size + idx) += w[i] * w[i] * rbf;
             }
             ri_del(ri);
         }
@@ -229,14 +269,16 @@ int predict_grid(double *y, double *w, double *x, size_t npts, size_t ndim, doub
             Ival = 0.0; Wval = 0.0;
             for (t = 0; t < (int)threads; t++)
             {
-                Ival += Iptr[t * size + i]; Wval += Wptr[t * size + i];
+                Ival += GET(Iarr, double, t * size + i);
+                Wval += GET(Warr, double, t * size + i);
             }
             y_hat[i] = (Wval > 0.0) ? Ival / Wval : 0.0;
         }
     }
 
-    DEALLOC(Iptr); free_array(Iarr);
-    DEALLOC(Wptr); free_array(Warr);
+    DEALLOC(Iarr->data); free_array(Iarr);
+    DEALLOC(Warr->data); free_array(Warr);
+    DEALLOC(cutoffs); DEALLOC(dims);
 
     return 0;
 }
@@ -288,51 +330,51 @@ int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **
     return 0;
 }
 
-static float xtal_bilinear(unsigned xidx, float xmap_x, float xmap_y, float *xtal, const size_t *ddims)
-{
-    float dx, dy, xtal_bi;
-    int x0, x1, y0, y1;
-    if (xmap_x <= 0.0f)
-    {
-        dx = 0.0f; x0 = 0; x1 = 0;
-    }
-    else if (xmap_x >= ddims[1] - 1.0f)
-    {
-        dx = 0.0f; x0 = ddims[1] - 1; x1 = ddims[1] - 1;
-    }
-    else
-    {
-        dx = xmap_x - floorf(xmap_x);
-        x0 = (int)floorf(xmap_x); x1 = x0 + 1;
-    }
+// static float xtal_bilinear(unsigned xidx, float xmap_x, float xmap_y, float *xtal, const size_t *ddims)
+// {
+//     float dx, dy, xtal_bi;
+//     int x0, x1, y0, y1;
+//     if (xmap_x <= 0.0f)
+//     {
+//         dx = 0.0f; x0 = 0; x1 = 0;
+//     }
+//     else if (xmap_x >= ddims[2] - 1.0f)
+//     {
+//         dx = 0.0f; x0 = ddims[2] - 1; x1 = ddims[2] - 1;
+//     }
+//     else
+//     {
+//         dx = xmap_x - floorf(xmap_x);
+//         x0 = (int)floorf(xmap_x); x1 = x0 + 1;
+//     }
 
-    if (xmap_y <= 0.0f)
-    {
-        dy = 0.0f; y0 = 0; y1 = 0;
-    }
-    else if (xmap_y >= ddims[2] - 1.0f)
-    {
-        dy = 0.0f; y0 = ddims[2] - 1; y1 = ddims[2] - 1;
-    }
-    else
-    {
-        dy = xmap_y - floorf(xmap_y);
-        y0 = (int)floorf(xmap_y); y1 = y0 + 1;
-    }
+//     if (xmap_y <= 0.0f)
+//     {
+//         dy = 0.0f; y0 = 0; y1 = 0;
+//     }
+//     else if (xmap_y >= ddims[1] - 1.0f)
+//     {
+//         dy = 0.0f; y0 = ddims[1] - 1; y1 = ddims[1] - 1;
+//     }
+//     else
+//     {
+//         dy = xmap_y - floorf(xmap_y);
+//         y0 = (int)floorf(xmap_y); y1 = y0 + 1;
+//     }
 
-    // Calculate bilinear interpolation
-    xtal_bi = (1.0f - dx) * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + x0 * ddims[2] + y0] +
-                      dx  * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + x1 * ddims[2] + y0] +
-              (1.0f - dx) *         dy  * xtal[xidx * ddims[1] * ddims[2] + x0 * ddims[2] + y1] +
-                      dx  *         dy  * xtal[xidx * ddims[1] * ddims[2] + x1 * ddims[2] + y1];
-    return xtal_bi;
-}
+//     // Calculate bilinear interpolation
+//     xtal_bi = (1.0f - dx) * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + y0 * ddims[2] + x0] +
+//                       dx  * (1.0f - dy) * xtal[xidx * ddims[1] * ddims[2] + y1 * ddims[2] + x0] +
+//               (1.0f - dx) *         dy  * xtal[xidx * ddims[1] * ddims[2] + y0 * ddims[2] + x1] +
+//                       dx  *         dy  * xtal[xidx * ddims[1] * ddims[2] + y1 * ddims[2] + x1];
+//     return xtal_bi;
+// }
 
-int update_sf(float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
+int update_sf(float *sf, float *dsf, float *rp, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
               unsigned *hkl_idxs, size_t hkl_size, unsigned *iidxs, size_t isize, unsigned threads)
 {
-    /* check parameters */
-    if (!sf || !dsf || !xidx || !xmap || !xtal || !hkl_idxs || !iidxs)
+    /* Check parameters */
+    if (!sf || !dsf || !rp || !sgn || !xidx || !xmap || !xtal || !hkl_idxs || !iidxs)
     {ERROR("update_sf: one of the arguments is NULL."); return -1;}
     if (hkl_size == 0 || isize == 0) return 0;
 
@@ -344,23 +386,32 @@ int update_sf(float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, fl
     float *dIsum = calloc(hkl_size, sizeof(float));
     float *Wsum = calloc(hkl_size, sizeof(float));
 
+    array xarr = new_array(3, ddims, sizeof(float), xtal);
+
     #pragma omp parallel num_threads(threads)
     {
         int i, j;
-        float xtal_bi, F, dF;
+        float xtal_bi, F, dF, crd[3];
 
         #pragma omp for
         for (i = 0; i < (int)isize; i++)
         {
             Ibuf[i] = 0.0f; Wbuf[i] = 0.0f; dIbuf[i] = 0.0f;
-            
             for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
             {
-                // Calculate xtal at given position xmap
-                xtal_bi = xtal_bilinear(xidx[j], xmap[2 * j], xmap[2 * j + 1], xtal, ddims);
+                /* Assign a coordinate */
+                crd[0] = xmap[2 * j]; crd[1] = xmap[2 * j + 1]; crd[2] = xidx[j];
+                // Calculate xtal at a given position xmap using the bilinear interpolation
+                xtal_bi = bilinearf(xarr, crd);
 
-                // Calculate weighted least squares slope betta: sgn = betta * xtal_bi
-                Ibuf[i] += sgn[j] * xtal_bi; Wbuf[i] += SQ(xtal_bi); dIbuf[i] += sgn[j] * SQ(xtal_bi);
+                /* Calculate weighted least squares slope betta: sgn = betta * xtal_bi * rp
+                   The slope is given by:
+                   betta = \sum_{j \el (h, k, l)} (sgn[j] * xtal[j] * rp[j]) *
+                           \sum_{j \el (h, k, l)} (xtal[j]^2 * rp[j]^2)
+                 */
+                Ibuf[i] += sgn[j] * xtal_bi * rp[j];
+                Wbuf[i] += SQ(xtal_bi * rp[j]);
+                dIbuf[i] += fabsf(sgn[j]) * SQ(xtal_bi * rp[j]);
             }
         }
 
@@ -387,36 +438,44 @@ int update_sf(float *sf, float *dsf, float *sgn, unsigned *xidx, float *xmap, fl
     DEALLOC(Ibuf); DEALLOC(Wbuf); DEALLOC(dIbuf);
     DEALLOC(Isum); DEALLOC(Wsum); DEALLOC(dIsum);
 
+    free_array(xarr);
+
     return 0;
 }
 
-float scale_crit(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims, unsigned *iidxs,
-                 size_t isize, unsigned threads)
+float scale_crit(float *sf, float *rp, float *sgn, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims,
+                 unsigned *iidxs, size_t isize, unsigned threads)
 {
-    /* check parameters */
-    if (!sf || !xidx || !xmap || !xtal || !iidxs) {ERROR("scale_crit: one of the arguments is NULL."); return 0.0f;}
+    /* Check parameters */
+    if (!sf || !rp || !sgn || !xidx || !xmap || !xtal || !iidxs)
+    {ERROR("scale_crit: one of the arguments is NULL."); return 0.0f;}
     if (isize == 0) return 0.0f;
 
     double err = 0.0;
+    array xarr = new_array(3, ddims, sizeof(float), xmap);
 
     #pragma omp parallel num_threads(threads) reduction(+:err)
     {
         int i, j;
-        float xtal_bi;
+        float xtal_bi, crd[3];
 
         #pragma omp for
         for (i = 0; i < (int)isize; i++)
         {
             for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
             {
-                // Calculate xtal at given position xmap
-                xtal_bi = xtal_bilinear(xidx[j], xmap[2 * j], xmap[2 * j + 1], xtal, ddims);
+                // Assign a coordinate
+                crd[0] = xmap[2 * j]; crd[1] = xmap[2 * j + 1]; crd[2] = xidx[j];
+                // Calculate xtal at a given position xmap
+                xtal_bi = bilinearf(xarr, crd);
 
                 // Calculate weighted least squares slope betta: sgn = betta * d_bi
-                err += fabsf(sgn[j] - xtal_bi * sf[j]);
+                err += fabsf(sgn[j] - xtal_bi * rp[j] * sf[j]);
             }
         }
     }
+
+    free_array(xarr);
 
     return err / iidxs[isize];
 }
@@ -424,14 +483,26 @@ float scale_crit(float *sf, float *sgn, unsigned *xidx, float *xmap, float *xtal
 int xtal_interp(float *xtal_bi, unsigned *xidx, float *xmap, float *xtal, const size_t *ddims, size_t isize, unsigned threads)
 {
     /* check parameters */
-    if (!xidx || !xmap || !xtal) {ERROR("xtal_interp: one of the arguments is NULL."); return -1;}
+    if (!xtal_bi || !xidx || !xmap || !xtal) {ERROR("xtal_interp: one of the arguments is NULL."); return -1;}
     if (isize == 0) return 0;
 
-    #pragma omp parallel for num_threads(threads)
-    for (int i = 0; i < (int)isize; i++)
+    array xarr = new_array(3, ddims, sizeof(float), xtal);
+
+    #pragma omp parallel num_threads(threads)
     {
-        // Calculate xtal at given position xmap
-        xtal_bi[i] = xtal_bilinear(xidx[i], xmap[2 * i], xmap[2 * i + 1], xtal, ddims);
+        float crd[3];
+
+        #pragma omp for
+        for (int i = 0; i < (int)isize; i++)
+        {
+            // Assign a coordinate
+            crd[0] = xmap[2 * i]; crd[1] = xmap[2 * i + 1]; crd[2] = xidx[i];
+            // Calculate xtal at a given position xmap
+            xtal_bi[i] = bilinearf(xarr, crd);
+        }
     }
+
+    free_array(xarr);
+
     return 0;
 }

@@ -71,14 +71,18 @@ ctypedef int (*line_profile)(int, float, float)
 cdef extern from "img_proc.h":
     int linear_profile(int max_val, float err, float wd) nogil
     int tophat_profile(int max_val, float err, float wd) nogil
-    int quad_profile(int max_val, float err, float wd) nogil    
+    int quad_profile(int max_val, float err, float wd) nogil
+    int gauss_profile(int max_val, float err, float wd) nogil
     
-    int draw_line_c "draw_line" (unsigned int *out, unsigned long Y, unsigned long X,
-                     unsigned int max_val, float *lines, unsigned long *ldims, float dilation, line_profile profile) nogil
+    int draw_line_c "draw_line" (unsigned int *out, unsigned long *dims, unsigned int max_val, float *lines,
+                     unsigned long *ldims, float dilation, line_profile profile) nogil
 
-    int draw_line_index_c "draw_line_index" (unsigned int **out, unsigned long *n_idxs, unsigned long Y,
-                            unsigned long X, unsigned int max_val, float *lines, unsigned long *ldims,
-                            float dilation, line_profile profile) nogil
+    int draw_line_index_c "draw_line_index" (unsigned int **out, unsigned long *n_idxs, unsigned long *dims,
+                          unsigned int max_val, float *lines, unsigned long *ldims, float dilation,
+                          line_profile profile) nogil
+
+    int normalise_line(float *out, float *data, unsigned long *dims, float *lines, unsigned long *ldims,
+                       float *dilations, line_profile profile) nogil
 
 cdef extern from "fftw3.h":
     void fftw_init_threads() nogil

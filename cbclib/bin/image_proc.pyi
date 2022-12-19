@@ -297,7 +297,7 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
     ...
 
 def draw_line(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: float=0.0,
-               profile: str='tophat') -> np.ndarray:
+              profile: str='tophat') -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame
     by using the Bresenham's algorithm [BSH]_. The lines must follow the LSD convention,
     see the parameters for more info.
@@ -413,6 +413,11 @@ def draw_line_index(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, ma
     """
     ...
 
+def normalise_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilations: Tuple[float, float, float],
+                      profile: str='tophat', num_threads: int=1) -> np.ndarray:
+    """
+    """
+
 def project_effs(inp: np.ndarray, mask: np.ndarray, effs: np.ndarray, num_threads: int=1) -> np.ndarray:
     """Calculate a projection of eigen flat-fields ``effs`` on a set of 2D arrays ``inp``.
 
@@ -438,19 +443,5 @@ def subtract_background(inp: np.ndarray, mask: np.ndarray, bgd: np.ndarray, num_
 
     Returns:
         An output projection of eigen flat-fields.
-    """
-    ...
-
-def normalise_pattern(inp: np.ndarray, bgd: np.ndarray, divisor: np.ndarray, num_threads: int=1) -> np.ndarray:
-    """Normalise a set of experimental patterns.
-
-    Args:
-        inp : A set of input 2D patterns.
-        bgd : A set of background arrays.
-        divisor : A set of divisor arrays.
-        num_threads : A number of threads used in the computations.
-
-    Returns:
-        A set of normalised experimental patterns.
     """
     ...

@@ -1,19 +1,20 @@
 import numpy as np
 import cython
-from libc.math cimport log, sqrt, pi
+from libc.math cimport log, sqrt, pi, exp
 from libc.string cimport memcmp
 from libc.stdlib cimport calloc, malloc, free
 from cython.parallel import prange
 from .line_detector cimport ArrayWrapper
 
-cdef line_profile profiles[3]
+cdef line_profile profiles[4]
 cdef void build_profiles():
     profiles[0] = linear_profile
     profiles[1] = quad_profile
     profiles[2] = tophat_profile
+    profiles[3] = gauss_profile
 
 cdef dict profile_scheme
-profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2}
+profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2, 'gauss': 3}
 
 # Set the cleanup routine
 cdef void _cleanup():
@@ -428,8 +429,7 @@ def draw_line(np.ndarray inp not None, np.ndarray lines not None, int max_val=25
         raise ValueError(f"Invalid profile keyword: '{profile}'")
 
     cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
-    cdef unsigned long _Y = inp.shape[0]
-    cdef unsigned long _X = inp.shape[1]
+    cdef unsigned long *_dims = <unsigned long *>inp.shape
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
 
@@ -437,7 +437,7 @@ def draw_line(np.ndarray inp not None, np.ndarray lines not None, int max_val=25
     cdef int fail
 
     with nogil:
-        fail = draw_line_c(_inp, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
+        fail = draw_line_c(_inp, _dims, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
     return inp
@@ -453,9 +453,8 @@ def draw_line_stack(np.ndarray inp not None, dict lines not None, int max_val=1,
 
     cdef int ndim = inp.ndim
     cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
-    cdef int _X = <int>inp.shape[ndim - 1]
-    cdef int _Y = <int>inp.shape[ndim - 2]
-    cdef int repeats = inp.size / _X / _Y
+    cdef unsigned long *_dims = <unsigned long *>inp.shape + ndim - 2
+    cdef int repeats = inp.size / _dims[0] / _dims[1]
 
     cdef int i, N = len(lines)
     cdef list frames = list(lines)
@@ -475,7 +474,8 @@ def draw_line_stack(np.ndarray inp not None, dict lines not None, int max_val=1,
     cdef int fail
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        fail = draw_line_c(_inp + i * _Y * _X, _Y, _X, max_val, _lptrs[i], _ldims[i], <float>dilation, _prof)
+        fail = draw_line_c(_inp + i * _dims[0] * _dims[1], _dims, max_val, _lptrs[i], _ldims[i],
+                           <float>dilation, _prof)
 
         if fail:
             with gil:
@@ -500,8 +500,7 @@ def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=25
         _shape[0] += 1; _shape[1] += 1
     else:
         _shape = normalize_sequence(shape, 2, np.NPY_INTP)
-    cdef unsigned long _Y = _shape[0]
-    cdef unsigned long _X = _shape[1]
+    cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
     cdef unsigned int *_idxs
     cdef unsigned long _n_idxs
@@ -512,7 +511,7 @@ def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=25
     cdef int fail = 0
 
     with nogil:
-        fail = draw_line_index_c(&_idxs, &_n_idxs, _Y, _X, max_val, _lines, _ldims, <float>dilation, _prof)
+        fail = draw_line_index_c(&_idxs, &_n_idxs, _dims, max_val, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 
@@ -520,6 +519,54 @@ def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=25
     cdef np.ndarray idxs = ArrayWrapper.from_ptr(<void *>_idxs).to_ndarray(2, dims, np.NPY_UINT32)
 
     return idxs
+
+def normalise_pattern(np.ndarray inp not None, dict lines not None, object dilations not None,
+                      str profile='tophat', unsigned int num_threads=1):
+    if inp.ndim != 3:
+        raise ValueError('Input array must be a 3D array.')
+    inp = check_array(inp, np.NPY_FLOAT32)
+
+    cdef np.ndarray dils = normalize_sequence(dilations, 3, np.NPY_FLOAT32)
+    cdef float *_dils = <float *>np.PyArray_DATA(dils)
+
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+
+    cdef float *_inp = <float *>np.PyArray_DATA(inp)
+    cdef unsigned long *_dims = <unsigned long *>inp.shape + 1
+    cdef int repeats = inp.size / _dims[0] / _dims[1]
+
+    cdef np.ndarray out = np.PyArray_SimpleNew(3, inp.shape, np.NPY_FLOAT32)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
+
+    cdef int i, N = len(lines)
+    cdef list frames = list(lines)
+    cdef dict _lines = {}
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
+    for i in range(N):
+        _lines[i] = check_array(lines[frames[i]], np.NPY_FLOAT32)
+        _lptrs[i] = <float *>np.PyArray_DATA(_lines[i])
+        _ldims[i] = <unsigned long *>(<np.ndarray>_lines[i]).shape
+
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+
+    if N < repeats:
+        repeats = N
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    cdef int fail
+
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        fail = normalise_line(_out + i * _dims[0] * _dims[1], _inp + i * _dims[0] * _dims[1], _dims,
+                              _lptrs[i], _ldims[i], _dils, _prof)
+
+        if fail:
+            with gil:
+                raise RuntimeError('C backend exited with error.')
+
+    free(_lptrs); free(_ldims)
+
+    return out
 
 def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray effs not None,
                  int num_threads=1):
@@ -589,31 +636,4 @@ def subtract_background(np.ndarray inp not None, np.ndarray mask not None, np.nd
                 else:
                     _out[i, j, k] = 0.0
 
-    return out
-
-def normalise_pattern(np.ndarray inp not None, np.ndarray bgd not None, np.ndarray divisor not None,
-                      int num_threads=1):
-    inp = check_array(inp, np.NPY_FLOAT32)
-    bgd = check_array(bgd, np.NPY_FLOAT32)
-    divisor = check_array(divisor, np.NPY_FLOAT32)
-
-    cdef int i, j, k
-    cdef float w, I
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
-
-    cdef np.float32_t[:, :, ::1] _inp = inp
-    cdef np.float32_t[:, :, ::1] _bgd = bgd
-    cdef np.float32_t[:, :, ::1] _div = divisor
-    cdef np.float32_t[:, :, ::1] _out = out
-
-    cdef int n_frames = _inp.shape[0]
-    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
-    for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(_inp.shape[1]):
-            for k in range(_inp.shape[2]):
-                if _div[i, j, k]:
-                    w = _div[i, j, k] - _bgd[i, j, k]
-                    I = _inp[i, j, k] - _bgd[i, j, k]
-                    if w > 0.0 and I > 0.0:
-                        _out[i, j, k] = I / w if I <= w else 1.0
     return out

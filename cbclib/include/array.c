@@ -644,3 +644,52 @@ void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const vo
     
     return inp + k * size;
 }
+
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Rectangular iterator ---------------------------*/
+/*----------------------------------------------------------------------------*/
+
+void ri_del(rect_iter ri)
+{
+    if (ri == NULL) ERROR("ri_del: NULL iterator.");
+    DEALLOC(ri->coord); DEALLOC(ri->strides); DEALLOC(ri);
+}
+
+rect_iter ri_ini(int ndim, int *pt0, int *pt1)
+{
+    /* check parameters */
+    if (ndim <= 0) {ERROR("new_ri: ndim must be positive."); return NULL;}
+
+    rect_iter ri = (rect_iter)malloc(sizeof(struct rect_iter_s));
+    if (!ri) {ERROR("new_ri: not enough memory."); return NULL;}
+    
+    ri->index = 0;
+    ri->ndim = ndim;
+    ri->size = 1;
+    ri->coord = calloc(ri->ndim, sizeof(int));
+    ri->strides = MALLOC(size_t, ri->ndim);
+
+    for (int n = ri->ndim - 1; n >= 0; n--)
+    {
+        if (pt1[n] < pt0[n])
+        {
+            ERROR("new_ri: pt1 must be larger than pt0");
+            ri_del(ri); return NULL;
+        }
+        ri->strides[n] = ri->size;
+        ri->size *= pt1[n] - pt0[n];
+    }
+
+    return ri;
+}
+
+int ri_end(rect_iter ri)
+{
+    return ri->index >= (int)ri->size;
+}
+
+void ri_inc(rect_iter ri)
+{
+    if (!ri_end(ri)) ri->index++;
+    UNRAVEL_INDEX(ri->coord, &ri->index, ri);
+}

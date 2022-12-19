@@ -16,6 +16,8 @@ typedef struct array_s *array;
 array new_array(int ndim, const size_t *dims, size_t item_size, void *data);
 void free_array(array arr);
 
+#define GET(_arr, _type, _idx) ((_type *)(_arr)->data)[(_idx)]
+
 #define UNRAVEL_INDEX(_coord, _idx, _arr)               \
     do {int _i = *(_idx), _n;                           \
         for (_n = 0; _n < (_arr)->ndim; _n++)           \
@@ -154,5 +156,24 @@ void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const vo
 
 #define wirthmedian(a, n, size, compar) wirthselect(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar)
 #define wirthmedian_r(a, n, size, compar, arg) wirthselect_r(a, (((n) & 1) ? ((n) / 2) : (((n) / 2) - 1)), n, size, compar, arg)
+
+/*---------------------------------------------------------------------------
+    Rectangular iterator
+----------------------------------------------------------------------------*/
+
+typedef struct rect_iter_s
+{
+    int ndim;
+    size_t size;
+    int *coord;
+    size_t *strides;
+    int index;
+} rect_iter_s;
+typedef struct rect_iter_s *rect_iter;
+
+void ri_del(rect_iter ri);
+rect_iter ri_ini(int ndim, int *pt0, int *pt1);
+int ri_end(rect_iter ri);
+void ri_inc(rect_iter ri);
 
 #endif

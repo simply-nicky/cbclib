@@ -61,9 +61,8 @@
                        floats of size X x Y, and the pixel at coordinates
                        (x, y) is obtained by img[x + y * X].
 
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
@@ -137,10 +136,10 @@
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
+int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
                          float scale, float sigma_scale, float quant,
                          float ang_th, float log_eps, float density_th,
-                         int n_bins, int ** reg_img, int * reg_y, int * reg_x);
+                         int n_bins, int **reg_img, int *reg_y, int *reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
@@ -167,9 +166,8 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                        floats of size X x Y, and the pixel at coordinates
                        (x,y) is obtained by img[x + y * X].
 
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
@@ -205,8 +203,8 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
-                     float scale, int ** reg_img, int * reg_y, int * reg_x);
+int lsd_scale_region(float **out, int *n_out, float *img, size_t *dims,
+                     float scale, int **reg_img, int *reg_y, int *reg_x);
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale
@@ -217,49 +215,8 @@ int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
                        of line segment number 2, and so on, and it finish
                        by the 7 values of line segment number n_out.
                        The seven values are:
-                       - x1, y1, x2, y2, width, p, -log10(NFA)
-                       .
-                       for a line segment from coordinates (x1, y1) to (x2, y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
-                       If 'out' is the returned pointer, the 7 values of
-                       line segment number 'n + 1' are obtained with
-                       'out[7 * n]' to 'out[7 * n + 6]'.
+                       - x1, y1, x2, y2, width, p, -log10(NFA).
 
-    @param n_out       Pointer to an int where LSD will store the number of
-                       line segments detected.
-
-    @param img         Pointer to input image data. It must be an array of
-                       floats of size X x Y, and the pixel at coordinates
-                       (x,y) is obtained by img[x + y * X].
-
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
-
-    @param scale       When different from 1.0, LSD will scale the input image
-                       by 'scale' factor by Gaussian filtering, before detecting
-                       line segments.
-                       Example: if scale = 0.8, the input image will be subsampled
-                       to 80% of its size, before the line segment detector
-                       is applied.
-                       Suggested value: 0.8
-
-    @return            LSD returns 0 if it finished normally, -1 otherwise.
- */
-int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale);
-
-/*----------------------------------------------------------------------------*/
-/** LSD Simple Interface
-
-    @param out         Pointer to a float array of size 7 x n_out, containing the list
-                       of line segments detected. The array contains first
-                       7 values of line segment number 1, then the 7 values
-                       of line segment number 2, and so on, and it finish
-                       by the 7 values of line segment number n_out.
-                       The seven values are:
-                       - x1, y1, x2, y2, width, p, -log10(NFA)
-                       .
                        for a line segment from coordinates (x1, y1) to (x2, y2),
                        a width 'width', an angle precision of p in (0, 1) given
                        by angle_tolerance / 180 degree, and NFA value 'NFA'.
@@ -274,13 +231,52 @@ int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale)
                        floats of size X x Y, and the pixel at coordinates
                        (x, y) is obtained by img[x + y * X].
 
-    @param Y           Y size of the image: the number of rows.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
-    @param X           X size of the image: the number of columns.
+    @param scale       When different from 1.0, LSD will scale the input image
+                       by 'scale' factor by Gaussian filtering, before detecting
+                       line segments.
+                       Example: if scale = 0.8, the input image will be subsampled
+                       to 80% of its size, before the line segment detector
+                       is applied.
+                       Suggested value: 0.8
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-int lsd(float ** out, int * n_out, float * img, int Y, int X);
+int lsd_scale(float **out, int *n_out, float *img, size_t *dims, float scale);
+
+/*----------------------------------------------------------------------------*/
+/** LSD Simple Interface
+
+    @param out         Pointer to a float array of size 7 x n_out, containing the list
+                       of line segments detected. The array contains first
+                       7 values of line segment number 1, then the 7 values
+                       of line segment number 2, and so on, and it finish
+                       by the 7 values of line segment number n_out.
+                       The seven values are:
+                       - x1, y1, x2, y2, width, p, -log10(NFA).
+
+                       for a line segment from coordinates (x1, y1) to (x2, y2),
+                       a width 'width', an angle precision of p in (0, 1) given
+                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
+                       If 'out' is the returned pointer, the 7 values of
+                       line segment number 'n + 1' are obtained with
+                       'out[7 * n]' to 'out[7 * n + 6]'.
+
+    @param n_out       Pointer to an int where LSD will store the number of
+                       line segments detected.
+
+    @param img         Pointer to input image data. It must be an array of
+                       floats of size X x Y, and the pixel at coordinates
+                       (x, y) is obtained by img[x + y * X].
+
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
+
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
+ */
+int lsd(float **out, int *n_out, float *img, size_t *dims);
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/

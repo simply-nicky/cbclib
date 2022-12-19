@@ -373,7 +373,8 @@ class Mirror(Transform):
     shape: Tuple[int, int]
 
     def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the mirroring transform.
+        """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the mirroring
+        transform.
 
         Args:
             ss_idxs: Slow axis indices of a frame.

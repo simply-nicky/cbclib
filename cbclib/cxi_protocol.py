@@ -7,11 +7,7 @@ Examples:
 
     >>> import cbclib as cbc
     >>> cbc.CXIProtocol.import_default()
-    {'config': {'float_precision': 'float64'}, 'datatypes': {'basis_vectors': 'float',
-    'data': 'uint', 'defocus_x': 'float', '...': '...'}, 'default_paths': {'basis_vectors':
-    '/speckle_tracking/basis_vectors', 'data': '/entry/data/data', 'defocus_x':
-    '/speckle_tracking/defocus_x', '...': '...'}, 'is_data': {'basis_vectors': 'False',
-    'data': 'True', 'defocus_x': 'False', '...': '...'}}
+    CXIProtocol(datatypes={...}, load_paths={...}, kinds={...})
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -359,7 +355,7 @@ class CXIStore():
 
     def open(self) -> None:
         """Open the files."""
-        if not self.__bool__():
+        if not self:
             for data_file in self.file_dict:
                 self.file_dict[data_file] = h5py.File(data_file, mode=self.mode)
 
@@ -442,13 +438,14 @@ class CXIStore():
 
     @staticmethod
     def _read_worker_frame(index: np.ndarray, ss_idxs: Indices, fs_idxs: Indices) -> np.ndarray:
-        return h5py.File(index[0])[index[1]][index[2]][ss_idxs, fs_idxs]
+        return h5py.File(index[0])[index[1]][index[2]][..., ss_idxs, fs_idxs]
 
     def _load_stack(self, attr: str, idxs: Optional[Indices], ss_idxs: Indices,
                     fs_idxs: Indices, processes: int, verbose: bool) -> np.ndarray:
         stack = []
         if idxs is None:
             idxs = self.indices()
+        idxs = np.atleast_1d(idxs)
 
         with Pool(processes=processes, initializer=initializer,
                   initargs=(type(self)._read_worker_frame, ss_idxs, fs_idxs)) as pool:
@@ -467,6 +464,7 @@ class CXIStore():
         sequence = []
         if idxs is None:
             idxs = self.indices()
+        idxs = np.atleast_1d(idxs)
 
         for index in self._indices[attr][idxs]:
             sequence.append(self._read_worker_sequence(index))
@@ -501,9 +499,9 @@ class CXIStore():
                 return self._load_stack(attr=attr, idxs=idxs, processes=processes,
                                         ss_idxs=ss_idxs, fs_idxs=fs_idxs, verbose=verbose)
             if kind == 'frame':
-                return self._load_frame(attr=attr, ss_idxs=ss_idxs, fs_idxs=fs_idxs, )
+                return self._load_frame(attr=attr, ss_idxs=ss_idxs, fs_idxs=fs_idxs)
             if kind == 'scalar':
-                return self._load_sequence(attr, idxs=0)
+                return self._load_sequence(attr=attr, idxs=0)
             if kind == 'sequence':
                 return self._load_sequence(attr=attr, idxs=idxs)
 
@@ -562,7 +560,7 @@ class CXIStore():
             if cxi_path in self.file:
                 del self.file[cxi_path]
             self.file.create_dataset(cxi_path, data=data, shape=data.shape,
-                                         dtype=self.protocol.get_dtype(attr, data.dtype))
+                                     dtype=self.protocol.get_dtype(attr, data.dtype))
 
     def save_attribute(self, attr: str, data: np.ndarray, mode: str='overwrite',
                        idxs: Optional[Indices]=None) -> None:

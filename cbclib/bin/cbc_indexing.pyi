@@ -1,3 +1,4 @@
+from typing import Sequence
 import numpy as np
 
 def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
@@ -86,46 +87,50 @@ def spherical_to_cartesian(vecs: np.ndarray) -> np.ndarray:
     """
     ...
 
-def gaussian_grid(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, basis: np.ndarray,
-                  Sigma: float, sigma: float, threads: int=1) -> np.ndarray:
-    r"""Criterion function for Fourier autoindexing based on maximising the marginal log-
-    likelihood.
+
+def filter_direction(grid: np.ndarray, axis: Sequence[float], rng: float, sigma: float,
+                     num_threads: int=1) -> np.ndarray:
+    """Mask out a specific direction in 3D data. Useful for correcting artifacts in a Fourier
+    image caused by the detector gaps. Returns a 3D array with the line defined by the direction
+    ``axis`` masked out.
 
     Args:
-        x_arr : A set of x coordinates of diffraction signal in Fourier space.
-        y_arr : A set of y coordinates of diffraction signal in Fourier space.
-        z_arr : A set of z coordinates of diffraction signal in Fourier space.
-        basis : Basis vectors of the indexing solution.
-        envelope : A width of the envelope gaussian function.
-        sigma : A width of diffraction orders.
-        threads : A number of threads used in the computations.
+        grid : A grid of coordinates.
+        axis : Direction of the masking line.
+        rng : Width of the masking line.
+        sigma : Smoothness of the masking line.
+        num_threads : Number of threads used to generate a mask.
 
     Returns:
-        Marginal log-likelihood.
+        A 3D mask array.
     """
     ...
 
-def gaussian_grid_grad(x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray, basis: np.ndarray,
-                       hkl: np.ndarray, envelope: float, sigma: float, threads: int=1) -> np.ndarray:
-    r"""Return the  gradient of the criterion function for Fourier autoindexing based on
-    maximising the marginal log-likelihood.
+def gaussian_grid(p_arr: np.ndarray, x_arr: np.ndarray, y_arr: np.ndarray, z_arr: np.ndarray,
+                  center: np.ndarray, basis: np.ndarray, sigma: float, cutoff: float,
+                  num_threads: int=1) -> np.ndarray:
+    r"""Criterion function for Fourier autoindexing based on maximising the intersection
+    between the experimental mapping ``p_arr`` and a grid of guassian peaks defined by a
+    set of basis vectors ``basis`` and lying in the sphere of radius ``cutoff``.
 
     Args:
+        p_arr : Rasterised grid of the experimental mapping.
         x_arr : A set of x coordinates of diffraction signal in Fourier space.
         y_arr : A set of y coordinates of diffraction signal in Fourier space.
         z_arr : A set of z coordinates of diffraction signal in Fourier space.
         basis : Basis vectors of the indexing solution.
-        envelope : A width of the envelope gaussian function.
+        center : Center of the modelled grid.
         sigma : A width of diffraction orders.
-        threads : A number of threads used in the computations.
+        cutoff : Distance cutoff for the modelled grid.
+        num_threads : A number of threads used in the computations.
 
     Returns:
-        Gradient of the marginal log-likelihood.
+        The intersection criterion and the gradient.
     """
     ...
 
 def calc_source_lines(basis: np.ndarray, hkl: np.ndarray, kin_min: np.ndarray, kin_max: np.ndarray,
-                      threads: int=1) -> np.ndarray:
+                      num_threads: int=1) -> np.ndarray:
     r"""Calculate the source lines for a set of diffraction orders ``hkl`` and the given indexing
     solution ``basis``.
 
@@ -134,7 +139,7 @@ def calc_source_lines(basis: np.ndarray, hkl: np.ndarray, kin_min: np.ndarray, k
         hkl : HKL indices of diffraction orders.
         kin_min : Lower bound of the rectangular aperture function.
         kin_max : Upper bound of the rectangular aperture function.
-        threads : A number of threads used in the computations.
+        num_threads : A number of threads used in the computations.
 
     Returns:
         A set of source lines in the aperture function.
@@ -157,20 +162,20 @@ def cross_entropy(x: np.ndarray, p: np.ndarray, q: np.ndarray, q_max: float, eps
     """
     ...
 
-def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, coord: np.ndarray, prob: np.ndarray, idxs: np.ndarray,
-               threshold: float, threads: int=1) -> np.ndarray:
+def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, coord: np.ndarray, prof: np.ndarray, idxs: np.ndarray,
+               threshold: float, num_threads: int=1) -> np.ndarray:
     """Filter generated diffraction streaks that have the signal-to-noise ratio above ``threshold``.
-    The SNR value is calculated as the ratio between the absolute value of background corrected signal
-    ``sgn`` and the square root of the background signal ``bgd``.
+    The SNR value is calculated as the ratio between the absolute value of background corrected
+    signal ``sgn`` and the square root of the background signal ``bgd``.
 
     Args:
         sgn : Background corrected measured intensities.
         bgd : Background intensities.
         coord : Coordinates of the generated pattern.
-        prob : Normalised intensities of the generated pattern.
+        prof : Reflection profiles.
         idxs : Streak indices of the generated pattern.
         threshold : SNR ratio threshold.
-        threads : Number of threads used in the calculations.
+        num_threads : Number of threads used in the calculations.
 
     Returns:
         A mask of diffraction streaks, True if :code:`SNR > threshold` for the given streak.

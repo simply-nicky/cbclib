@@ -42,7 +42,7 @@ class DetectExecutor(Executor, INIContainer):
                                  'table_path', 'wf_path', 'detector', 'num_chunks', 'num_threads',
                                  'verbose'),
                       'detection': ('scan_num', 'roi', 'frames', 'imax', 'cor_rng', 'quant',
-                                    'cutoff', 'filter_thr', 'group_thr', 'dilation', 'q_abs', 
+                                    'cutoff', 'filter_thr', 'group_thr', 'dilations', 'q_abs',
                                     'width', 'snr_thr')}
 
     dir_path            : str = 'None'
@@ -58,31 +58,27 @@ class DetectExecutor(Executor, INIContainer):
     quant               : float = 0.02
     cutoff              : float = 0.0
     filter_thr          : float = 0.0
-    group_thr           : float = 0.85
-    dilation            : float = 0.0
-    q_abs               : float = 0.3
-    width               : float = 4.0
-    snr_thr             : float = 0.95
+    group_thr           : float = 1.0
+    dilations           : Tuple[float, float, float] = (0.0, 1.0, 6.0)
+    q_abs               : float = 0.0
+    width               : float = 0.0
+    snr_thr             : float = 1.0
 
     def detect_lsd(self, data: CrystData) -> pd.DataFrame:
         lsd_det = data.lsd_detector()
-        lsd_det = lsd_det.generate_pattern(vmin=self.cor_rng[0], vmax=self.cor_rng[1],
+        lsd_det = lsd_det.generate_patterns(vmin=self.cor_rng[0], vmax=self.cor_rng[1],
                                             size=(1, 3, 3))
         lsd_det = lsd_det.update_lsd(quant=self.quant)
         lsd_det = lsd_det.detect(cutoff=self.cutoff, filter_threshold=self.filter_thr,
-                                    group_threshold=self.group_thr, dilation=self.dilation)
-        lsd_det = lsd_det.draw_streaks()
-        lsd_det = lsd_det.draw_background()
-        lsd_det = lsd_det.update_pattern()
+                                 group_threshold=self.group_thr, dilation=self.dilations[0])
+        lsd_det = lsd_det.update_patterns(dilations=self.dilations)
         return lsd_det.export_table(concatenate=True)
 
     def detect_model(self, data: CrystData) -> pd.DataFrame:
         data = data.import_patterns(self.table.table).update_background()
         mdl_det = data.model_detector(self.basis, self.samples, self.setup)
         mdl_det = mdl_det.detect(q_abs=self.q_abs, width=self.width, threshold=self.snr_thr)
-        mdl_det = mdl_det.draw_streaks()
-        mdl_det = mdl_det.draw_background()
-        mdl_det = mdl_det.update_pattern()
+        mdl_det = mdl_det.update_patterns(dilations=self.dilations)
         return mdl_det.export_table(concatenate=True)
 
     def get_detector(self) -> Callable[[CrystData], pd.DataFrame]:
@@ -121,17 +117,20 @@ def criterion(x: np.ndarray, problem: SampleProblem) -> float:
 
 @dataclass
 class RefineExecutor(Executor, INIContainer):
-    __ini_fields__ = {'system': ('out_path', 'basis_path', 'samples_path', 'setup_path',
-                                 'table_path', 'backend', 'num_threads', 'verbose'),
-                      'indexing': ('tilt_tol', 'smp_tol', 'q_abs', 'width', 'alpha', 'num_gen',
-                                   'pop_size')}
+    __ini_fields__ = {'system': ('out_path', 'basis_path', 'focii_path', 'samples_path',
+                                 'setup_path', 'table_path', 'backend', 'num_threads',
+                                 'verbose'),
+                      'indexing': ('tilt_tol', 'smp_tol', 'foc_tol', 'q_abs', 'width',
+                                   'alpha', 'num_gen', 'pop_size')}
 
+    focii_path          : str = 'None'
     backend             : str = 'pygmo'
 
     tilt_tol            : float = 0.0
     smp_tol             : float = 0.0
-    q_abs               : float = 0.3
-    width               : float = 4.0
+    foc_tol             : float = 0.0
+    q_abs               : float = 0.0
+    width               : float = 0.0
     alpha               : float = 0.0
     num_gen             : int = 0
     pop_size            : int = 0
@@ -169,13 +168,13 @@ class RefineExecutor(Executor, INIContainer):
     def run(self):
         frames = self.table.table['frames'].unique()
 
-        patterns = []
+        patterns, focii = [], {}
         fitter = self.get_fitter()
         for frame in tqdm(frames, total=frames.size, disable=not self.verbose,
                         desc='Run CBC indexing refinement'):
-            problem = self.table.refine(frame=frame, bounds=(self.tilt_tol, self.smp_tol, 0.0),
-                                        basis=self.basis, sample=self.samples[frame],
-                                        q_abs=self.q_abs, width=self.width, alpha=self.alpha)
+            problem = self.table.refine_sample(frame=frame, basis=self.basis, sample=self.samples[frame],
+                                               bounds=(self.tilt_tol, self.smp_tol, self.foc_tol),
+                                               q_abs=self.q_abs, width=self.width, alpha=self.alpha)
 
             if self.num_gen:
                 champion = fitter(problem)
@@ -185,8 +184,17 @@ class RefineExecutor(Executor, INIContainer):
             patterns.append(problem.index_frame(champion, frame=frame, 
                                                 num_threads=self.num_threads))
             if self.num_gen:
-                self.samples[frame] = problem.generate_sample(champion)
+                if self.smp_tol or self.tilt_tol:
+                    self.samples[frame] = problem.generate_sample(champion)
+                if self.foc_tol:
+                    focii[frame] = problem.generate_setup(champion).foc_pos
 
-        pd.concat(patterns).to_hdf(self.out_path, 'data')
+        if self.out_path != 'None':
+            pd.concat(patterns).to_hdf(self.out_path, 'data')
+
         if self.num_gen:
-            self.samples.to_dataframe().to_hdf(self.samples_path, 'data')
+            if self.smp_tol or self.tilt_tol:
+                self.samples.to_dataframe().to_hdf(self.samples_path, 'data')
+            if self.foc_tol and self.focii_path != 'None':
+                df = pd.DataFrame.from_dict(focii, orient='index', columns=('fx', 'fy', 'fz'))
+                df.to_hdf(self.focii_path, 'data')

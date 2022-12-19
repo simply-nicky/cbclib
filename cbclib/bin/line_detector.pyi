@@ -38,14 +38,13 @@ class LSD:
     ang_th      : float
     quant       : float
 
-    def __init__(self, scale: float=0.8, sigma_scale: float=0.6, log_eps: float=0.0,
-                 ang_th: float=45.0, density_th: float=0.7, quant: float=2.0) -> None:
+    def __init__(self, scale: float=0.9, sigma_scale: float=0.9, log_eps: float=0.0,
+                 ang_th: float=45.0, density_th: float=0.7, quant: float=2e-2) -> None:
         ...
 
     def detect(self, image: np.ndarray, cutoff: float, filter_threshold: float=0.0,
-               group_threshold: float=0.6, filter: bool=True, group: bool=True,
-               dilation: float=0.0, return_labels: bool=False,
-               num_threads: int=1) -> Dict[str, Dict[int, np.ndarray]]:
+               group_threshold: float=1.0, dilation: float=0.0, profile: str='linear',
+               return_labels: bool=False, num_threads: int=1) -> Dict[str, Dict[int, np.ndarray]]:
         """Perform the LSD streak detection on an input array `image`. The Streak detection
         comprises three steps: an initial LSD detection of lines, a grouping of the detected
         lines and merging, if the normalized cross-correlation value if higher than the
@@ -56,12 +55,16 @@ class LSD:
             image : 2D array of the digital image.
             cutoff : Distance cut-off value for lines grouping in pixels.
             filter_threshold : Filtering threshold. A line is discarded if the 0-order image
-                moment is lower than ``filter_threshold``. 
+                moment is lower than ``filter_threshold``.
             group_threshold : Grouping threshold. The lines are merged if the cross-correlation
                 value of a pair of lines is higher than ``group_threshold``.
-            filter : Perform filtering if True.
-            group : Perform grouping if True.
             dilation : Line mask dilation value in pixels.
+            profile : Line width profiles. The following keyword values are allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+
             return_labels : Return line labels mask if True.
             num_threads : A number of threads used in the computations.
 
@@ -81,4 +84,7 @@ class LSD:
               Unused pixels have the value 0, while the used ones have the number of the line
               segment, numbered in the same order as in `lines`.
         """
+        ...
+
+    def state_dict(self) -> Dict[str, float]:
         ...

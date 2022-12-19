@@ -47,6 +47,10 @@
 
 #define SQ(x)   ((x) * (x))
 
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
+
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+
 #define CLIP(c, a, b) \
     do {(c) = ((c) > (a)) ? (c) : (a); (c) = ((c) < (b)) ? (c) : (b); } while (0)
 

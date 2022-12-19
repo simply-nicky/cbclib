@@ -128,17 +128,19 @@ class ScanSetup(INIContainer):
         delta_x = x * self.x_pixel_size - source[0]
         delta_y = y * self.y_pixel_size - source[1]
         phis = np.arctan2(delta_y, delta_x)
-        thetas = np.arctan(np.sqrt(delta_x**2 + delta_y**2) / source[2])
+        thetas = np.arccos(-source[2] / np.sqrt(delta_x**2 + delta_y**2 + source[2]**2))
         return np.stack((np.sin(thetas) * np.cos(phis),
                          np.sin(thetas) * np.sin(phis),
                          np.cos(thetas)), axis=-1)
 
     def _k_to_det(self, karr: np.ndarray, source: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        theta = np.arccos(karr[..., 2] / np.sqrt((karr * karr).sum(axis=-1)))
-        phi = np.arctan2(karr[..., 1], karr[..., 0])
-        det_x = source[2] * np.tan(theta) * np.cos(phi) + source[0]
-        det_y = source[2] * np.tan(theta) * np.sin(phi) + source[1]
-        return det_x / self.x_pixel_size, det_y / self.y_pixel_size
+        """Project the line originating from ``source`` along ``karr`` direction to z = 0 plane.
+        """
+        phis = np.arctan2(karr[..., 1], karr[..., 0])
+        thetas = np.arccos(karr[..., 2] / np.sqrt((karr * karr).sum(axis=-1)))
+        det_x = -source[2] * np.tan(thetas) * np.cos(phis) + source[0]
+        det_y = -source[2] * np.tan(thetas) * np.sin(phis) + source[1]
+        return det_x, det_y
 
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, pos: np.ndarray) -> np.ndarray:
         """Project detector coordinates ``(x, y)`` to the output wave-vectors space originating
@@ -164,7 +166,8 @@ class ScanSetup(INIContainer):
         Returns:
             A tuple of x and y detector coordinates.
         """
-        return self._k_to_det(kout, pos)
+        det_x, det_y = self._k_to_det(kout, pos)
+        return det_x / self.x_pixel_size, det_y / self.y_pixel_size
 
     def detector_to_kin(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
         """Project detector coordinates ``(x, y)`` to the incident wave-vectors space.
@@ -187,7 +190,21 @@ class ScanSetup(INIContainer):
         Returns:
             A tuple of x and y detector coordinates.
         """
-        return self._k_to_det(kin, self.foc_pos)
+        det_x, det_y = self._k_to_det(kin, self.foc_pos)
+        return det_x / self.x_pixel_size, det_y / self.y_pixel_size
+
+    def kin_to_sample(self, kin: np.ndarray, dist: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Project incident wave-vectors to the detector plane.
+
+        Args:
+            kin : Incident wave-vectors.
+            dist : Focus-to-sample distance.
+
+        Returns:
+            A tuple of x and y detector coordinates.
+        """
+        source = np.array([self.foc_pos[0], self.foc_pos[1], self.foc_pos[2] + dist])
+        return self._k_to_det(kin, source)
 
     def tilt_rotation(self, theta: float) -> Rotation:
         """Return a tilt rotation by the angle ``theta`` arount the axis of rotation.
@@ -587,8 +604,9 @@ class Streaks(DataContainer):
         """
         return Streaks(**{attr: self[attr][indices] for attr in self.contents()})
 
-    def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3, dilation: float=0.0,
-                          profile: str='tophat', drop_duplicates: bool=False) -> pd.DataFrame:
+    def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3,
+                          dilation: float=0.0, profile: str='tophat',
+                          reduce: bool=True) -> pd.DataFrame:
         """Draw a pattern in the :class:`pandas.DataFrame` format.
 
         Args:
@@ -600,16 +618,17 @@ class Streaks(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
-            drop_duplicates : Discard pixel data with duplicate x and y coordinates if True.
+            reduce : Discard the pixel data with reflection profile values equal to
+                zero.
 
         Returns:
             A pattern in :class:`pandas.DataFrame` format.
         """
         df = pd.DataFrame(self.pattern_dict(shape, dp=dp, dilation=dilation, profile=profile))
-        df = df[df['p'] > 0.0]
-        if drop_duplicates:
-            return df.drop_duplicates(['x', 'y'])
+        if reduce:
+            return df[df['rp'] > 0.0]
         return df
 
     def pattern_dict(self, shape: Optional[Tuple[int, int]]=None, dp: float=1e-3,
@@ -625,22 +644,23 @@ class Streaks(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Returns:
             A pattern in dictionary format.
         """
         if dp > 1.0 or dp <= 0.0:
             raise ValueError('`dp` must be in the range of (0.0, 1.0]')
-        idx, x, y, p = draw_line_index(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
-                                       dilation=dilation, profile=profile).T
-        pattern = {'index': idx, 'x': x, 'y': y, 'p': p / int(1.0 / dp)}
+        idx, x, y, rp = draw_line_index(lines=self.to_numpy(), shape=shape, max_val=int(1.0 / dp),
+                                        dilation=dilation, profile=profile).T
+        pattern = {'index': idx, 'x': x, 'y': y, 'rp': rp / int(1.0 / dp)}
         for attr in ['h', 'k', 'l']:
             if attr in self.contents():
                 pattern[attr] = self[attr][idx]
         return pattern
 
     def pattern_image(self, shape: Tuple[int, int], dp: float=1e-3, dilation: float=0.0,
-                      profile: str='tophat') -> np.ndarray:
+                      profile: str='gauss') -> np.ndarray:
         """Draw a pattern in the :class:`numpy.ndarray` format.
 
         Args:
@@ -652,14 +672,15 @@ class Streaks(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Returns:
             A pattern in :class:`numpy.ndarray` format.
         """
         if dp > 1.0 or dp <= 0.0:
             raise ValueError('`dp` must be in the range of (0.0, 1.0]')
-        mask = self.pattern_mask(shape, int(1.0 / dp), dilation, profile)
-        return mask / int(1.0 / dp)
+        image = self.pattern_mask(shape, int(1.0 / dp), dilation, profile)
+        return image / int(1.0 / dp)
 
     def pattern_mask(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
                      profile: str='tophat') -> np.ndarray:
@@ -674,6 +695,7 @@ class Streaks(DataContainer):
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Returns:
             A pattern mask.

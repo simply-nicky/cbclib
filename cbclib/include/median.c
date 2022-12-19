@@ -70,7 +70,7 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
         else
         {
             RAVEL_INDEX(fpt->coordinates + i * fpt->ndim, &index, arr);
-            if (*(unsigned char *)(mask->data + index * mask->item_size))
+            if (GET(mask, unsigned char, index))
             {
                 memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
                     arr->item_size);
@@ -114,9 +114,12 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *di
             int len = 0;
             for (int n = 0; n < (int)iline->npts; n++)
             {
-                if (((unsigned char *)mline->data)[n * mline->stride])
-                {memcpy(buffer + len++ * iline->item_size,
-                        iline->data + n * iline->stride * iline->item_size, iline->item_size);}
+                if (GET(mline, unsigned char, n * mline->stride))
+                {
+                    memcpy(buffer + len++ * iline->item_size,
+                           iline->data + n * iline->stride * iline->item_size,
+                           iline->item_size);
+                }
             }
 
             if (len) 
