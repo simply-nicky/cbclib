@@ -1,9 +1,6 @@
 cimport numpy as np
-<<<<<<< HEAD
-=======
 from libc.string cimport memcmp, memcpy
 from libc.stdlib cimport malloc, free
->>>>>>> dev-dataclass
 
 cdef extern from "Python.h":
     int Py_AtExit(void(*func)())
@@ -50,47 +47,22 @@ cdef extern from "fft_functions.h":
                          double *sigma, int mode, double complex cval, double truncate, unsigned threads,
                          cconvolve_func fft_convolve) nogil
 
-<<<<<<< HEAD
-cdef extern from "median.h":
-=======
 cdef extern from "array.h":
->>>>>>> dev-dataclass
     int compare_double(void *a, void *b) nogil
     int compare_float(void *a, void *b) nogil
     int compare_int(void *a, void *b) nogil
     int compare_uint(void *a, void *b) nogil
     int compare_ulong(void *a, void *b) nogil
 
-<<<<<<< HEAD
-    int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
-                 unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
-
-    int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, unsigned char *gdata,
-=======
 cdef extern from "median.h":
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
     int median_filter_c "median_filter" (void *out, void *data, unsigned char *mask, unsigned char *imask,
->>>>>>> dev-dataclass
                         int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                         unsigned threads) nogil
 
-<<<<<<< HEAD
-    int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, int ndim,
-                         unsigned long *dims, unsigned long item_size, unsigned long *fsize,
-                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
-                         unsigned threads) nogil
-
-cdef extern from "img_proc.h":
-    int draw_lines(unsigned int *out, unsigned long Y, unsigned long X, unsigned int max_val,
-                   float *lines, unsigned long *ldims, float dilation) nogil
-
-    int draw_line_indices(unsigned int **out, unsigned long *n_idxs, unsigned long Y, unsigned long X,
-                          unsigned int max_val, float *lines, unsigned long *ldims,
-                          float dilation) nogil
-=======
     int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, unsigned char *imask,
                         int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
@@ -123,7 +95,6 @@ cdef extern from "img_proc.h":
     double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, unsigned long *dims, float **lines,
                          unsigned long *ldims, unsigned long lsize, float dilation, float epsilon,
                          line_profile profile, unsigned threads) nogil
->>>>>>> dev-dataclass
 
 cdef extern from "fftw3.h":
     void fftw_init_threads() nogil
@@ -137,11 +108,7 @@ cdef enum:
     EXTEND_REFLECT = 3
     EXTEND_WRAP = 4
 
-<<<<<<< HEAD
-cdef inline int extend_mode_to_code(str mode) except -1:
-=======
 cdef inline int mode_to_code(str mode) except -1:
->>>>>>> dev-dataclass
     if mode == 'constant':
         return EXTEND_CONSTANT
     elif mode == 'nearest':
@@ -153,11 +120,7 @@ cdef inline int mode_to_code(str mode) except -1:
     elif mode == 'wrap':
         return EXTEND_WRAP
     else:
-<<<<<<< HEAD
-        raise RuntimeError('boundary mode not supported')
-=======
         raise RuntimeError(f'Invalid boundary mode: {mode}')
->>>>>>> dev-dataclass
 
 cdef inline np.ndarray check_array(np.ndarray array, int type_num):
     cdef np.ndarray out

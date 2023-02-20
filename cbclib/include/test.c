@@ -7,13 +7,8 @@
 #include "sgn_proc.h"
 #include "kd_tree.h"
 
-<<<<<<< HEAD
-static int test_draw_lines();
-static int test_draw_line_indices();
-=======
 static int test_draw_line();
 static int test_draw_line_index();
->>>>>>> dev-dataclass
 static int test_lsd();
 static int test_median();
 static int test_pairs();
@@ -22,11 +17,7 @@ static int test_kd_tree();
 
 int main(int argc, char *argv[])
 {
-<<<<<<< HEAD
-    return test_draw_line_indices();
-=======
     return test_kd_tree();
->>>>>>> dev-dataclass
 }
 
 static int test_draw_line()
@@ -96,40 +87,6 @@ static int test_draw_line_index()
     printf("\n");
 
     DEALLOC(lines); DEALLOC(out);
-
-    return EXIT_SUCCESS;
-}
-
-static int test_draw_line_indices()
-{
-    size_t X = 32;
-    size_t Y = 48;
-    size_t n_lines = 2;
-    double *lines = (double *)calloc(n_lines * 7, sizeof(double));
-    unsigned int *out;
-    size_t n_idxs;
-
-    if (!lines)
-    {
-        printf("not enough memory\n");
-        return EXIT_FAILURE;
-    }
-
-    lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
-    lines[7] = 30.; lines[8] = 15.; lines[9] = 5.; lines[10] = 10.; lines[11] = 3.5;
-
-    draw_line_indices(&out, &n_idxs, X, Y, 255, lines, n_lines, 0);
-
-    printf("Result:\n");
-    printf("idx  x   y   I \n");
-    for (int i = 0; i < (int)n_idxs; i++)
-    {
-        for (int j = 0; j < 4; j++) printf("%03d ", out[j + 4 * i]);
-        printf("\n");
-    }
-    printf("\n");
-
-    free(lines); free(out);
 
     return EXIT_SUCCESS;
 }

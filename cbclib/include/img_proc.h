@@ -2,26 +2,12 @@
 #define IMG_PROC_H
 #include "include.h"
 
-<<<<<<< HEAD
-// Line draw
-int draw_lines(unsigned int *out, size_t Y, size_t X, unsigned int max_val, float *lines,
-    size_t *ldims, float dilation);
-int draw_line_indices(unsigned int **out, size_t *n_idxs, size_t Y, size_t X, unsigned int max_val,
-    float *lines, size_t *ldims, float dilation);
-
-// Collapse adjacent lines into one and filter out the bad ones
-int filter_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
-    size_t *ldims, float threshold, float dilation);
-int group_lines(float *olines, unsigned char *proc, float *data, size_t Y, size_t X, float *ilines,
-    size_t *ldims, float cutoff, float threshold, float dilation);
-=======
 typedef float (*line_profile)(float err, float wd);
 
 static inline float tophat_profile(float err, float wd)
 {
     return fminf(fmaxf(wd - fabsf(err), 0.0f), 1.0f);
 }
->>>>>>> dev-dataclass
 
 static inline float linear_profile(float err, float wd)
 {

@@ -1,28 +1,12 @@
-<<<<<<< HEAD
-cimport numpy as np
-import numpy as np
-import cython
-from .image_proc cimport check_array, normalize_sequence
-=======
 import numpy as np
 from cython.parallel import parallel, prange
 from .image_proc cimport check_array, normalize_sequence
 from .line_detector cimport ArrayWrapper
->>>>>>> dev-dataclass
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
 
-<<<<<<< HEAD
-def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
-    rot_mats = check_array(rot_mats, np.NPY_FLOAT64)
-
-    cdef np.npy_intp *edims = [rot_mats.shape[0], 3]
-    cdef np.ndarray eulers = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT64)
-
-    cdef double *e_ptr = <double *>np.PyArray_DATA(eulers)
-=======
 DEF CUTOFF = 3.0
 
 def euler_angles(np.ndarray rot_mats not None):
@@ -47,7 +31,6 @@ def euler_angles(np.ndarray rot_mats not None):
     cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT64)
 
     cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
->>>>>>> dev-dataclass
     cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
     cdef unsigned long n_mats = rot_mats.shape[0]
 
@@ -56,44 +39,6 @@ def euler_angles(np.ndarray rot_mats not None):
         fail = compute_euler_angles(e_ptr, rm_ptr, n_mats)
     if fail:
         raise RuntimeError('C backend exited with error.')
-<<<<<<< HEAD
-    return eulers
-
-def euler_matrix(eulers: np.ndarray) -> np.ndarray:
-    eulers = check_array(eulers, np.NPY_FLOAT64)
-
-    cdef np.npy_intp *rmdims = [eulers.shape[0], 3, 3]
-    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
-
-    cdef double *e_ptr = <double *>np.PyArray_DATA(eulers)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
-    cdef unsigned long n_mats = eulers.shape[0]
-
-    cdef int fail = 0
-    with nogil:
-        fail = compute_rot_matrix(rm_ptr, e_ptr, n_mats)
-    if fail:
-        raise RuntimeError('C backend exited with error.')
-    return rot_mats
-
-def tilt_matrix(tilts: np.ndarray, axis: object) -> np.ndarray:
-    cdef np.ndarray _axis = normalize_sequence(axis, 3, np.NPY_FLOAT64)
-
-    cdef np.npy_intp *rmdims = [tilts.shape[0], 3, 3]
-    cdef np.ndarray rot_mats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
-
-    cdef double *t_ptr = <double *>np.PyArray_DATA(tilts)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rot_mats)
-    cdef unsigned long n_mats = tilts.shape[0]
-    cdef double a0 = _axis[0], a1 = _axis[1], a2 = _axis[2]
-
-    cdef int fail = 0
-    with nogil:
-        fail = generate_rot_matrix(rm_ptr, t_ptr, n_mats, a0, a1, a2)
-    if fail:
-        raise RuntimeError('C backend exited with error.')
-    return rot_mats
-=======
     
     if rot_mats.shape[0] == 1:
         return angles[0]
@@ -684,4 +629,3 @@ def filter_hkl(np.ndarray sgn not None, np.ndarray bgd not None, np.ndarray coor
     cdef np.ndarray out = np.PyArray_Arange(0, n_max + 1, 1, np.NPY_INT64)
     out = np.PyArray_Compress(out, mask, 0, <np.ndarray>NULL)
     return out
->>>>>>> dev-dataclass

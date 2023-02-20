@@ -56,19 +56,9 @@ typedef struct line_s *line;
 line new_line(size_t npts, size_t stride, size_t item_size, void *data);
 line init_line(array arr, int axis);
 
-<<<<<<< HEAD
-#define UPDATE_LINE(_line, _iter)                               \
-{                                                               \
-    int _div;                                                   \
-    _div = _iter / _line->stride;                               \
-    _line->data = _line->first + _line->line_size * _div +      \
-    (_iter - _div * _line->stride) * _line->item_size;          \
-}
-=======
 /*---------------------------------------------------------------------------
     Update the pointer to the first element of a line
 ----------------------------------------------------------------------------*/
->>>>>>> dev-dataclass
 
 #define UPDATE_LINE(_line, _iter)                                               \
 do {int _div; _div = (_iter) / (_line)->stride;                                 \

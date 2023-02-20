@@ -1,28 +1,6 @@
 cimport numpy as np
 from cpython.ref cimport Py_INCREF
 from libc.stdlib cimport free, malloc, calloc
-<<<<<<< HEAD
-from libc.string cimport memset
-from .image_proc cimport check_array, normalize_sequence
-
-cdef extern from "lsd.h":
-    int LineSegmentDetection(float **out, int *n_out, float *img, int img_x, int img_y,
-                             float scale, float sigma_scale,
-                             float quant, float ang_th, float log_eps,
-                             float density_th, int n_bins,
-                             int **reg_img, int *reg_x, int *reg_y) nogil
-
-cdef extern from "img_proc.h":
-    int draw_lines(unsigned int *out, unsigned long Y, unsigned long X,
-                   unsigned int max_val, float *lines, unsigned long *ldims,
-                   float dilation) nogil
-
-    int filter_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
-                     float *ilines, unsigned long *ldims, float threshold, float dilation) nogil
-
-    int group_lines(float *olines, unsigned char *proc, float *data, unsigned long Y, unsigned long X,
-                    float *ilines, unsigned long *ldims, float cutoff, float threshold, float dilation) nogil
-=======
 from libc.string cimport memset, memcpy
 
 cdef extern from "array.h":
@@ -53,7 +31,6 @@ cdef extern from "img_proc.h":
     int group_line(float *olines, unsigned char *proc, float *data, unsigned long *dims, float *ilines,
                    unsigned long *ldims, float cutoff, float threshold, float dilation,
                    line_profile profile) nogil
->>>>>>> dev-dataclass
 
 cdef class ArrayWrapper:
     cdef void* _data
@@ -80,10 +57,4 @@ cdef class LSD:
     cdef public float log_eps
     cdef public float scale
     cdef public float sigma_scale
-<<<<<<< HEAD
     cdef public float quant
-    cdef public float x_c
-    cdef public float y_c
-=======
-    cdef public float quant
->>>>>>> dev-dataclass

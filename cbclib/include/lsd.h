@@ -59,11 +59,7 @@
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
-<<<<<<< HEAD
-                       (x,y) is obtained by img[x+y*X].
-=======
                        (x, y) is obtained by img[x + y * X].
->>>>>>> dev-dataclass
 
     @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
                        number of columns.
@@ -140,17 +136,10 @@
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-<<<<<<< HEAD
-int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
-                         float scale, float sigma_scale, float quant,
-                         float ang_th, float log_eps, float density_th,
-                         int n_bins, int ** reg_img, int * reg_y, int * reg_x);
-=======
 int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
                          float scale, float sigma_scale, float quant,
                          float ang_th, float log_eps, float density_th,
                          int n_bins, int **reg_img, int *reg_y, int *reg_x);
->>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
@@ -175,11 +164,7 @@ int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
-<<<<<<< HEAD
-                       (x,y) is obtained by img[x+y*X].
-=======
                        (x,y) is obtained by img[x + y * X].
->>>>>>> dev-dataclass
 
     @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
                        number of columns.
@@ -218,13 +203,8 @@ int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-<<<<<<< HEAD
-int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
-                     float scale, int ** reg_img, int * reg_y, int * reg_x);
-=======
 int lsd_scale_region(float **out, int *n_out, float *img, size_t *dims,
                      float scale, int **reg_img, int *reg_y, int *reg_x);
->>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale
@@ -249,11 +229,7 @@ int lsd_scale_region(float **out, int *n_out, float *img, size_t *dims,
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
-<<<<<<< HEAD
-                       (x,y) is obtained by img[x+y*X].
-=======
                        (x, y) is obtained by img[x + y * X].
->>>>>>> dev-dataclass
 
     @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
                        number of columns.
@@ -268,11 +244,7 @@ int lsd_scale_region(float **out, int *n_out, float *img, size_t *dims,
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-<<<<<<< HEAD
-int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale);
-=======
 int lsd_scale(float **out, int *n_out, float *img, size_t *dims, float scale);
->>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface
@@ -297,22 +269,14 @@ int lsd_scale(float **out, int *n_out, float *img, size_t *dims, float scale);
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
-<<<<<<< HEAD
-                       (x,y) is obtained by img[x+y*X].
-=======
                        (x, y) is obtained by img[x + y * X].
->>>>>>> dev-dataclass
 
     @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
                        number of columns.
 
     @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
-<<<<<<< HEAD
-int lsd(float ** out, int * n_out, float * img, int Y, int X);
-=======
 int lsd(float **out, int *n_out, float *img, size_t *dims);
->>>>>>> dev-dataclass
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/

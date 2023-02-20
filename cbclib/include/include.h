@@ -23,29 +23,17 @@
 
 /** pi **/
 #ifndef M_PI
-<<<<<<< HEAD
-#define M_PI    3.14159265358979323846f
-=======
 #define M_PI        3.14159265358979323846f
->>>>>>> dev-dataclass
 #endif
 
 /** pi / 2 **/
 #ifndef M_PI_2
-<<<<<<< HEAD
-#define M_PI_2  1.57079632679489661923f
-=======
 #define M_PI_2      1.57079632679489661923f
->>>>>>> dev-dataclass
 #endif
 
 /** ln(10) **/
 #ifndef M_LN10
-<<<<<<< HEAD
-#define M_LN10 2.30258509299404568402f
-=======
 #define M_LN10      2.30258509299404568402f
->>>>>>> dev-dataclass
 #endif /* !M_LN10 */
 
 /** 3/2 pi */

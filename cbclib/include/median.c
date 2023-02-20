@@ -70,11 +70,7 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
         else
         {
             RAVEL_INDEX(fpt->coordinates + i * fpt->ndim, &index, arr);
-<<<<<<< HEAD
-            if (*(unsigned char *)(mask->data + index * mask->item_size))
-=======
             if (GET(mask, unsigned char, index))
->>>>>>> dev-dataclass
             {
                 memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
                     arr->item_size);
@@ -84,70 +80,7 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
     }
 }
 
-<<<<<<< HEAD
-int compare_double(const void *a, const void *b)
-{
-    if (*(double*)a > *(double*)b) return 1;
-    else if (*(double*)a < *(double*)b) return -1;
-    else return 0;
-}
-
-int compare_float(const void *a, const void *b)
-{
-    if (*(float*)a > *(float*)b) return 1;
-    else if (*(float*)a < *(float*)b) return -1;
-    else return 0;
-}
-
-int compare_int(const void *a, const void *b)
-{
-    return (*(int *)a - *(int *)b);
-}
-
-int compare_uint(const void *a, const void *b)
-{
-    if (*(unsigned int *)a > *(unsigned int *)b) return 1;
-    else if (*(unsigned int *)a < *(unsigned int *)b) return -1;
-    else return 0;
-}
-
-int compare_ulong(const void *a, const void *b)
-{
-    if (*(unsigned long *)a > *(unsigned long *)b) return 1;
-    else if (*(unsigned long *)a < *(unsigned long *)b) return -1;
-    else return 0;
-}
-
-static void wirthselect(void *data, void *key, int k, int l, int m, size_t size,
-    int (*compar)(const void*, const void*))
-{
-    int i, j;
-    while (l < m)
-    {
-        memcpy(key, data + k * size, size);
-        i = l; j = m;
-
-        do
-        {
-            while (compar(key, data + i * size) > 0) i++;
-            while (compar(key, data + j * size) < 0) j--;
-            if (i <= j) 
-            {
-                SWAP_BUF(data + i * size, data + j * size, size);
-                i++; j--;
-            }
-        } while((i <= j));
-        if (j < k) l = i;
-        if (k < i) m = j;
-    }
-    
-    key = data + k * size;
-}
-
-int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size, int axis,
-=======
 int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *dims, size_t item_size, int axis,
->>>>>>> dev-dataclass
     int (*compar)(const void*, const void*), unsigned threads)
 {
     /* check parameters */
@@ -206,11 +139,7 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *di
     return 0;
 }
 
-<<<<<<< HEAD
-int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gdata, int ndim, size_t *dims,
-=======
 int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
->>>>>>> dev-dataclass
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
@@ -220,16 +149,11 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
     if (ndim <= 0) {ERROR("median_filter: ndim must be positive."); return -1;}
     if (threads == 0) {ERROR("median_filter: threads must be positive."); return -1;}
 
-<<<<<<< HEAD
-    array iarr = new_array(ndim, dims, item_size, data);
-    array marr = new_array(ndim, dims, 1, gdata);
-=======
     array iarr = new_array(ndim, dims, item_size, inp);
     array imarr = new_array(ndim, dims, 1, imask);
 
     if (!iarr->size) {free_array(iarr); free_array(imarr); return 0;}
 
->>>>>>> dev-dataclass
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
@@ -245,15 +169,6 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
             {
                 UNRAVEL_INDEX(coord, &i, iarr);
 
-<<<<<<< HEAD
-                update_footprint(fpt, coord, iarr, marr, mode, cval);
-
-                if (fpt->counter)
-                {
-                    wirthselect(fpt->data, key, fpt->counter / 2, 0, fpt->counter - 1, fpt->item_size, compar);
-                    memcpy(out + i * fpt->item_size, key, fpt->item_size);
-                }
-=======
                 update_footprint(fpt, coord, iarr, imarr, mode, cval);
 
                 if (fpt->counter)
@@ -262,7 +177,6 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
                     memcpy(out + i * fpt->item_size, key, fpt->item_size);
                 }
                 else memset(out + i * fpt->item_size, 0, fpt->item_size);
->>>>>>> dev-dataclass
             }
             else memset(out + i * fpt->item_size, 0, fpt->item_size);
         }
