@@ -1,6 +1,7 @@
 # Diffraction pattern results and temporary development files
 /figures/
 /results/
+/scripts/
 /logs/
 /cbclib/include/*.d
 /cbclib/include/*.o
@@ -85,7 +86,6 @@ instance/
 
 # Sphinx documentation
 docs/_build/
-docs/_static/
 docs/_templates/
 
 # PyBuilder

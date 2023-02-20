@@ -1,6 +1,6 @@
 #include "array.h"
 
-array new_array(int ndim, size_t *dims, size_t item_size, void *data)
+array new_array(int ndim, const size_t *dims, size_t item_size, void *data)
 {
     /* check parameters */
     if(ndim <= 0) {ERROR("new_array: ndim must be positive."); return NULL;}
@@ -11,29 +11,28 @@ array new_array(int ndim, size_t *dims, size_t item_size, void *data)
     arr->ndim = ndim;
     arr->item_size = item_size;
     arr->size = 1;
-    for (int n = 0; n < ndim; n++) arr->size *= dims[n];
-
+    arr->data = data;
     arr->dims = dims;
-    arr->strides = (size_t *)malloc(arr->ndim * sizeof(size_t));
+    arr->strides = MALLOC(size_t, arr->ndim);
     if (!arr->strides) {ERROR("new_array: not enough memory."); return NULL;}
-    size_t stride = 1;
+
     for (int n = arr->ndim - 1; n >= 0; n--)
     {
-        arr->strides[n] = stride;
-        stride *= arr->dims[n];
+        arr->strides[n] = arr->size;
+        arr->size *= dims[n];
     }
-    arr->data = data;
+
     return arr;
 }
 
 void free_array(array arr)
 {
-    free(arr->strides);
-    free(arr);
+    DEALLOC(arr->strides);
+    DEALLOC(arr);
 }
 
 // note: the line count over axis is given by: arr->size / arr->dims[axis]
-// note: you can free the line just with: free(line)
+// note: you can free the line just with: DEALLOC(line)
 
 line new_line(size_t npts, size_t stride, size_t item_size, void *data)
 {
@@ -64,7 +63,7 @@ line init_line(array arr, int axis)
     return ln;
 }
 
-void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval)
+void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, const void *cval)
 {
     int dsize = (int)osize - (int)inp->npts;
     int size_before = dsize - dsize / 2;
@@ -239,7 +238,7 @@ void extend_line(void *out, size_t osize, line inp, EXTEND_MODE mode, void *cval
     }
 }
 
-int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval)
+int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode, const void *cval)
 {
     /* kkkkkkkk|abcd|kkkkkkkk */
     if (mode == EXTEND_CONSTANT)
@@ -248,7 +247,7 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
             return 1;
     }
 
-    int *close = (int *)malloc(arr->ndim * sizeof(int));
+    int *close = MALLOC(int, arr->ndim);
     size_t dist;
 
     switch (mode)
@@ -341,9 +340,9 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
 
     int index;
     RAVEL_INDEX(close, &index, arr);
-    free(close);
+    DEALLOC(close);
 
-    if (((unsigned char *)mask->data)[index])
+    if (*(unsigned char *)(mask->data + index * mask->item_size))
     {
         memcpy(out, arr->data + index * arr->item_size, arr->item_size);
         return 1;
@@ -352,26 +351,345 @@ int extend_point(void *out, int *coord, array arr, array mask, EXTEND_MODE mode,
 
 }
 
-static size_t binary_search(const void *key, const void *array, size_t l, size_t r, size_t size,
-    int (*compar)(const void*, const void*))
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Comparing functions ----------------------------*/
+/*----------------------------------------------------------------------------*/
+
+int compare_double(const void *a, const void *b)
 {
-    if (l <= r)
+    if (*(double*)a > *(double*)b) return 1;
+    else if (*(double*)a < *(double*)b) return -1;
+    else return 0;
+}
+
+int compare_float(const void *a, const void *b)
+{
+    if (*(float*)a > *(float*)b) return 1;
+    else if (*(float*)a < *(float*)b) return -1;
+    else return 0;
+}
+
+int compare_int(const void *a, const void *b)
+{
+    return (*(int *)a - *(int *)b);
+}
+
+int compare_uint(const void *a, const void *b)
+{
+    if (*(unsigned int *)a > *(unsigned int *)b) return 1;
+    else if (*(unsigned int *)a < *(unsigned int *)b) return -1;
+    else return 0;
+}
+
+int compare_ulong(const void *a, const void *b)
+{
+    if (*(unsigned long *)a > *(unsigned long *)b) return 1;
+    else if (*(unsigned long *)a < *(unsigned long *)b) return -1;
+    else return 0;
+}
+
+int indirect_compare_double(const void *a, const void *b, void *data)
+{
+    double *dptr = data;
+    if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
+    else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
+    else return 0;
+}
+
+int indirect_compare_float(const void *a, const void *b, void *data)
+{
+    float *dptr = data;
+    if (dptr[*(size_t *)a] > dptr[*(size_t *)b]) return 1;
+    else if (dptr[*(size_t *)a] < dptr[*(size_t *)b]) return -1;
+    else return 0;
+}
+
+int indirect_search_double(const void *key, const void *base, void *data)
+{
+    double *dptr = data;
+    if (*(double *)key > dptr[*(size_t *)base]) return 1;
+    else if (*(double *)key < dptr[*(size_t *)base]) return -1;
+    else return 0;
+}
+
+int indirect_search_float(const void *key, const void *base, void *data)
+{
+    float *dptr = data;
+    if (*(float *)key > dptr[*(size_t *)base]) return 1;
+    else if (*(float *)key < dptr[*(size_t *)base]) return -1;
+    else return 0;
+}
+
+static size_t binary_left(const void *key, const void *array, int l, int r, size_t size,
+    int (*compar)(const void *, const void *))
+{
+    size_t m, out = 0;
+    int cmp;
+    while (l <= r)
     {
-        size_t m = l + (r - l) / 2;
-        int cmp0 = compar(key, array + m * size);
-        int cmp1 = compar(key, array + (m + 1) * size);
-        if (cmp0 == 0) return m;
-        if (cmp0 > 0 && cmp1 < 0) return m + 1;
-        if (cmp0 < 0) return binary_search(key, array, l, m, size, compar);
-        return binary_search(key, array, m + 1, r, size, compar);
+        m = l + (r - l) / 2;
+        cmp = compar(key, array + m * size);
+
+        // if m is less than key, all elements
+        // in range [l, m] are also less
+        // so we now search in [m + 1, r]
+        if (cmp > 0)
+        {
+            l = m + 1;
+            if (compar(key, array + (m + 1) * size) < 0) out = m + 1;
+        }
+        // if m is greater than key, all elements
+        // in range [m + 1, r] are also greater
+        // so we now search in [l, m - 1]
+        else if (cmp < 0) r = m - 1;
+        // if m is equal to key, we note down
+        // the last found index then we search
+        // for more in left side of m
+        // so we now search in [l, m - 1]
+        else {out = m; r = m - 1; }
     }
-    return 0;
+    return out;
+}
+
+static size_t binary_right(const void *key, const void *array, int l, int r, size_t size,
+    int (*compar)(const void *, const void *))
+{
+    size_t m, out = 0;
+    int cmp;
+    while (l <= r)
+    {
+        m = l + (r - l) / 2;
+        cmp = compar(key, array + m * size);
+
+        // if m is less than key, then all elements
+        // in range [l, m - 1] are also less
+        // so we now search in [m + 1, r]
+        if (cmp > 0)
+        {
+            l = m + 1;
+            if (compar(key, array + (m + 1) * size) < 0) out = m + 1;
+        }
+        // if m is greater than key, then all
+        // elements in range [m + 1, r] are
+        // also greater so we now search in
+        // [l, m - 1]
+        else if (cmp < 0) r = m - 1;
+        // if m is equal to key, we note down
+        // the last found index then we search
+        // for more in right side of m
+        // so we now search in [m + 1, r]
+        else {out = m; l = m + 1; }
+    }
+    return out;
 }
 
 size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
-    int (*compar)(const void*, const void*))
+    SEARCH_SIDE side, int (*compar)(const void *, const void *))
 {
     if (compar(key, base) < 0) return 0;
     if (compar(key, base + (npts - 1) * size) > 0) return npts;
-    return binary_search(key, base, 0, npts, size, compar);
+    switch (side)
+    {
+        case SEARCH_LEFT: return binary_left(key, base, 0, npts, size, compar);
+        case SEARCH_RIGHT: return binary_right(key, base, 0, npts, size, compar);
+        default: ERROR("searchsorted: invalid extend mode."); return 0;
+    }
+}
+
+static size_t binary_left_r(const void *key, const void *array, int l, int r, size_t size,
+    int (*compar)(const void *, const void *, void *), void *arg)
+{
+    size_t m, out = 0;
+    int cmp;
+    while (l <= r)
+    {
+        m = l + (r - l) / 2;
+        cmp = compar(key, array + m * size, arg);
+
+        // if m is less than key, all elements
+        // in range [l, m] are also less
+        // so we now search in [m + 1, r]
+        if (cmp > 0)
+        {
+            l = m + 1;
+            if (compar(key, array + (m + 1) * size, arg) < 0) out = m + 1;
+        }
+        // if m is greater than key, all elements
+        // in range [m + 1, r] are also greater
+        // so we now search in [l, m - 1]
+        else if (cmp < 0) r = m - 1;
+        // if m is equal to key, we note down
+        // the last found index then we search
+        // for more in left side of m
+        // so we now search in [l, m - 1]
+        else {out = m; r = m - 1; }
+    }
+    return out;
+}
+
+static size_t binary_right_r(const void *key, const void *array, int l, int r, size_t size,
+    int (*compar)(const void *, const void *, void *), void *arg)
+{
+    size_t m, out = 0;
+    int cmp;
+    while (l <= r)
+    {
+        m = l + (r - l) / 2;
+        cmp = compar(key, array + m * size, arg);
+
+        // if m is less than key, then all elements
+        // in range [l, m - 1] are also less
+        // so we now search in [m + 1, r]
+        if (cmp > 0)
+        {
+            l = m + 1;
+            if (compar(key, array + (m + 1) * size, arg) < 0) out = m + 1;
+        }
+        // if m is greater than key, then all
+        // elements in range [m + 1, r] are
+        // also greater so we now search in
+        // [l, m - 1]
+        else if (cmp < 0) r = m - 1;
+        // if m is equal to key, we note down
+        // the last found index then we search
+        // for more in right side of m
+        // so we now search in [m + 1, r]
+        else {out = m; l = m + 1;}
+
+    }
+    return out;
+}
+
+size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
+    SEARCH_SIDE side, int (*compar)(const void *, const void *, void *), void *arg)
+{
+    if (compar(key, base, arg) < 0) return 0;
+    if (compar(key, base + (npts - 1) * size, arg) > 0) return npts;
+    switch (side)
+    {
+        case SEARCH_LEFT: return binary_left_r(key, base, 0, npts, size, compar, arg);
+        case SEARCH_RIGHT: return binary_right_r(key, base, 0, npts, size, compar, arg);
+        default: ERROR("searchsorted_r: invalid extend mode."); return 0;
+    }
+}
+
+/*----------------------------------------------------------------------------*/
+/*------------------------------- Wirth select -------------------------------*/
+/*----------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------
+    Function :  kth_smallest()
+    In       :  array of elements, n elements in the array, rank k 
+    Out      :  one element
+    Job      :  find the kth smallest element in the array
+    Notice   :  Buffer must be of size n
+
+    Reference:
+        Author: Wirth, Niklaus
+        Title: Algorithms + data structures = programs
+        Publisher: Englewood Cliffs: Prentice-Hall, 1976 Physical description: 366 p.
+        Series: Prentice-Hall Series in Automatic Computation
+---------------------------------------------------------------------------*/
+
+void *wirthselect(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *))
+{
+    int i, j, l = 0, m = n - 1;
+    void *buf = malloc(size);
+    while (l < m)
+    {
+        memcpy(buf, inp + k * size, size);
+        i = l; j = m;
+
+        do
+        {
+            while (compar(buf, inp + i * size) > 0) i++;
+            while (compar(buf, inp + j * size) < 0) j--;
+            if (i <= j) 
+            {
+                SWAP_BUF(inp + i * size, inp + j * size, size);
+                i++; j--;
+            }
+        } while (i <= j);
+        if (j < k) l = i;
+        if (k < i) m = j;
+    }
+    free(buf);
+    
+    return inp + k * size;
+}
+
+void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const void *, const void *, void *), void *arg)
+{
+    int i, j, l = 0, m = n - 1;
+    void *buf = malloc(size);
+    while (l < m)
+    {
+        memcpy(buf, inp + k * size, size);
+        i = l; j = m;
+
+        do
+        {
+            while (compar(buf, inp + i * size, arg) > 0) i++;
+            while (compar(buf, inp + j * size, arg) < 0) j--;
+            if (i <= j) 
+            {
+                SWAP_BUF(inp + i * size, inp + j * size, size);
+                i++; j--;
+            }
+        } while (i <= j);
+        if (j < k) l = i;
+        if (k < i) m = j;
+    }
+    free(buf);
+    
+    return inp + k * size;
+}
+
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Rectangular iterator ---------------------------*/
+/*----------------------------------------------------------------------------*/
+
+void ri_del(rect_iter ri)
+{
+    if (ri == NULL) ERROR("ri_del: NULL iterator.");
+    DEALLOC(ri->coord); DEALLOC(ri->strides); DEALLOC(ri);
+}
+
+rect_iter ri_ini(int ndim, int *pt0, int *pt1)
+{
+    /* check parameters */
+    if (ndim <= 0) {ERROR("new_ri: ndim must be positive."); return NULL;}
+
+    rect_iter ri = (rect_iter)malloc(sizeof(struct rect_iter_s));
+    if (!ri) {ERROR("new_ri: not enough memory."); return NULL;}
+    
+    ri->index = 0;
+    ri->ndim = ndim;
+    ri->size = 1;
+    ri->coord = calloc(ri->ndim, sizeof(int));
+    ri->strides = MALLOC(size_t, ri->ndim);
+
+    for (int n = ri->ndim - 1; n >= 0; n--)
+    {
+        if (pt1[n] < pt0[n])
+        {
+            ERROR("new_ri: pt1 must be larger than pt0");
+            ri_del(ri); return NULL;
+        }
+        ri->strides[n] = ri->size;
+        ri->size *= pt1[n] - pt0[n];
+    }
+
+    return ri;
+}
+
+int ri_end(rect_iter ri)
+{
+    return ri->index >= (int)ri->size;
+}
+
+void ri_inc(rect_iter ri)
+{
+    if (!ri_end(ri)) ri->index++;
+    UNRAVEL_INDEX(ri->coord, &ri->index, ri);
 }

@@ -45,30 +45,33 @@
                        of line segment number 2, and so on, and it finish
                        by the 7 values of line segment number n_out.
                        The seven values are:
-                       - x1,y1,x2,y2,width,p,-log10(NFA)
-                       .
-                       for a line segment from coordinates (x1,y1) to (x2,y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance/180 degree, and NFA value 'NFA'.
+                       - x1, y1, x2, y2, width, p, -log10(NFA)
+
+                       for a line segment from coordinates (x1, y1) to (x2, y2),
+                       a width 'width', an angle precision of p in (0, 1) given
+                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
                        If 'out' is the returned pointer, the 7 values of
                        line segment number 'n+1' are obtained with
-                       'out[7*n+0]' to 'out[7*n+6]'.
+                       'out[7 * n]' to 'out[7 * n + 6]'.
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
+<<<<<<< HEAD
                        (x,y) is obtained by img[x+y*X].
+=======
+                       (x, y) is obtained by img[x + y * X].
+>>>>>>> dev-dataclass
 
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
                        line segments.
-                       Example: if scale=0.8, the input image will be subsampled
+                       Example: if scale = 0.8, the input image will be subsampled
                        to 80% of its size, before the line segment detector
                        is applied.
                        Suggested value: 0.8
@@ -101,7 +104,7 @@
                        -  0.0 gives an average of 1 false detections on noise
                        -  1.0 gives an average of 0.1 false detections on nose
                        -  2.0 gives an average of 0.01 false detections on noise
-                       .
+
                        Suggested value: 0.0
 
     @param density_th  Minimal proportion of 'supporting' points in a rectangle.
@@ -115,14 +118,14 @@
                        int image where each pixel indicates the line segment
                        to which it belongs. Unused pixels have the value '0',
                        while the used ones have the number of the line segment,
-                       numbered 1,2,3,..., in the same order as in the
+                       numbered 1, 2, 3, ..., in the same order as in the
                        output list. If desired, a non NULL int** pointer must
                        be assigned, and LSD will make that the pointer point
                        to an int array of size reg_x x reg_y, where the pixel
-                       value at (x,y) is obtained with (*reg_img)[x+y*reg_x].
+                       value at (x, y) is obtained with (*reg_img)[x + y * reg_x].
                        Note that the resulting image has the size of the image
                        used for the processing, that is, the size of the input
-                       image scaled by the given factor 'scale'. If scale!=1
+                       image scaled by the given factor 'scale'. If scale != 1
                        this size differs from XxY and that is the reason why
                        its value is given by reg_x and reg_y.
                        Suggested value: NULL
@@ -135,12 +138,19 @@
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
+<<<<<<< HEAD
 int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                          float scale, float sigma_scale, float quant,
                          float ang_th, float log_eps, float density_th,
                          int n_bins, int ** reg_img, int * reg_y, int * reg_x);
+=======
+int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
+                         float scale, float sigma_scale, float quant,
+                         float ang_th, float log_eps, float density_th,
+                         int n_bins, int **reg_img, int *reg_y, int *reg_x);
+>>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale and Region output.
@@ -151,30 +161,33 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                        of line segment number 2, and so on, and it finish
                        by the 7 values of line segment number n_out.
                        The seven values are:
-                       - x1,y1,x2,y2,width,p,-log10(NFA)
-                       .
-                       for a line segment from coordinates (x1,y1) to (x2,y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance/180 degree, and NFA value 'NFA'.
+                       - x1, y1, x2, y2, width, p, -log10(NFA)
+
+                       for a line segment from coordinates (x1, y1) to (x2, y2),
+                       a width 'width', an angle precision of p in (0, 1) given
+                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
                        If 'out' is the returned pointer, the 7 values of
-                       line segment number 'n+1' are obtained with
-                       'out[7*n+0]' to 'out[7*n+6]'.
+                       line segment number 'n + 1' are obtained with
+                       'out[7 * n]' to 'out[7 * n + 6]'.
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
+<<<<<<< HEAD
                        (x,y) is obtained by img[x+y*X].
+=======
+                       (x,y) is obtained by img[x + y * X].
+>>>>>>> dev-dataclass
 
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
                        line segments.
-                       Example: if scale=0.8, the input image will be subsampled
+                       Example: if scale = 0.8, the input image will be subsampled
                        to 80% of its size, before the line segment detector
                        is applied.
                        Suggested value: 0.8
@@ -183,14 +196,14 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                        int image where each pixel indicates the line segment
                        to which it belongs. Unused pixels have the value '0',
                        while the used ones have the number of the line segment,
-                       numbered 1,2,3,..., in the same order as in the
+                       numbered 1, 2, 3, ..., in the same order as in the
                        output list. If desired, a non NULL int** pointer must
                        be assigned, and LSD will make that the pointer point
                        to an int array of size reg_x x reg_y, where the pixel
-                       value at (x,y) is obtained with (*reg_img)[x+y*reg_x].
+                       value at (x, y) is obtained with (*reg_img)[x + y * reg_x].
                        Note that the resulting image has the size of the image
                        used for the processing, that is, the size of the input
-                       image scaled by the given factor 'scale'. If scale!=1
+                       image scaled by the given factor 'scale'. If scale != 1
                        this size differs from XxY and that is the reason why
                        its value is given by reg_x and reg_y.
                        Suggested value: NULL
@@ -203,10 +216,15 @@ int LineSegmentDetection(float ** out, int * n_out, float * img, int Y, int X,
                        'reg_img' image, when asked for.
                        Suggested value: NULL
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
+<<<<<<< HEAD
 int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
                      float scale, int ** reg_img, int * reg_y, int * reg_x);
+=======
+int lsd_scale_region(float **out, int *n_out, float *img, size_t *dims,
+                     float scale, int **reg_img, int *reg_y, int *reg_x);
+>>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface with Scale
@@ -217,37 +235,44 @@ int lsd_scale_region(float ** out, int * n_out, float * img, int X, int Y,
                        of line segment number 2, and so on, and it finish
                        by the 7 values of line segment number n_out.
                        The seven values are:
-                       - x1,y1,x2,y2,width,p,-log10(NFA)
-                       .
-                       for a line segment from coordinates (x1,y1) to (x2,y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance/180 degree, and NFA value 'NFA'.
+                       - x1, y1, x2, y2, width, p, -log10(NFA).
+
+                       for a line segment from coordinates (x1, y1) to (x2, y2),
+                       a width 'width', an angle precision of p in (0, 1) given
+                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
                        If 'out' is the returned pointer, the 7 values of
-                       line segment number 'n+1' are obtained with
-                       'out[7*n+0]' to 'out[7*n+6]'.
+                       line segment number 'n + 1' are obtained with
+                       'out[7 * n]' to 'out[7 * n + 6]'.
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
+<<<<<<< HEAD
                        (x,y) is obtained by img[x+y*X].
+=======
+                       (x, y) is obtained by img[x + y * X].
+>>>>>>> dev-dataclass
 
-    @param Y           Y size of the image: the number of rows.
-
-    @param X           X size of the image: the number of columns.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
     @param scale       When different from 1.0, LSD will scale the input image
                        by 'scale' factor by Gaussian filtering, before detecting
                        line segments.
-                       Example: if scale=0.8, the input image will be subsampled
+                       Example: if scale = 0.8, the input image will be subsampled
                        to 80% of its size, before the line segment detector
                        is applied.
                        Suggested value: 0.8
 
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
+<<<<<<< HEAD
 int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale);
+=======
+int lsd_scale(float **out, int *n_out, float *img, size_t *dims, float scale);
+>>>>>>> dev-dataclass
 
 /*----------------------------------------------------------------------------*/
 /** LSD Simple Interface
@@ -258,29 +283,36 @@ int lsd_scale(float ** out, int * n_out, float * img, int Y, int X, float scale)
                        of line segment number 2, and so on, and it finish
                        by the 7 values of line segment number n_out.
                        The seven values are:
-                       - x1,y1,x2,y2,width,p,-log10(NFA)
-                       .
-                       for a line segment from coordinates (x1,y1) to (x2,y2),
-                       a width 'width', an angle precision of p in (0,1) given
-                       by angle_tolerance/180 degree, and NFA value 'NFA'.
+                       - x1, y1, x2, y2, width, p, -log10(NFA).
+
+                       for a line segment from coordinates (x1, y1) to (x2, y2),
+                       a width 'width', an angle precision of p in (0, 1) given
+                       by angle_tolerance / 180 degree, and NFA value 'NFA'.
                        If 'out' is the returned pointer, the 7 values of
-                       line segment number 'n+1' are obtained with
-                       'out[7*n+0]' to 'out[7*n+6]'.
+                       line segment number 'n + 1' are obtained with
+                       'out[7 * n]' to 'out[7 * n + 6]'.
 
     @param n_out       Pointer to an int where LSD will store the number of
                        line segments detected.
 
     @param img         Pointer to input image data. It must be an array of
                        floats of size X x Y, and the pixel at coordinates
+<<<<<<< HEAD
                        (x,y) is obtained by img[x+y*X].
+=======
+                       (x, y) is obtained by img[x + y * X].
+>>>>>>> dev-dataclass
 
-    @param Y           Y size of the image: the number of rows.
+    @param dims        (Y, X) shape of the image: Y - the number of rows, X - the
+                       number of columns.
 
-    @param X           X size of the image: the number of columns.
-
-    @return            LSD returns 0 if it finished normally, -1 othrewise.
+    @return            LSD returns 0 if it finished normally, -1 otherwise.
  */
+<<<<<<< HEAD
 int lsd(float ** out, int * n_out, float * img, int Y, int X);
+=======
+int lsd(float **out, int *n_out, float *img, size_t *dims);
+>>>>>>> dev-dataclass
 
 #endif /* !LSD_HEADER */
 /*----------------------------------------------------------------------------*/

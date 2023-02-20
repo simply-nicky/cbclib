@@ -15,9 +15,8 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned cha
 
     if (fpt->npts == 0) {ERROR("new_footprint: zerro number of points in a footprint."); return NULL;}
     
-
-    fpt->offsets = (int *)malloc(fpt->npts * fpt->ndim * sizeof(int));
-    fpt->coordinates = (int *)malloc(fpt->npts * fpt->ndim * sizeof(int));
+    fpt->offsets = MALLOC(int, fpt->npts * fpt->ndim);
+    fpt->coordinates = MALLOC(int, fpt->npts * fpt->ndim);
 
     fpt->item_size = item_size;
     fpt->data = malloc(fpt->npts * fpt->item_size);
@@ -41,10 +40,10 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned cha
 
 void free_footprint(footprint fpt)
 {
-    free(fpt->coordinates);
-    free(fpt->offsets);
-    free(fpt->data);
-    free(fpt);
+    DEALLOC(fpt->coordinates);
+    DEALLOC(fpt->offsets);
+    DEALLOC(fpt->data);
+    DEALLOC(fpt);
 }
 
 void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval)
@@ -66,12 +65,16 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
         if (extend)
         {
             fpt->counter += extend_point(fpt->data + fpt->counter * fpt->item_size,
-                &(fpt->coordinates[i * fpt->ndim]), arr, mask, mode, cval);
+                fpt->coordinates + i * fpt->ndim, arr, mask, mode, cval);
         }
         else
         {
             RAVEL_INDEX(fpt->coordinates + i * fpt->ndim, &index, arr);
+<<<<<<< HEAD
             if (*(unsigned char *)(mask->data + index * mask->item_size))
+=======
+            if (GET(mask, unsigned char, index))
+>>>>>>> dev-dataclass
             {
                 memcpy(fpt->data + fpt->counter * fpt->item_size, arr->data + index * arr->item_size,
                     arr->item_size);
@@ -81,6 +84,7 @@ void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_M
     }
 }
 
+<<<<<<< HEAD
 int compare_double(const void *a, const void *b)
 {
     if (*(double*)a > *(double*)b) return 1;
@@ -141,16 +145,21 @@ static void wirthselect(void *data, void *key, int k, int l, int m, size_t size,
 }
 
 int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size, int axis,
+=======
+int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *dims, size_t item_size, int axis,
+>>>>>>> dev-dataclass
     int (*compar)(const void*, const void*), unsigned threads)
 {
     /* check parameters */
-    if (!out || !data || !mask || !dims) {ERROR("median: one of the arguments is NULL."); return -1;}
+    if (!out || !inp || !mask || !dims || !compar) {ERROR("median: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("median: ndim must be positive."); return -1;}
     if (axis < 0 || axis >= ndim) {ERROR("median: invalid axis."); return -1;}
     if (threads == 0) {ERROR("median: threads must be positive."); return -1;}
 
-    array iarr = new_array(ndim, dims, item_size, data);
+    array iarr = new_array(ndim, dims, item_size, inp);
     array marr = new_array(ndim, dims, 1, mask);
+
+    if (!iarr->size) {free_array(iarr); free_array(marr); return 0;}
 
     int repeats = iarr->size / iarr->dims[axis];
     threads = (threads > (unsigned)repeats) ? (unsigned)repeats : threads;
@@ -158,7 +167,7 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
     #pragma omp parallel num_threads(threads)
     {
         void *buffer = malloc(iarr->dims[axis] * iarr->item_size);
-        void *key = malloc(iarr->item_size);
+        void *key;
 
         line iline = init_line(iarr, axis);
         line mline = init_line(marr, axis);
@@ -172,22 +181,24 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
             int len = 0;
             for (int n = 0; n < (int)iline->npts; n++)
             {
-                if (((unsigned char *)mline->data)[n * mline->stride])
-                {memcpy(buffer + len++ * iline->item_size,
-                    iline->data + n * iline->stride * iline->item_size, iline->item_size);}
+                if (GET(mline, unsigned char, n * mline->stride))
+                {
+                    memcpy(buffer + len++ * iline->item_size,
+                           iline->data + n * iline->stride * iline->item_size,
+                           iline->item_size);
+                }
             }
 
             if (len) 
             {
-                wirthselect(buffer, key, len / 2, 0, len - 1, iline->item_size, compar);
+                key = wirthmedian(buffer, len, iline->item_size, compar);
                 memcpy(out + i * iline->item_size, key, iline->item_size);
             }
             else memset(out + i * iline->item_size, 0, iline->item_size);
 
         }
 
-        free(iline); free(mline);
-        free(key); free(buffer);
+        DEALLOC(iline); DEALLOC(mline); DEALLOC(buffer);
     }
 
     free_array(iarr); free_array(marr);
@@ -195,25 +206,37 @@ int median(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, s
     return 0;
 }
 
+<<<<<<< HEAD
 int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gdata, int ndim, size_t *dims,
+=======
+int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
+>>>>>>> dev-dataclass
     size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
     /* check parameters */
-    if (!out || !data || !fsize || !cval)
+    if (!out || !inp || !fsize || !cval || !compar)
     {ERROR("median_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("median_filter: ndim must be positive."); return -1;}
     if (threads == 0) {ERROR("median_filter: threads must be positive."); return -1;}
 
+<<<<<<< HEAD
     array iarr = new_array(ndim, dims, item_size, data);
     array marr = new_array(ndim, dims, 1, gdata);
+=======
+    array iarr = new_array(ndim, dims, item_size, inp);
+    array imarr = new_array(ndim, dims, 1, imask);
+
+    if (!iarr->size) {free_array(iarr); free_array(imarr); return 0;}
+
+>>>>>>> dev-dataclass
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
     {
         footprint fpt = init_footprint(iarr->ndim, iarr->item_size, fsize, fmask);
-        int *coord = (int *)malloc(iarr->ndim * sizeof(int));
-        void *key = malloc(iarr->item_size);
+        int *coord = MALLOC(int, iarr->ndim);
+        void *key;
 
         #pragma omp for schedule(guided)
         for (int i = 0; i < (int)iarr->size; i++)
@@ -222,6 +245,7 @@ int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gda
             {
                 UNRAVEL_INDEX(coord, &i, iarr);
 
+<<<<<<< HEAD
                 update_footprint(fpt, coord, iarr, marr, mode, cval);
 
                 if (fpt->counter)
@@ -229,37 +253,50 @@ int median_filter(void *out, void *data, unsigned char *mask, unsigned char *gda
                     wirthselect(fpt->data, key, fpt->counter / 2, 0, fpt->counter - 1, fpt->item_size, compar);
                     memcpy(out + i * fpt->item_size, key, fpt->item_size);
                 }
+=======
+                update_footprint(fpt, coord, iarr, imarr, mode, cval);
+
+                if (fpt->counter)
+                {
+                    key = wirthmedian(fpt->data, fpt->counter, fpt->item_size, compar);
+                    memcpy(out + i * fpt->item_size, key, fpt->item_size);
+                }
+                else memset(out + i * fpt->item_size, 0, fpt->item_size);
+>>>>>>> dev-dataclass
             }
             else memset(out + i * fpt->item_size, 0, fpt->item_size);
         }
 
-        free_footprint(fpt); free(coord); free(key);
+        free_footprint(fpt); DEALLOC(coord);
     }
 
-    free_array(iarr); free(marr);
+    free_array(iarr); DEALLOC(imarr);
 
     return 0;
 }
 
-int maximum_filter(void *out, void *data, unsigned char *mask, int ndim, size_t *dims, size_t item_size,
-    size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
+    size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
     unsigned threads)
 {
     /* check parameters */
-    if (!out || !data || !fsize || !cval)
+    if (!out || !inp || !fsize || !cval || !compar)
     {ERROR("maximum_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("maximum_filter: ndim must be positive."); return -1;}
     if (threads == 0) {ERROR("maximum_filter: threads must be positive."); return -1;}
 
-    array iarr = new_array(ndim, dims, item_size, data);
-    array marr = new_array(ndim, dims, 1, mask);
+    array iarr = new_array(ndim, dims, item_size, inp);
+    array marr = new_array(ndim, dims, 1, imask);
+
+    if (!iarr->size) {free_array(iarr); free_array(marr); return 0;}
+
     threads = (threads > iarr->size) ? iarr->size : threads;
 
     #pragma omp parallel num_threads(threads)
     {
         footprint fpt = init_footprint(iarr->ndim, iarr->item_size, fsize, fmask);
         int *coord = (int *)malloc(iarr->ndim * sizeof(int));
-        void *key = malloc(iarr->item_size), *iter, *last;
+        void *key;
 
         #pragma omp for schedule(guided)
         for (int i = 0; i < (int)iarr->size; i++)
@@ -272,26 +309,18 @@ int maximum_filter(void *out, void *data, unsigned char *mask, int ndim, size_t 
 
                 if (fpt->counter)
                 {
-                    iter = fpt->data + fpt->item_size;
-                    last = fpt->data + fpt->counter * fpt->item_size;
-                    memcpy(key, fpt->data, fpt->item_size);
-
-                    while (iter != last)
-                    {
-                        if (compar(key, iter) < 0) memcpy(key, iter, fpt->item_size);
-                        iter += fpt->item_size;
-                    }
-
+                    key = wirthselect(fpt->data, fpt->counter - 1, fpt->counter, fpt->item_size, compar);
                     memcpy(out + i * fpt->item_size, key, fpt->item_size);
                 }
+                else memset(out + i * fpt->item_size, 0, fpt->item_size);
             }
             else memset(out + i * fpt->item_size, 0, fpt->item_size);
         }
 
-        free_footprint(fpt); free(coord); free(key);
+        free_footprint(fpt); DEALLOC(coord);
     }
 
-    free_array(iarr); free(marr);
+    free_array(iarr); DEALLOC(marr);
 
     return 0;
 }

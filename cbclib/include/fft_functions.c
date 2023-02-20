@@ -34,7 +34,11 @@ static int cfft_convolve_calc(void *fft_plan, void *ifft_plan, line out, double 
     return fail;
 }
 
+<<<<<<< HEAD
 int rfft_convolve_np(double *out, double *inp, int ndim, size_t *dims,
+=======
+int rfft_convolve_np(double *out, double *inp, int ndim, const size_t *dims,
+>>>>>>> dev-dataclass
     double *krn, size_t ksize, int axis, EXTEND_MODE mode, double cval,
     unsigned threads)
 {
@@ -56,8 +60,8 @@ int rfft_convolve_np(double *out, double *inp, int ndim, size_t *dims,
 
     #pragma omp parallel num_threads(threads) reduction(|:fail)
     {
-        double *inpft = (double *)malloc(2 * (flen / 2 + 1) * sizeof(double));
-        double *krnft = (double *)malloc(2 * (flen / 2 + 1) * sizeof(double));
+        double *inpft = MALLOC(double, 2 * (flen / 2 + 1));
+        double *krnft = MALLOC(double, 2 * (flen / 2 + 1));
         rfft_plan plan = make_rfft_plan(flen);
 
         extend_line((void *)krnft, flen, kline, EXTEND_CONSTANT, (void *)&zerro);
@@ -72,22 +76,30 @@ int rfft_convolve_np(double *out, double *inp, int ndim, size_t *dims,
             UPDATE_LINE(oline, i);
             extend_line((void *)inpft, flen, iline, mode, (void *)&cval);
             fail |= rfft_convolve_calc((void *)plan, (void *)plan, oline, inpft, krnft,
+<<<<<<< HEAD
                 flen, rfft_np, irfft_np);
+=======
+                                       flen, rfft_np, irfft_np);
+>>>>>>> dev-dataclass
         }
 
-        free(iline); free(oline);
+        DEALLOC(iline); DEALLOC(oline);
         destroy_rfft_plan(plan);
-        free(inpft); free(krnft);    
+        DEALLOC(inpft); DEALLOC(krnft);    
     }
 
     free_array(iarr);
     free_array(oarr);
-    free(kline);
+    DEALLOC(kline);
 
     return fail;
 }
 
+<<<<<<< HEAD
 int cfft_convolve_np(double complex *out, double complex *inp, int ndim, size_t *dims,
+=======
+int cfft_convolve_np(double complex *out, double complex *inp, int ndim, const size_t *dims,
+>>>>>>> dev-dataclass
     double complex *krn, size_t ksize, int axis, EXTEND_MODE mode, double complex cval,
     unsigned threads)
 {
@@ -109,8 +121,13 @@ int cfft_convolve_np(double complex *out, double complex *inp, int ndim, size_t 
 
     #pragma omp parallel num_threads(threads) reduction(|:fail)
     {
+<<<<<<< HEAD
         double complex *inpft = (double complex *)malloc(flen * sizeof(double complex));
         double complex *krnft = (double complex *)malloc(flen * sizeof(double complex));
+=======
+        double complex *inpft = MALLOC(double complex, flen);
+        double complex *krnft = MALLOC(double complex, flen);
+>>>>>>> dev-dataclass
         cfft_plan plan = make_cfft_plan(flen);
 
         extend_line((void *)krnft, flen, kline, EXTEND_CONSTANT, (void *)&zerro);
@@ -125,22 +142,39 @@ int cfft_convolve_np(double complex *out, double complex *inp, int ndim, size_t 
             UPDATE_LINE(oline, i);
             extend_line((void *)inpft, flen, iline, mode, (void *)&cval);
             fail |= cfft_convolve_calc((void *)plan, (void *)plan, oline, inpft, krnft,
+<<<<<<< HEAD
                 flen, fft_np, ifft_np);
         }
 
         free(iline); free(oline);
         destroy_cfft_plan(plan);
         free(inpft); free(krnft);    
+=======
+                                       flen, fft_np, ifft_np);
+        }
+
+        DEALLOC(iline); DEALLOC(oline);
+        destroy_cfft_plan(plan);
+        DEALLOC(inpft); DEALLOC(krnft);    
+>>>>>>> dev-dataclass
     }
 
     free_array(iarr);
     free_array(oarr);
+<<<<<<< HEAD
     free(kline);
+=======
+    DEALLOC(kline);
+>>>>>>> dev-dataclass
 
     return fail;
 }
 
+<<<<<<< HEAD
 int rfft_convolve_fftw(double *out, double *inp, int ndim, size_t *dims,
+=======
+int rfft_convolve_fftw(double *out, double *inp, int ndim, const size_t *dims,
+>>>>>>> dev-dataclass
     double *krn, size_t ksize, int axis, EXTEND_MODE mode, double cval,
     unsigned threads)
 {
@@ -171,9 +205,9 @@ int rfft_convolve_fftw(double *out, double *inp, int ndim, size_t *dims,
         #pragma omp critical
         {
             rfft_plan = fftw_plan_guru_dft_r2c(1, dim, 0, NULL, inpft, (fftw_complex *)inpft,
-                FFTW_ESTIMATE);
+                                               FFTW_ESTIMATE);
             irfft_plan = fftw_plan_guru_dft_c2r(1, dim, 0, NULL, (fftw_complex *)inpft,
-                inpft, FFTW_ESTIMATE);
+                                                inpft, FFTW_ESTIMATE);
         }
 
         extend_line((void *)krnft, flen, kline, EXTEND_CONSTANT, (void *)&zerro);
@@ -191,20 +225,24 @@ int rfft_convolve_fftw(double *out, double *inp, int ndim, size_t *dims,
                 inpft, krnft, flen, rfft_fftw, irfft_fftw);
         }
 
-        free(iline); free(oline);
+        DEALLOC(iline); DEALLOC(oline);
         fftw_destroy_plan(rfft_plan);
         fftw_destroy_plan(irfft_plan);
-        free(dim); fftw_free(inpft); fftw_free(krnft);
+        DEALLOC(dim); fftw_free(inpft); fftw_free(krnft);
     }
 
     free_array(iarr);
     free_array(oarr);
-    free(kline);
+    DEALLOC(kline);
 
     return fail;
 }
 
+<<<<<<< HEAD
 int cfft_convolve_fftw(double complex *out, double complex *inp, int ndim, size_t *dims,
+=======
+int cfft_convolve_fftw(double complex *out, double complex *inp, int ndim, const size_t *dims,
+>>>>>>> dev-dataclass
     double complex *krn, size_t ksize, int axis, EXTEND_MODE mode, double complex cval,
     unsigned threads)
 {
@@ -252,6 +290,7 @@ int cfft_convolve_fftw(double complex *out, double complex *inp, int ndim, size_
             UPDATE_LINE(oline, i);
             extend_line((void *)inpft, flen, iline, mode, (void *)&cval);
             fail |= cfft_convolve_calc((void *)fft_plan, (void *)ifft_plan, oline,
+<<<<<<< HEAD
                 inpft, krnft, flen, fft_fftw, ifft_fftw);
         }
 
@@ -259,11 +298,24 @@ int cfft_convolve_fftw(double complex *out, double complex *inp, int ndim, size_
         fftw_destroy_plan(fft_plan);
         fftw_destroy_plan(ifft_plan);
         free(dim); fftw_free(inpft); fftw_free(krnft);
+=======
+                                       inpft, krnft, flen, fft_fftw, ifft_fftw);
+        }
+
+        DEALLOC(iline); DEALLOC(oline);
+        fftw_destroy_plan(fft_plan);
+        fftw_destroy_plan(ifft_plan);
+        DEALLOC(dim); fftw_free(inpft); fftw_free(krnft);
+>>>>>>> dev-dataclass
     }
 
     free_array(iarr);
     free_array(oarr);
+<<<<<<< HEAD
     free(kline);
+=======
+    DEALLOC(kline);
+>>>>>>> dev-dataclass
 
     return fail;
 }
@@ -303,7 +355,7 @@ int gauss_kernel1d(double *out, double sigma, unsigned order, size_t ksize, int 
             }
             for (int i = 0; i <= (int) order; i++) q0[i] = q1[i];
         }
-        free(q0);
+        DEALLOC(q0);
         double fct;
         for (int i = 0; i < (int) ksize; i++)
         {
@@ -311,17 +363,21 @@ int gauss_kernel1d(double *out, double sigma, unsigned order, size_t ksize, int 
             for (int j = 0; j <= (int) order; j++) fct += pow(i - radius, j) * q1[j];
             out[i * step] *= fct;
         }
-        free(q1);
+        DEALLOC(q1);
     }
     return 0;
 }
 
+<<<<<<< HEAD
 int gauss_filter_r(double *out, double *inp, int ndim, size_t *dims, double *sigma,
+=======
+int gauss_filter_r(double *out, double *inp, int ndim, const size_t *dims, double *sigma,
+>>>>>>> dev-dataclass
     unsigned *order, EXTEND_MODE mode, double cval, double truncate, unsigned threads,
     rconvolve_func fft_convolve)
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma || !order)
+    if (!out || !inp || !dims || !sigma || !order || !fft_convolve)
     {ERROR("gauss_filter: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_filter: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_filter: threads must be positive."); return -1;}
@@ -332,20 +388,28 @@ int gauss_filter_r(double *out, double *inp, int ndim, size_t *dims, double *sig
     if (axis < ndim)
     {
         size_t ksize = 2 * (size_t) (sigma[axis] * truncate) + 1;
+<<<<<<< HEAD
         double *krn = (double *)malloc(ksize * sizeof(double));
+=======
+        double *krn = MALLOC(double, ksize);
+>>>>>>> dev-dataclass
         fail |= gauss_kernel1d(krn, sigma[axis], order[axis], ksize, 1);
         fail |= fft_convolve(out, inp, ndim, dims, krn, ksize, axis, mode, cval, threads);
-        free(krn);
+        DEALLOC(krn);
 
         for (int n = axis + 1; n < ndim; n++)
         {
             if (sigma[n] > 1e-15)
             {
                 ksize = 2 * (size_t) (sigma[n] * truncate) + 1;
+<<<<<<< HEAD
                 krn = (double *)malloc(ksize * sizeof(double));
+=======
+                krn = MALLOC(double, ksize);
+>>>>>>> dev-dataclass
                 fail |= gauss_kernel1d(krn, sigma[n], order[n], ksize, 1);
                 fail |= fft_convolve(out, out, ndim, dims, krn, ksize, n, mode, cval, threads);
-                free(krn);
+                DEALLOC(krn);
             }
         }
     }
@@ -359,6 +423,7 @@ int gauss_filter_r(double *out, double *inp, int ndim, size_t *dims, double *sig
     return fail;
 }
 
+<<<<<<< HEAD
 int gauss_filter_c(double complex *out, double complex *inp, int ndim, size_t *dims, double *sigma,
     unsigned *order, EXTEND_MODE mode, double complex cval, double truncate, unsigned threads,
     cconvolve_func fft_convolve)
@@ -405,33 +470,128 @@ int gauss_filter_c(double complex *out, double complex *inp, int ndim, size_t *d
 int gauss_grad_mag_r(double *out, double *inp, int ndim, size_t *dims, double *sigma,
     EXTEND_MODE mode, double cval, double truncate, unsigned threads,
     rconvolve_func fft_convolve)
+=======
+int gauss_filter_c(double complex *out, double complex *inp, int ndim, const size_t *dims, double *sigma,
+    unsigned *order, EXTEND_MODE mode, double complex cval, double truncate, unsigned threads,
+    cconvolve_func fft_convolve)
+>>>>>>> dev-dataclass
 {
     /* check parameters */
-    if (!out || !inp || !dims || !sigma)
+    if (!out || !inp || !dims || !sigma || !order || !fft_convolve)
+    {ERROR("gauss_filter: one of the arguments is NULL."); return -1;}
+    if (ndim <= 0) {ERROR("gauss_filter: ndim must be positive."); return -1;}
+    if (!threads) {ERROR("gauss_filter: threads must be positive."); return -1;}
+
+    int fail = 0;
+    int axis = 0;
+    while (sigma[axis] < 1e-15 && axis < ndim) axis++;
+    if (axis < ndim)
+    {
+        size_t ksize = 2 * (size_t) (sigma[axis] * truncate) + 1;
+        double complex *krn = (double complex *)calloc(ksize, sizeof(double complex));
+        fail |= gauss_kernel1d((double *)krn, sigma[axis], order[axis], ksize, 2);
+        fail |= fft_convolve(out, inp, ndim, dims, krn, ksize, axis, mode, cval, threads);
+        DEALLOC(krn);
+
+        for (int n = axis + 1; n < ndim; n++)
+        {
+            if (sigma[n] > 1e-15)
+            {
+                ksize = 2 * (size_t) (sigma[n] * truncate) + 1;
+                krn = (double complex *)calloc(ksize, sizeof(double complex));
+                fail |= gauss_kernel1d((double *)krn, sigma[n], order[n], ksize, 2);
+                fail |= fft_convolve(out, out, ndim, dims, krn, ksize, n, mode, cval, threads);
+                DEALLOC(krn);
+            }
+        }
+    }
+    else
+    {
+        size_t size = 1;
+        for (int n = 0; n < ndim; n++) size *= dims[n];
+        #pragma omp parallel for num_threads(threads)
+        for (int i = 0; i < (int)size; i++) out[i] = inp[i];
+    }
+    return fail;
+}
+
+int gauss_grad_mag_r(double *out, double *inp, int ndim, const size_t *dims, double *sigma,
+    EXTEND_MODE mode, double cval, double truncate, unsigned threads,
+    rconvolve_func fft_convolve)
+{
+    /* check parameters */
+    if (!out || !inp || !dims || !sigma || !fft_convolve)
     {ERROR("gauss_grad_mag: one of the arguments is NULL."); return -1;}
     if (ndim <= 0) {ERROR("gauss_grad_mag: ndim must be positive."); return -1;}
     if (!threads) {ERROR("gauss_grad_mag: threads must be positive."); return -1;}
 
     int fail = 0;
     size_t size = 1;
+<<<<<<< HEAD
     unsigned *order = (unsigned *)malloc(ndim * sizeof(unsigned));
+=======
+    unsigned *order = MALLOC(unsigned, ndim);
+>>>>>>> dev-dataclass
     for (int n = 0; n < ndim; n++) size *= dims[n];
 
     #pragma omp parallel for num_threads(threads)
     for (int i = 0; i < (int)size; i++) out[i] = 0.0;
 
+<<<<<<< HEAD
     double *tmp = (double *)malloc(size * sizeof(double));
+=======
+    double *tmp = MALLOC(double, size);
+>>>>>>> dev-dataclass
     for (int m = 0; m < ndim; m++)
     {
         for (int n = 0; n < ndim; n++) order[n] = (n == m) ? 1 : 0;
         fail |= gauss_filter_r(tmp, inp, ndim, dims, sigma, order, mode,
+<<<<<<< HEAD
             cval, truncate, threads, fft_convolve);
+=======
+                               cval, truncate, threads, fft_convolve);
+>>>>>>> dev-dataclass
         
         #pragma omp parallel for num_threads(threads)
         for (int i = 0; i < (int)size; i++) out[i] += tmp[i] * tmp[i];
     }
 
-    free(tmp); free(order);
+    DEALLOC(tmp); DEALLOC(order);
+    #pragma omp parallel for num_threads(threads)
+    for (int i = 0; i < (int)size; i++) out[i] = sqrt(out[i]);
+    return fail;
+}
+
+int gauss_grad_mag_c(double *out, double complex *inp, int ndim, const size_t *dims, double *sigma,
+    EXTEND_MODE mode, double complex cval, double truncate, unsigned threads,
+    cconvolve_func fft_convolve)
+{
+    /* check parameters */
+    if (!out || !inp || !dims || !sigma || !fft_convolve)
+    {ERROR("gauss_grad_mag: one of the arguments is NULL."); return -1;}
+    if (ndim <= 0) {ERROR("gauss_grad_mag: ndim must be positive."); return -1;}
+    if (!threads) {ERROR("gauss_grad_mag: threads must be positive."); return -1;}
+
+    int fail = 0;
+    size_t size = 1;
+    unsigned *order = MALLOC(unsigned, ndim);
+    for (int n = 0; n < ndim; n++) size *= dims[n];
+
+    #pragma omp parallel for num_threads(threads)
+    for (int i = 0; i < (int)size; i++) out[i] = 0.0;
+
+    double complex *tmp = MALLOC(double complex, size);
+    for (int m = 0; m < ndim; m++)
+    {
+        for (int n = 0; n < ndim; n++) order[n] = (n == m) ? 1 : 0;
+        fail |= gauss_filter_c(tmp, inp, ndim, dims, sigma, order, mode,
+                               cval, truncate, threads, fft_convolve);
+        
+        #pragma omp parallel for num_threads(threads)
+        for (int i = 0; i < (int)size; i++) out[i] += SQ(creal(tmp[i])) + SQ(cimag(tmp[i]));
+    }
+
+    DEALLOC(tmp); DEALLOC(order);
     #pragma omp parallel for num_threads(threads)
     for (int i = 0; i < (int)size; i++) out[i] = sqrt(out[i]);
     return fail;
