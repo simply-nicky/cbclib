@@ -1,55 +1,169 @@
 import os
 import shutil
-from typing import Iterable
+from typing import List, Tuple
 from datetime import datetime
 import hdf5plugin
 import pytest
 import numpy as np
 import cbclib as cbc
 
+def generate_data(models: List[cbc.CBDModel], shape: Tuple[int, int, int],
+                  bgd_lvl: Tuple[float, float], q_abs: float, stk_w: float, sgn_lvl: float,
+                  bad_n: int, bad_lvl: Tuple[int, int]) -> np.ndarray:
+    y, x = np.meshgrid(np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
+    background = 1.0 - 2.0 * np.sqrt((x - shape[2] // 2)**2 + (y - shape[1] // 2)**2) / \
+                 np.sqrt(shape[2]**2 + shape[1]**2)
+    background = bgd_lvl[0] + background * (bgd_lvl[1] - bgd_lvl[0])
+    patterns = []
+    for model in models:
+        hkl = model.basis.generate_hkl(q_abs)
+        hkl = hkl[model.filter_hkl(q_abs)]
+        patterns.append(model.generate_streaks(hkl, stk_w).pattern_image(shape[1:]))
+    data = sgn_lvl * np.stack(patterns) + background
+    data = np.random.poisson(data)
+
+    i = np.random.randint(0, shape[0] - 1, bad_n)
+    j = np.random.randint(0, shape[1] - 1, bad_n)
+    k = np.random.randint(0, shape[2] - 1, bad_n)
+    data[i, j, k] = bad_lvl[0] + (bad_lvl[1] - bad_lvl[0]) * np.random.randint(bad_n)
+    return data
+
+@pytest.fixture(params=[{'lengths': [13e-3, 10e-3, 15e-3], 'angles': [0.3, -0.2, 0.15]},],
+                scope='session')
+def basis(request: pytest.FixtureRequest) -> cbc.Basis:
+    mat = np.eye(3) * np.array(request.param['lengths'])
+    rotation = cbc.Rotation.import_euler(request.param['angles'])
+    return cbc.Basis.import_matrix(rotation(mat))
+
+@pytest.fixture(params=[{'shape': (500, 500), 'det_dist': 0.1, 'pupil_size': 25,
+                         'pixel_size': 7.5e-5, 'energy': 1e4}],
+                scope='session')
+def setup(request: pytest.FixtureRequest) -> cbc.ScanSetup:
+    wavelength = 12398.419297617678 / request.param['energy']
+    foc_pos = np.array([0.5 * request.param['shape'][1] * request.param['pixel_size'],
+                        0.5 * request.param['shape'][0] * request.param['pixel_size'],
+                        request.param['det_dist']])
+    pupil_roi = (0.5 * (request.param['shape'][1] - request.param['pupil_size']),
+                 0.5 * (request.param['shape'][1] + request.param['pupil_size']),
+                 0.5 * (request.param['shape'][0] - request.param['pupil_size']),
+                 0.5 * (request.param['shape'][0] + request.param['pupil_size']))
+    return cbc.ScanSetup(foc_pos=foc_pos, pupil_roi=pupil_roi, rot_axis=np.array([0.0, 1.0, 0.0]),
+                         x_pixel_size=request.param['pixel_size'],
+                         y_pixel_size=request.param['pixel_size'], wavelength=wavelength)
+
+@pytest.fixture(params=[{'n_frames': 50, 'foc_dist': 0.01, 'tilt': np.deg2rad(1.0)},],
+                scope='session')
+def samples(request: pytest.FixtureRequest, setup: cbc.ScanSetup) -> cbc.ScanSamples:
+    smp_pos = np.array([setup.foc_pos[0], setup.foc_pos[1],
+                        setup.foc_pos[2] - request.param['foc_dist']])
+    samples = {}
+    for frame in range(request.param['n_frames']):
+        samples[frame] = cbc.Sample(setup.tilt_rotation(request.param['tilt'] * frame),
+                                    smp_pos)
+    return cbc.ScanSamples(samples)
+
+@pytest.fixture(params=[{'bgd_lvl': (5.0, 10.0), 'stk_w': 3.0, 'sgn_lvl': 10.0,
+                         'bad_n': 300, 'bad_lvl': (200, 400), 'q_abs': 0.3},],
+                scope='session')
+def data(request: pytest.FixtureRequest, basis: cbc.Basis, samples: cbc.ScanSamples,
+         setup: cbc.ScanSetup) -> np.ndarray:
+    shape = (len(samples), int(2.0 * setup.foc_pos[1] / setup.y_pixel_size),
+             int(2.0 * setup.foc_pos[0] / setup.x_pixel_size))
+    models = [cbc.CBDModel(basis, sample, setup, shape=shape[1:]) for sample in samples.values()]
+    return generate_data(**request.param, shape=shape, models=models)
+
 @pytest.fixture(scope='session')
-def temp_dir():
+def temp_dir() -> str:
     now = datetime.now()
     path = now.strftime("temp_%m_%d_%H%M%S")
     os.mkdir(path)
     yield path
     shutil.rmtree(path)
 
-@pytest.mark.maxwell
-def test_converter_petra(dir_path: str, scan_num: int, roi: Iterable[int], temp_dir: str) -> None:
-    assert os.path.isdir(temp_dir)
-    data = cbc.converter_petra(dir_path, scan_num, os.path.join(temp_dir, 'test.h5'),
-                               transform=cbc.Crop(roi=np.asarray(roi).reshape(-1, 2)))
-    assert os.path.isfile(os.path.join(temp_dir, 'test.h5'))
-    assert 'data' in data.files
-    data = data.load('data')
+@pytest.fixture(params=[{'load_paths': {'data': '/test/data/data', 'mask': '/test/data/mask'}},
+                        {'load_paths': {}}],
+                scope='session')
+def cxi_protocol(request: pytest.FixtureRequest) -> cbc.CXIProtocol:
+    default = dict(cbc.CXIProtocol.import_default())
+    for attr, val in request.param.items():
+        default[attr].update(val)
+    return cbc.CXIProtocol(**default)
 
-    data = data.update_mask(method='range-bad', vmax=10000000)
-    assert data.get('mask') is not None
-    data = data.update_whitefield(method='mean')
-    assert data.get('whitefield') is not None
+@pytest.mark.data_processing
+def test_cxi_protocol(cxi_protocol: cbc.CXIProtocol, temp_dir: str):
+    path = os.path.join(temp_dir, 'procotol.ini')
+    cxi_protocol.to_ini(path)
+    new_protocol = cbc.CXIProtocol.import_ini(path)
+    assert new_protocol == cxi_protocol
+    os.remove(path)
 
-    data.save(attributes=['mask', 'whitefield', 'data', 'translations', 'tilts'])
+@pytest.fixture(scope='session')
+def h5_path(data: np.ndarray, cxi_protocol: cbc.CXIProtocol, temp_dir: str) -> str:
+    path = os.path.join(temp_dir, 'data.h5')
+    with cbc.CXIStore(path, mode='w', protocol=cxi_protocol) as h5_file:
+        h5_file.save_attribute('data', data)
+    yield path
+    os.remove(path)
 
-@pytest.mark.maxwell
-def test_converter_petra_indices(dir_path: str, scan_num: int, roi: Iterable[int], n0: int,
-                                 n1: int, temp_dir: str) -> None:
-    assert os.path.isdir(temp_dir)
-    data = cbc.converter_petra(dir_path, scan_num, os.path.join(temp_dir, 'test.h5'),
-                               transform=cbc.Crop(roi=np.asarray(roi).reshape(-1, 2)),
-                               indices=np.arange(n0, n1))
-    assert os.path.isfile(os.path.join(temp_dir, 'test.h5'))
-    assert 'data' in data.files
-    data = data.load('data', indices=np.arange(n0, n1))
+def test_cxi_store(data: np.ndarray, cxi_protocol: cbc.CXIProtocol, temp_dir: str):
+    path = os.path.join(temp_dir, 'test.h5')
+    with cbc.CXIStore(path, mode='a', protocol=cxi_protocol) as h5_file:
+        h5_file.save_attribute('data', data, mode='insert', idxs=np.arange(data.shape[0]))
+        h5_file.save_attribute('data', data, mode='append')
+    with cbc.CXIStore(path, mode='r', protocol=cxi_protocol) as h5_file:
+        file_shape = (len(h5_file.indices()),) + h5_file.read_shape()
+        new_data = h5_file.load_attribute('data', idxs=np.arange(data.shape[0], 2 * data.shape[0]))
+    data_shape = (2 * data.shape[0], data.shape[1], data.shape[2])
+    assert file_shape == data_shape
+    assert np.all(new_data == data)
+    os.remove(path)
 
-    data = data.update_mask(method='range-bad', vmax=10000000)
-    assert data.get('mask') is not None
-    data = data.update_whitefield(method='mean')
-    assert data.get('whitefield') is not None
+@pytest.fixture(params=[{'roi': (20, 460, 45, 490)},
+                        {'roi': (10, 440, 30, 495)}],
+                scope='session')
+def crop(request: pytest.FixtureRequest) -> cbc.Crop:
+    return cbc.Crop(**request.param)
 
-    data.save(attributes=['mask', 'whitefield', 'data', 'translations', 'tilts'])
+@pytest.fixture(scope='session')
+def frames(data: np.ndarray) -> np.ndarray:
+    frames = np.arange(data.shape[0])
+    return np.concatenate((frames[:8:2], frames[8:]))
 
-@pytest.mark.maxwell
-def test_cxistore(scan_num: int) -> None:
-    assert os.path.isfile(f'results/scan_{scan_num:d}.h5')
-    file = cbc.CXIStore(f'results/scan_{scan_num:d}.h5', f'results/scan_{scan_num:d}.h5')
+@pytest.fixture(scope='session')
+def cryst_data(h5_path: str, cxi_protocol: cbc.CXIProtocol, crop: cbc.Crop, frames: np.ndarray) -> cbc.CrystData:
+    data = cbc.CrystData(cbc.CXIStore(h5_path, 'r', cxi_protocol))
+    with data.input_file:
+        transform = cbc.ComposeTransforms((cbc.Mirror(0, data.input_file.read_shape()), crop))
+    data = data.update_transform(transform)
+    data = data.load(processes=4).mask_frames(frames)
+    data = data.update_mask(method='range-bad', vmin=0, vmax=150)
+    data = data.update_whitefield(method='median + mean', num_medians=5)
+    return data
+
+@pytest.mark.data_processing
+def test_cryst_data(cryst_data: cbc.CrystData):
+    assert np.sum(np.invert(cryst_data.mask).astype(int)) == np.sum((cryst_data.data > 150).astype(int))
+    assert np.all(np.isclose(cryst_data.cor_data, (cryst_data.data - cryst_data.background) * cryst_data.mask))
+
+@pytest.fixture(scope='session')
+def lsd_detector(cryst_data: cbc.CrystData) -> cbc.LSDetector:
+    lsd_det = cryst_data.lsd_detector()
+    lsd_det = lsd_det.generate_pattern(vmin=0.0, vmax=10.0, size=(1, 3, 3))
+    lsd_det = lsd_det.detect(cutoff=10.0, filter_threshold=1.0, group_threshold=0.9, dilation=3.5)
+    lsd_det = lsd_det.draw_streaks(dilation=3.5)
+    lsd_det = lsd_det.draw_background(dilation=10.5)
+    return lsd_det.update_pattern()
+
+@pytest.mark.data_processing
+def test_lsd_detector(lsd_detector: cbc.LSDetector):
+    bgd_mask = np.subtract(lsd_detector.bgd_mask, lsd_detector.streak_mask, dtype=int)
+    assert bgd_mask.min() == 0 and bgd_mask.max() == 1
+    assert lsd_detector.pattern.min() == 0.0 and lsd_detector.pattern.max() == 1.0
+
+@pytest.fixture(scope='session')
+def table_file(lsd_detector: cbc.LSDetector, temp_dir: str) -> str:
+    path = os.path.join(temp_dir, 'table.h5')
+    table = lsd_detector.export_table(concatenate=True)
+    table.to_hdf(path, 'data')
+    yield path
+    os.remove(path)
