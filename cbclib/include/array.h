@@ -5,9 +5,9 @@
 typedef struct array_s
 {
     int ndim;
-    size_t size;
-    size_t item_size;
-    const size_t *dims;
+    size_t size;            // Number of elements
+    size_t item_size;       // Number of bytes per one element
+    const size_t *dims;     // Shape of the array
     size_t *strides;
     void *data;
 } array_s;
@@ -142,11 +142,13 @@ typedef enum
     SEARCH_RIGHT = 1
 } SEARCH_SIDE;
 
-size_t searchsorted(const void *key, const void *base, size_t npts, size_t size,
-    SEARCH_SIDE side, int (*compar)(const void *, const void *));
+/* find idx \el [0, npts], so that base[idx - 1] < key <= base[idx] */
 
-size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size,
-    SEARCH_SIDE side, int (*compar)(const void *, const void *, void *), void *arg);
+size_t searchsorted(const void *key, const void *base, size_t npts, size_t size, SEARCH_SIDE side,
+                    int (*compar)(const void *, const void *));
+
+size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t size, SEARCH_SIDE side,
+                      int (*compar)(const void *, const void *, void *), void *arg);
 
 /*---------------------------------------------------------------------------
     Wirth select

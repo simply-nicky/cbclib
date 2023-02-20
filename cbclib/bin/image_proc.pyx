@@ -1,8 +1,4 @@
 import numpy as np
-import cython
-from libc.math cimport log, sqrt, pi, exp
-from libc.string cimport memcmp
-from libc.stdlib cimport calloc, malloc, free
 from cython.parallel import prange
 from .line_detector cimport ArrayWrapper
 
@@ -417,54 +413,44 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
         raise RuntimeError('C backend exited with error.')
     return out
 
-def draw_line(np.ndarray inp not None, np.ndarray lines not None, int max_val=255, double dilation=0.0, str profile='tophat'):
-    inp = check_array(inp, np.NPY_UINT32)
-    lines = check_array(lines, np.NPY_FLOAT32)
-
-    if inp.ndim != 2:
-        raise ValueError("Input array must be two-dimensional")
-    if lines.ndim != 2 or lines.shape[1] < 5:
-        raise ValueError("lines array has an incompatible shape")
+def draw_line_mask(object shape not None, object lines not None, int max_val=1, double dilation=0.0,
+                   str profile='tophat', unsigned int num_threads=1):
     if profile not in profile_scheme:
         raise ValueError(f"Invalid profile keyword: '{profile}'")
 
-    cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
-    cdef unsigned long *_dims = <unsigned long *>inp.shape
-    cdef float *_lines = <float *>np.PyArray_DATA(lines)
-    cdef unsigned long *_ldims = <unsigned long *>lines.shape
+    cdef int ndim = len(shape)
+    if ndim < 2:
+        raise ValueError(f"Invalid shape: '{shape}'")
 
-    cdef line_profile _prof = profiles[profile_scheme[profile]]
-    cdef int fail
+    cdef np.ndarray _shape = normalize_sequence(shape, ndim, np.NPY_INTP)
+    cdef np.ndarray inp = np.PyArray_ZEROS(ndim, <np.npy_intp *>np.PyArray_DATA(_shape), np.NPY_UINT32, 0)
+    cdef unsigned *_inp = <unsigned *>np.PyArray_DATA(inp)
 
-    with nogil:
-        fail = draw_line_c(_inp, _dims, max_val, _lines, _ldims, <float>dilation, _prof)
-    if fail:
-        raise RuntimeError('C backend exited with error.')    
-    return inp
-
-def draw_line_stack(np.ndarray inp not None, dict lines not None, int max_val=1, double dilation=0.0,
-                     str profile='tophat', unsigned int num_threads=1):
-    if inp.ndim < 2:
-        raise ValueError('Input array must be >=2D array.')
-    inp = check_array(inp, np.NPY_UINT32)
-
-    if profile not in profile_scheme:
-        raise ValueError(f"Invalid profile keyword: '{profile}'")
-
-    cdef int ndim = inp.ndim
-    cdef unsigned int *_inp = <unsigned int *>np.PyArray_DATA(inp)
     cdef unsigned long *_dims = <unsigned long *>inp.shape + ndim - 2
     cdef int repeats = inp.size / _dims[0] / _dims[1]
 
-    cdef int i, N = len(lines)
-    cdef list frames = list(lines)
-    cdef dict _lines = {}
+    cdef int i, N
+    if ndim == 2:
+        N = 1
+    else:
+        N = len(lines)
+
+    cdef np.ndarray arr
     cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
-    cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
-    for i in range(N):
-        _lines[i] = check_array(lines[frames[i]], np.NPY_FLOAT32)
-        _lptrs[i] = <float *>np.PyArray_DATA(_lines[i])
-        _ldims[i] = <unsigned long *>(<np.ndarray>_lines[i]).shape
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
+
+    if N == 1:
+        arr = check_array(lines, np.NPY_FLOAT32)
+        _ldims[0] = arr.shape[0]; _ldims[1] =  arr.shape[1]
+        _lptrs[0] = <float *>np.PyArray_DATA(arr)
+    else:
+        for i in range(N):
+            arr = check_array(lines[i], np.NPY_FLOAT32)
+            if arr.ndim != 2 or arr.shape[1] < 5:
+                raise ValueError("lines array has an incompatible shape")
+            _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+            _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+            memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
 
     cdef line_profile _prof = profiles[profile_scheme[profile]]
 
@@ -474,19 +460,82 @@ def draw_line_stack(np.ndarray inp not None, dict lines not None, int max_val=1,
     cdef int fail
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
-        fail = draw_line_c(_inp + i * _dims[0] * _dims[1], _dims, max_val, _lptrs[i], _ldims[i],
-                           <float>dilation, _prof)
+        fail = draw_line_int(_inp + i * _dims[0] * _dims[1], _dims, max_val, _lptrs[i], _ldims + 2 * i,
+                             <float>dilation, _prof)
 
         if fail:
             with gil:
                 raise RuntimeError('C backend exited with error.')
 
+    if N > 1:
+        for i in range(N):
+            free(_lptrs[i])
     free(_lptrs); free(_ldims)
 
     return inp
 
-def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=255, double dilation=0.0,
-                      str profile='tophat'):
+def draw_line_image(object shape not None, object lines not None, double dilation=0.0,
+                    str profile='gauss', unsigned int num_threads=1):
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+
+    cdef int ndim = len(shape)
+    if ndim < 2:
+        raise ValueError(f"Invalid shape: '{shape}'")
+
+    cdef np.ndarray _shape = normalize_sequence(shape, ndim, np.NPY_INTP)
+    cdef np.ndarray inp = np.PyArray_ZEROS(ndim, <np.npy_intp *>np.PyArray_DATA(_shape), np.NPY_FLOAT32, 0)
+    cdef float *_inp = <float *>np.PyArray_DATA(inp)
+
+    cdef unsigned long *_dims = <unsigned long *>inp.shape + ndim - 2
+    cdef int repeats = inp.size / _dims[0] / _dims[1]
+
+    cdef int i, N
+    if ndim == 2:
+        N = 1
+    else:
+        N = len(lines)
+
+    cdef np.ndarray arr
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
+
+    if N == 1:
+        arr = check_array(lines, np.NPY_FLOAT32)
+        _ldims[0] = arr.shape[0]; _ldims[1] =  arr.shape[1]
+        _lptrs[0] = <float *>np.PyArray_DATA(arr)
+    else:
+        for i in range(N):
+            arr = check_array(lines[i], np.NPY_FLOAT32)
+            if arr.ndim != 2 or arr.shape[1] < 5:
+                raise ValueError("lines array has an incompatible shape")
+            _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+            _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+            memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
+
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+
+    if N < repeats:
+        repeats = N
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    cdef int fail
+
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        fail = draw_line_float(_inp + i * _dims[0] * _dims[1], _dims, _lptrs[i], _ldims + 2 * i,
+                               <float>dilation, _prof)
+
+        if fail:
+            with gil:
+                raise RuntimeError('C backend exited with error.')
+
+    if N > 1:
+        for i in range(N):
+            free(_lptrs[i])
+    free(_lptrs); free(_ldims)
+
+    return inp
+
+def draw_line_table(np.ndarray lines not None, object shape=None, double dilation=0.0, str profile='gauss'):
     lines = check_array(lines, np.NPY_FLOAT32)
 
     if lines.ndim != 2 or lines.shape[1] < 5:
@@ -502,7 +551,10 @@ def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=25
         _shape = normalize_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
-    cdef unsigned int *_idxs
+    cdef unsigned *_idx
+    cdef unsigned *_x
+    cdef unsigned *_y
+    cdef float *_val
     cdef unsigned long _n_idxs
     cdef float *_lines = <float *>np.PyArray_DATA(lines)
     cdef unsigned long *_ldims = <unsigned long *>lines.shape
@@ -511,16 +563,18 @@ def draw_line_index(np.ndarray lines not None, object shape=None, int max_val=25
     cdef int fail = 0
 
     with nogil:
-        fail = draw_line_index_c(&_idxs, &_n_idxs, _dims, max_val, _lines, _ldims, <float>dilation, _prof)
+        fail = draw_line_index(&_idx, &_x, &_y, &_val, &_n_idxs, _dims, _lines, _ldims, <float>dilation, _prof)
     if fail:
         raise RuntimeError('C backend exited with error.')    
 
-    cdef np.npy_intp *dims = [_n_idxs, 4]
-    cdef np.ndarray idxs = ArrayWrapper.from_ptr(<void *>_idxs).to_ndarray(2, dims, np.NPY_UINT32)
+    cdef np.ndarray idx = ArrayWrapper.from_ptr(<void *>_idx).to_ndarray(1, [_n_idxs,], np.NPY_UINT32)
+    cdef np.ndarray x = ArrayWrapper.from_ptr(<void *>_x).to_ndarray(1, [_n_idxs,], np.NPY_UINT32)
+    cdef np.ndarray y = ArrayWrapper.from_ptr(<void *>_y).to_ndarray(1, [_n_idxs,], np.NPY_UINT32)
+    cdef np.ndarray val = ArrayWrapper.from_ptr(<void *>_val).to_ndarray(1, [_n_idxs,], np.NPY_FLOAT32)
 
-    return idxs
+    return idx, x, y, val
 
-def normalise_pattern(np.ndarray inp not None, dict lines not None, object dilations not None,
+def normalise_pattern(np.ndarray inp not None, object lines not None, object dilations not None,
                       str profile='tophat', unsigned int num_threads=1):
     if inp.ndim != 3:
         raise ValueError('Input array must be a 3D array.')
@@ -540,14 +594,16 @@ def normalise_pattern(np.ndarray inp not None, dict lines not None, object dilat
     cdef float *_out = <float *>np.PyArray_DATA(out)
 
     cdef int i, N = len(lines)
-    cdef list frames = list(lines)
-    cdef dict _lines = {}
+    cdef np.ndarray arr
     cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
-    cdef unsigned long **_ldims = <unsigned long **>malloc(N * sizeof(unsigned long *))
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
     for i in range(N):
-        _lines[i] = check_array(lines[frames[i]], np.NPY_FLOAT32)
-        _lptrs[i] = <float *>np.PyArray_DATA(_lines[i])
-        _ldims[i] = <unsigned long *>(<np.ndarray>_lines[i]).shape
+        arr = check_array(lines[i], np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+        _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+        _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+        memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
 
     cdef line_profile _prof = profiles[profile_scheme[profile]]
 
@@ -558,15 +614,69 @@ def normalise_pattern(np.ndarray inp not None, dict lines not None, object dilat
 
     for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
         fail = normalise_line(_out + i * _dims[0] * _dims[1], _inp + i * _dims[0] * _dims[1], _dims,
-                              _lptrs[i], _ldims[i], _dils, _prof)
+                              _lptrs[i], _ldims + 2 * i, _dils, _prof)
 
         if fail:
             with gil:
                 raise RuntimeError('C backend exited with error.')
 
+    for i in range(N):
+        free(_lptrs[i])
     free(_lptrs); free(_ldims)
 
     return out
+
+def refine_pattern(np.ndarray inp not None, object lines not None, float dilation,
+                   str profile='tophat', unsigned int num_threads=1):
+    if inp.ndim != 3:
+        raise ValueError('Input array must be a 3D array.')
+    inp = check_array(inp, np.NPY_FLOAT32)
+
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+
+    cdef float *_inp = <float *>np.PyArray_DATA(inp)
+    cdef unsigned long *_dims = <unsigned long *>inp.shape + 1
+    cdef int repeats = inp.size / _dims[0] / _dims[1]
+
+    cdef np.ndarray out = np.PyArray_SimpleNew(3, inp.shape, np.NPY_FLOAT32)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
+
+    cdef int i, N = len(lines)
+    cdef np.ndarray arr
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
+    for i in range(N):
+        arr = check_array(lines[i], np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+        _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+        _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+        memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
+
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+
+    if N < repeats:
+        repeats = N
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    cdef int fail
+
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        fail = refine_line(_lptrs[i], _inp + i * _dims[0] * _dims[1], _dims,
+                           _lptrs[i], _ldims + 2 * i, dilation, _prof)
+
+        if fail:
+            with gil:
+                raise RuntimeError('C backend exited with error.')
+
+    cdef dict line_dict = {}
+    for i in range(repeats):
+        arr = ArrayWrapper.from_ptr(<void *>_lptrs[i]).to_ndarray(2, <np.npy_intp *>(_ldims + 2 * i), np.NPY_FLOAT32)
+        line_dict[i] = arr
+
+    free(_lptrs); free(_ldims)
+
+    return line_dict
 
 def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray effs not None,
                  int num_threads=1):
@@ -637,3 +747,44 @@ def subtract_background(np.ndarray inp not None, np.ndarray mask not None, np.nd
                     _out[i, j, k] = 0.0
 
     return out
+
+def ce_criterion(np.ndarray ij not None, np.ndarray p not None, np.ndarray fidxs not None, object shape not None,
+                 object lines not None, double dilation=0.0, double epsilon=1e-12, str profile='gauss',
+                 unsigned int num_threads=1):
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
+    if len(shape) != 2:
+        raise ValueError(f"Invalid shape: '{shape}'")
+
+    ij = check_array(ij, np.NPY_UINT32)
+    p = check_array(p, np.NPY_FLOAT32)
+    fidxs = check_array(fidxs, np.NPY_UINT32)
+
+    cdef unsigned long *_dims = [shape[0], shape[1]]
+    cdef unsigned *_ij = <unsigned *>np.PyArray_DATA(ij)
+    cdef float *_p = <float *>np.PyArray_DATA(p)   
+    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs) 
+
+    cdef int i, N = len(lines)
+    cdef np.ndarray arr
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
+    for i in range(N):
+        arr = check_array(lines[i], np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+        _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+        _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+        memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
+
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
+    cdef double crit
+
+    with nogil:
+        crit = cross_entropy(_ij, _p, _fidxs, _dims, _lptrs, _ldims, N, dilation, epsilon, _prof, num_threads)
+
+    for i in range(N):
+        free(_lptrs[i])
+    free(_lptrs); free(_ldims)
+
+    return crit

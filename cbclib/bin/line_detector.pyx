@@ -1,5 +1,6 @@
 import numpy as np
 from cython.parallel import prange, parallel
+from .image_proc cimport check_array, normalize_sequence
 
 cdef line_profile profiles[4]
 cdef void build_profiles():

@@ -364,11 +364,11 @@ class LogContainer(DataContainer):
         """
         raise self._no_data_exc
 
-    def generate_samples(self: L, pos: np.ndarray, setup: ScanSetup) -> L:
+    def generate_samples(self: L, dist: float, setup: ScanSetup) -> L:
         """Generate a :class:`cbclib.ScanSamples` object from the sample translations.
 
         Args:
-            pos : Initial sample position in meters.
+            dist : Initial focus-to-sample distance in meters.
             setup : Experimental setup.
 
         Raises:
@@ -446,12 +446,12 @@ class LogContainerFull(LogContainer):
                 translations[:dset.size, idx] = dset
         return self.replace(translations=translations)
 
-    def generate_samples(self, pos: np.ndarray, setup: ScanSetup) -> ScanSamples:
+    def generate_samples(self, dist: float, setup: ScanSetup) -> ScanSamples:
         if self.translations is None:
             raise ValueError('No translations in the container')
 
         samples = {}
         for frame, translation in zip(self.idxs, self.translations):
             samples[frame] = Sample(setup.tilt_rotation(translation[3] - self.translations[0, 3]),
-                                    translation[:3] - self.translations[0, :3] + pos)
+                                    translation[2] - self.translations[0, 2] + dist)
         return ScanSamples(samples)

@@ -17,12 +17,11 @@ from dataclasses import dataclass, field
 from weakref import ref
 import numpy as np
 import pandas as pd
-from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks
-from .cbc_indexing import CBDModel
-from .cxi_protocol import CXIStore, Indices
+from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks, CBDModel
+from .cxi_protocol import CXIProtocol, CXIStore, Indices
 from .data_container import DataContainer, Transform, ReferenceType
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  normalise_pattern, draw_line_stack)
+                  normalise_pattern, refine_pattern, draw_line_mask)
 
 C = TypeVar('C', bound='CrystData')
 
@@ -48,9 +47,9 @@ class CrystData(DataContainer):
         background : Detector image backgrounds.
         streak_mask : A mask of detected diffraction streaks.
     """
-    input_file  : CXIStore
+    input_file  : Optional[CXIStore] = None
     transform   : Optional[Transform] = None
-    num_threads : int = field(default=np.clip(1, 64, cpu_count()))
+    num_threads : int = cpu_count()
     output_file : Optional[CXIStore] = None
 
     data        : Optional[np.ndarray] = None
@@ -67,21 +66,29 @@ class CrystData(DataContainer):
     _no_whitefield_exc: ClassVar[ValueError] = ValueError('No whitefield in the container')
 
     @property
+    def protocol(self) -> Optional[CXIProtocol]:
+        if self.input_file is not None:
+            return self.input_file.protocol
+        if self.output_file is not None:
+            return self.output_file.protocol
+        return None
+
+    @property
     def shape(self) -> Tuple[int, int, int]:
         shape = [0, 0, 0]
         for attr, data in self.items():
-            if attr in self.input_file.protocol and data is not None:
-                kind = self.input_file.protocol.get_kind(attr)
+            if attr in self.protocol and data is not None:
+                kind = self.protocol.get_kind(attr)
                 if kind == 'sequence':
                     shape[0] = data.shape[0]
         for attr, data in self.items():
-            if attr in self.input_file.protocol and data is not None:
-                kind = self.input_file.protocol.get_kind(attr)
+            if attr in self.protocol and data is not None:
+                kind = self.protocol.get_kind(attr)
                 if kind == 'frame':
                     shape[1:] = data.shape
         for attr, data in self.items():
-            if attr in self.input_file.protocol and data is not None:
-                kind = self.input_file.protocol.get_kind(attr)
+            if attr in self.protocol and data is not None:
+                kind = self.protocol.get_kind(attr)
                 if kind == 'stack':
                     shape[:] = data.shape
         return tuple(shape)
@@ -129,7 +136,7 @@ class CrystData(DataContainer):
             attributes = self.contents()
 
         data_dict = dict(self)
-        for attr in self.input_file.protocol.str_to_list(attributes):
+        for attr in self.protocol.str_to_list(attributes):
             if attr not in self.keys():
                 raise ValueError(f"Invalid attribute: '{attr}'")
 
@@ -178,11 +185,13 @@ class CrystData(DataContainer):
                 attributes = [attr for attr in self.input_file.keys()
                               if attr in self.keys()]
             else:
-                attributes = self.input_file.protocol.str_to_list(attributes)
+                attributes = self.protocol.str_to_list(attributes)
 
             if idxs is None:
                 idxs = self.input_file.indices()
-            data_dict = {'frames': np.asarray(idxs)}
+            else:
+                idxs = np.atleast_1d(idxs)
+            data_dict = {'frames': idxs}
 
             for attr in attributes:
                 if attr not in self.input_file.keys():
@@ -226,24 +235,27 @@ class CrystData(DataContainer):
         if self.output_file is None:
             raise ValueError("'output_file' is not defined inside the container")
 
+        if apply_transform and self.transform:
+            if self.input_file is None:
+                raise ValueError("'input_file' is not defined inside the container")
+            with self.input_file:
+                shape = self.input_file.read_shape()[-2:]
+
         if attributes is None:
             attributes = list(self.contents())
 
-        with self.input_file:
-            shape = self.input_file.read_shape()
-
         with self.output_file:
-            for attr in self.output_file.protocol.str_to_list(attributes):
+            for attr in self.protocol.str_to_list(attributes):
                 data = self.get(attr)
-                if attr in self.output_file.protocol and data is not None:
-                    kind = self.output_file.protocol.get_kind(attr)
+                if attr in self.protocol and data is not None:
+                    kind = self.protocol.get_kind(attr)
 
                     if kind in ['stack', 'sequence']:
                         data = data[self.good_frames]
 
                     if apply_transform and self.transform:
                         if kind in ['stack', 'frame']:
-                            out = np.zeros(shape, dtype=data.dtype)
+                            out = np.zeros(data.shape[:-2] + shape, dtype=data.dtype)
                             data = self.transform.backward(data, out)
 
                     self.output_file.save_attribute(attr, np.asarray(data), mode=mode, idxs=idxs)
@@ -271,8 +283,8 @@ class CrystData(DataContainer):
         data_dict = {'transform': transform}
 
         for attr, data in self.items():
-            if attr in self.input_file.protocol and data is not None:
-                kind = self.input_file.protocol.get_kind(attr)
+            if attr in self.protocol and data is not None:
+                kind = self.protocol.get_kind(attr)
                 if kind in ['stack', 'frame']:
                     if self.transform is None:
                         data_dict[attr] = transform.forward(data)
@@ -360,7 +372,7 @@ class CrystData(DataContainer):
         """
         raise self._no_data_exc
 
-    def update_mask(self: C, method: str='perc-bad', pmin: float=0., pmax: float=99.99,
+    def update_mask(self: C, method: str='range-bad', pmin: float=0.0, pmax: float=99.99,
                     vmin: int=0, vmax: int=65535, update: str='reset') -> C:
         """Return a new :class:`CrystData` object with the updated bad pixels mask.
 
@@ -523,9 +535,9 @@ class CrystData(DataContainer):
 
 @dataclass
 class CrystDataPart(CrystData):
-    input_file  : CXIStore
+    input_file  : Optional[CXIStore] = None
     transform   : Optional[Transform] = None
-    num_threads : int = field(default=np.clip(1, 64, cpu_count()))
+    num_threads : int = cpu_count()
     output_file : Optional[CXIStore] = None
 
     data        : Optional[np.ndarray] = None
@@ -561,8 +573,8 @@ class CrystDataPart(CrystData):
         return self.replace(mask=mask)
 
     def mask_pupil(self: C, setup: ScanSetup, padding: float=0.0) -> C:
-        x0, y0 = self.forward_points(*setup.pupil_min)
-        x1, y1 = self.forward_points(*setup.pupil_max)
+        x0, y0 = self.forward_points(x=setup.pupil_roi[2], y=setup.pupil_roi[0])
+        x1, y1 = self.forward_points(x=setup.pupil_roi[3], y=setup.pupil_roi[1])
         return self.mask_region((int(y0 - padding), int(y1 + padding),
                                  int(x0 - padding), int(x1 + padding)))
 
@@ -584,7 +596,7 @@ class CrystDataPart(CrystData):
                              f'{whitefield.shape} != {self.shape[1:]}')
         return CrystDataFull(**dict(self, whitefield=whitefield))
 
-    def update_mask(self, method: str='perc-bad', pmin: float=0., pmax: float=99.99,
+    def update_mask(self, method: str='range-bad', pmin: float=0.0, pmax: float=99.99,
                     vmin: int=0, vmax: int=65535, update: str='reset') -> C:
         if vmin >= vmax:
             raise ValueError('vmin must be less than vmax')
@@ -634,9 +646,9 @@ class CrystDataPart(CrystData):
 
 @dataclass
 class CrystDataFull(CrystDataPart):
-    input_file  : CXIStore
+    input_file  : Optional[CXIStore] = None
     transform   : Optional[Transform] = None
-    num_threads : int = field(default=np.clip(1, 64, cpu_count()))
+    num_threads : int = cpu_count()
     output_file : Optional[CXIStore] = None
 
     data        : Optional[np.ndarray] = None
@@ -665,8 +677,8 @@ class CrystDataFull(CrystDataPart):
                                                 num_threads=self.num_threads)
 
     def blur_pupil(self, setup: ScanSetup, padding: float=0.0, blur: float=0.0) -> CrystDataFull:
-        x0, y0 = self.forward_points(*setup.pupil_min)
-        x1, y1 = self.forward_points(*setup.pupil_max)
+        x0, y0 = self.forward_points(x=setup.pupil_roi[2], y=setup.pupil_roi[0])
+        x1, y1 = self.forward_points(x=setup.pupil_roi[3], y=setup.pupil_roi[1])
 
         i, j = np.indices(self.shape[1:])
         dtype = self.cor_data.dtype
@@ -722,7 +734,6 @@ class CrystDataFull(CrystDataPart):
 D = TypeVar('D', bound='Detector')
 
 class Detector(DataContainer):
-    max_val         : ClassVar[int] = 1000
     profile         : ClassVar[str] = 'gauss'
     _no_streaks_exc : ClassVar[ValueError] = ValueError('No streaks in the container')
 
@@ -809,8 +820,18 @@ class Detector(DataContainer):
             * `p` : Normalised pattern values.
             * `rp` : Reflection profiles.
             * `I_raw` : Measured intensity.
-            * `sgn` : Background subtracted intensity.
             * `bgd` : Background values.
+        """
+        raise self._no_streaks_exc
+
+    def refine_streaks(self: D, dilation: float=0.0) -> D:
+        """Refine detected diffraction streaks by fitting a Gaussian across the line.
+
+        Args:
+            dilation : Dilation radius in pixels used for the Gaussian fit.
+
+        Returns:
+            A new detector with the updated diffraction streaks.
         """
         raise self._no_streaks_exc
 
@@ -858,10 +879,9 @@ class Detector(DataContainer):
 
 class DetectorFull(Detector):
     def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
-        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
-        mask = np.zeros(self.shape, dtype=np.uint32)
-        return draw_line_stack(mask, lines=streaks, max_val=max_val, dilation=dilation,
-                               profile=profile, num_threads=self.num_threads)
+        streaks = [streaks.to_numpy() for streaks in self.streaks.values()]
+        return draw_line_mask(self.shape, lines=streaks, max_val=max_val, dilation=dilation,
+                              profile=profile, num_threads=self.num_threads)
 
     def export_streaks(self):
         if self.parent() is None:
@@ -879,17 +899,14 @@ class DetectorFull(Detector):
 
         dataframes, frames = [], []
         for idx, streaks in self.streaks.items():
-            df = streaks.pattern_dataframe(shape=self.shape[1:], dp=1.0 / self.max_val,
-                                           dilation=dilation, profile=self.profile)
+            df = streaks.pattern_dataframe(shape=self.shape[1:], dilation=dilation, profile=self.profile)
             df['frames'] = self.frames[idx] * np.ones(df.shape[0], dtype=df['index'].dtype)
 
             index = self.parent().good_frames[idx]
-            raw_data = self.parent().data[index] * self.parent().mask[index]
-            df['p'] = self.patterns[idx][df['y'], df['x']]
-            df = df[df['p'] > 0.0]
-            df['I_raw'] = raw_data[df['y'], df['x']]
-            df['sgn'] = self.parent().cor_data[index][df['y'], df['x']]
-            df['bgd'] = self.parent().background[index][df['y'], df['x']]
+            df = df[self.parent().mask[index, df['y'], df['x']]]
+            df['p'] = self.patterns[idx, df['y'], df['x']]
+            df['I_raw'] = self.parent().data[index, df['y'], df['x']]
+            df['bgd'] = self.parent().background[index, df['y'], df['x']]
             df['x'], df['y'] = self.parent().backward_points(df['x'], df['y'])
 
             frames.append(self.frames[idx])
@@ -900,6 +917,12 @@ class DetectorFull(Detector):
         if concatenate:
             return pd.concat(dataframes, ignore_index=True)
         return dataframes
+
+    def refine_streaks(self: D, dilation: float=0.0) -> D:
+        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
+        streaks = refine_pattern(inp=self.data, lines=streaks, dilation=dilation,
+                                 num_threads=self.num_threads)
+        return self.replace(streaks={idx: Streaks(*(lines.T)) for idx, lines in streaks.items()})
 
     def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
         streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
@@ -983,7 +1006,7 @@ class LSDetector(Detector):
                                        group_threshold=group_threshold,
                                        dilation=dilation, profile=profile,
                                        num_threads=self.num_threads)
-        streaks = {idx: Streaks(*np.around(lines[:, :5], 2).T)
+        streaks = {idx: Streaks(*(lines[:, :5].T))
                    for idx, lines in out_dict['lines'].items() if lines.size}
         idxs = [idx for idx, lines in out_dict['lines'].items() if lines.size]
         return LSDetectorFull(**dict(self.mask_frames(idxs), streaks=streaks))
@@ -1078,16 +1101,14 @@ class ModelDetector(Detector):
 
     patterns        : Optional[np.ndarray] = None
 
-    def detect(self, q_abs: float=0.3, width: float=4.0, threshold: float=0.95) -> ModelDetectorFull:
+    def detect(self, hkl: np.ndarray, width: float=4.0, threshold: float=1.0) -> ModelDetectorFull:
         """Perform the streak detection based on prediction. Generate a predicted pattern and
         filter out all the streaks, which signal-to-noise ratio is below the ``threshold``.
 
         Args:
-            q_abs : The size of reciprocal space to use in prediction. The reciprocal vectors
-                are normalised and span in [0.0 - 1.0] interval.
+            hkl : A set of reciprocal lattice points used in the detection.
             width : Difrraction streak width in pixels of a predicted pattern.
             threshold : SNR threshold.
-            dp : The quantisation step of a predicted pattern.
 
         Returns:
             New :class:`cbclib.ModelDetector` streak detector with updated ``streaks``.
@@ -1097,12 +1118,11 @@ class ModelDetector(Detector):
 
         streaks = {}
         for idx, model in self.models.items():
-            hkl = model.generate_hkl(q_abs)
             index = self.parent().good_frames[idx]
-            stks = model.filter_streaks(hkl=hkl, signal=self.parent().cor_data[index],
-                                        background=self.parent().background[index],
-                                        width=width, threshold=threshold, dp=1.0 / self.max_val,
-                                        profile=self.profile, num_threads=self.num_threads)
+            stks = model.filter_streaks(hkl=hkl[model.filter_hkl(hkl)], threshold=threshold,
+                                        signal=self.parent().cor_data[index], profile=self.profile,
+                                        background=self.parent().background[index],  width=width,
+                                        num_threads=self.num_threads)
             streaks[idx] = stks
         return ModelDetectorFull(**dict(self, streaks=streaks))
 

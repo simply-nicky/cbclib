@@ -3,101 +3,106 @@
 #include "kd_tree.h"
 
 #define TOL 3.1425926535897937e-05
-#define LVAL_MAX 1000
 
 #define WRAP_DIST(_dist, _dx, _hb, _fb, _div)                   \
     do {float _dx1; if ((_dx) < -(_hb)) _dx1 = (_dx) + (_fb);   \
         else if ((_dx) > (_hb)) _dx1 = (_dx) - (_fb);           \
         else _dx1 = (_dx); (_dist) += SQ(_dx1 / _div); } while (0)
 
-typedef struct ntuple_list_s
+typedef struct index_tuple_s
 {
     int iter;
     size_t size;
     size_t max_size;
-    size_t dim;
-    unsigned int *values;
-} * ntuple_list;
+    unsigned *idx, *x, *y;
+    float *val;
+} index_tuple_s;
+typedef struct index_tuple_s *index_tuple;
 
-static void free_ntuple_list(ntuple_list n_tuple)
+static void free_index_tuple(index_tuple itup)
 {
-    if (n_tuple == NULL || n_tuple->values == NULL)
-        ERROR("free_ntuple_list: invalid n-tuple input.");
-    DEALLOC(n_tuple->values);
-    DEALLOC(n_tuple);
+    if (itup == NULL || itup->idx == NULL || itup->x == NULL || itup->y == NULL ||
+        itup->val == NULL) ERROR("free_index_tuple: invalid index-tuple input.");
+    DEALLOC(itup->idx); DEALLOC(itup->x); DEALLOC(itup->y); DEALLOC(itup->val);
+    DEALLOC(itup);
 }
 
-static ntuple_list new_ntuple_list(size_t dim, size_t max_size)
+static index_tuple new_index_tuple(size_t max_size)
 {
-    ntuple_list n_tuple;
-
-    /* check parameters */
-    if (dim == 0) ERROR("new_ntuple_list: 'dim' must be positive.");
+    index_tuple itup;
 
     /* get memory for list structure */
-    n_tuple = (ntuple_list)malloc(sizeof(struct ntuple_list_s));
-    if (n_tuple == NULL) ERROR("not enough memory.");
+    itup = (index_tuple)malloc(sizeof(struct index_tuple_s));
 
     /* initialize list */
-    n_tuple->size = 0;
-    n_tuple->max_size = max_size;
-    n_tuple->dim = dim;
+    itup->size = 0;
+    itup->max_size = max_size;
 
     /* get memory for tuples */
-    n_tuple->values = (unsigned int *)malloc(dim * max_size * sizeof(unsigned int));
-    if (n_tuple->values == NULL) ERROR("not enough memory.");
+    itup->idx = MALLOC(unsigned, itup->max_size);
+    itup->x = MALLOC(unsigned, itup->max_size);
+    itup->y = MALLOC(unsigned, itup->max_size);
+    itup->val = MALLOC(float, itup->max_size);
 
-    return n_tuple;
+    return itup;
 }
 
-static void realloc_ntuple_list(ntuple_list n_tuple, size_t max_size)
+static void realloc_index_tuple(index_tuple itup, size_t max_size)
 {
     /* check parameters */
-    if (n_tuple == NULL || n_tuple->values == NULL || n_tuple->max_size == 0)
-        ERROR("realloc_ntuple_list: invalid n-tuple.");
+    if (itup == NULL || itup->idx == NULL || itup->x == NULL || itup->y == NULL ||
+        itup->val == NULL || itup->max_size == 0)
+        ERROR("realloc_index_tuple: invalid index-tuple.");
 
     /* duplicate number of tuples */
-    n_tuple->max_size = max_size;
+    itup->max_size = max_size;
 
     /* realloc memory */
-    n_tuple->values = REALLOC(n_tuple->values, unsigned int, n_tuple->dim * n_tuple->max_size);
-    if (n_tuple->values == NULL) ERROR("not enough memory.");
+    itup->idx = REALLOC(itup->idx, unsigned, itup->max_size);
+    itup->x = REALLOC(itup->x, unsigned, itup->max_size);
+    itup->y = REALLOC(itup->y, unsigned, itup->max_size);
+    itup->val = REALLOC(itup->val, float, itup->max_size);
 }
 
-static void add_4tuple(ntuple_list list, float v1, float v2, float v3, float v4)
+static void add_index_tuple(index_tuple itup, unsigned idx, unsigned x, unsigned y, float val)
 {
     /* check parameters */
-    if (list == NULL) ERROR("add_4tuple: invalid n-tuple input.");
-    if (list->dim != 4) ERROR("add_4tuple: the n-tuple must be a 4-tuple.");
+    if (itup == NULL || itup->idx == NULL || itup->x == NULL || itup->y == NULL ||
+        itup->val == NULL) ERROR("add_index_tuple: invalid index-tuple input.");
 
-    /* if needed, alloc more tuples to 'list' */
-    if (list->size == list->max_size) realloc_ntuple_list(list, list->max_size + 1);
-    if (list->values == NULL) ERROR("add_4tuple: invalid n-tuple input.");
+    /* if needed, alloc more tuples to 'itup' */
+    if (itup->size == itup->max_size) realloc_index_tuple(itup, itup->max_size + 1);
 
     /* add new 4-tuple */
-    list->values[list->size * list->dim + 0] = v1;
-    list->values[list->size * list->dim + 1] = v2;
-    list->values[list->size * list->dim + 2] = v3;
-    list->values[list->size * list->dim + 3] = v4;
+    itup->idx[itup->size] = idx; itup->x[itup->size] = x;
+    itup->y[itup->size] = y; itup->val[itup->size] = val;
 
     /* update number of tuples counter */
-    list->size++;
+    itup->size++;
 }
 
-typedef void (*set_pixel)(void *out, int x, int y, unsigned int val, unsigned int max_val);
+typedef void (*set_pixel)(void *out, int x, int y, float val);
 
-static void set_pixel_color(void *out, int x, int y, unsigned int val, unsigned int max_val)
+static void set_pixel_int(void *out, int x, int y, float val)
 {
     array image = (array)out;
-    unsigned int *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
-    unsigned int new = *ptr + val;
-    *ptr = new > max_val ? max_val : new;
+    unsigned *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
+    unsigned new = MAX(*ptr, (unsigned)val);
+    *ptr = new;
 }
 
-static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned int max_val)
+static void set_pixel_float(void *out, int x, int y, float val)
 {
-    ntuple_list idxs = (ntuple_list)out;
-    add_4tuple(idxs, (unsigned int)idxs->iter, (unsigned int)x, (unsigned int)y, val > max_val ? max_val : val);
+    array image = (array)out;
+    float *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
+    float new = MAX(*ptr, val);
+    *ptr = new;
+}
+
+static void set_pixel_index(void *out, int x, int y, float val)
+{
+    index_tuple idxs = (index_tuple)out;
+    add_index_tuple(idxs, idxs->iter, x, y, val);
 }
 
 /* Points (integer) follow the convention:      [k, j, i], where {i <-> x, j <-> y, k <-> z}
@@ -109,7 +114,7 @@ static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned 
 /*----------------------------------------------------------------------------*/
 
 /*----------------------------------------------------------------------------
-    Function :  kth_smallest()
+    Function :  plot_line_width()
     In       :  A 2d line defined by two (integer) points (j0, i0, j1, i1)
                 and a (float) width wd
     Out      :  A rasterized image of the line
@@ -120,7 +125,7 @@ static void set_pixel_index(void *out, int x, int y, unsigned int val, unsigned 
         pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
         url: http://members.chello.at/~easyfilter/bresenham.html
 ------------------------------------------------------------------------------*/
-static void plot_line_width(void *out, const size_t *dims, int *points, float wd, unsigned int max_val,
+static void plot_line_width(void *out, const size_t *dims, int *points, float wd, unsigned max_val,
                             set_pixel setter, line_profile profile)
 {
     /* create a volatile copy of the input line */
@@ -130,8 +135,8 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
     /* plot an anti-aliased line of width wd */
     int dx = abs(pts[3] - pts[1]), sx = pts[1] < pts[3] ? 1 : -1;
     int dy = abs(pts[2] - pts[0]), sy = pts[0] < pts[2] ? 1 : -1;
-    int err = dx - dy, derr = 0, dx0 = 0, e2, x2, y2, val;    /* error value e_xy */
-    float ed = dx + dy == 0 ? 1.0f : sqrtf((float)dx * dx + (float)dy * dy);
+    int err = dx - dy, derr = 0, dx0 = 0, e2, x2, y2;    /* error value e_xy */
+    float ed = (dx + dy == 0) ? 1.0f : sqrtf((float)dx * dx + (float)dy * dy), val;
     wd = 0.5f * (wd + 1.0f);
 
     /* define image bounds */
@@ -170,8 +175,8 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
         /* pixel loop */
         err += derr; derr = 0;
         pts[1] += dx0; dx0 = 0;
-        val = profile(max_val, (err - dx + dy) / ed, wd);
-        setter(out, pts[1], pts[0], val, max_val);
+        val = max_val * profile((err - dx + dy) / ed, wd);
+        setter(out, pts[1], pts[0], val);
 
         if (2 * err >= -dx)
         {
@@ -180,8 +185,8 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
                  abs(e2) < ed * wd && y2 >= bnd[0] && y2 <= bnd[2];
                  e2 += dx, y2 += sy)
             {
-                val = profile(max_val, e2 / ed, wd);
-                setter(out, pts[1], y2, val, max_val);
+                val = max_val * profile(e2 / ed, wd);
+                setter(out, pts[1], y2, val);
             }
             if (pts[1] == pts[3]) break;
             derr -= dy; dx0 += sx;
@@ -193,8 +198,8 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
                  abs(e2) < ed * wd && x2 >= bnd[1] && x2 <= bnd[3];
                  e2 -= dy, x2 += sx)
             {
-                val = profile(max_val, e2 / ed, wd);
-                setter(out, x2, pts[0], val, max_val);
+                val = max_val * profile(e2 / ed, wd);
+                setter(out, x2, pts[0], val);
             }
             if (pts[0] == pts[2]) break;
             derr += dx; pts[0] += sy;
@@ -202,8 +207,8 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
     }
 }
 
-int draw_line(unsigned int *out, const size_t *dims, unsigned int max_val, float *lines, const size_t *ldims,
-              float dilation, line_profile profile)
+int draw_line_int(unsigned *out, const size_t *dims, unsigned max_val, float *lines, const size_t *ldims,
+                 float dilation, line_profile profile)
 {
     /* check parameters */
     if (!out || !lines || !profile) {ERROR("draw_line: one of the arguments is NULL."); return -1;}
@@ -213,7 +218,7 @@ int draw_line(unsigned int *out, const size_t *dims, unsigned int max_val, float
     if (ldims[0] == 0) return 0;
 
     array larr = new_array(2, ldims, sizeof(float), lines);
-    array oarr = new_array(2, dims, sizeof(unsigned int), out);
+    array oarr = new_array(2, dims, sizeof(unsigned), out);
     line ln = init_line(larr, 1);
 
     for (int i = 0; i < (int)ldims[0]; i++)
@@ -225,7 +230,7 @@ int draw_line(unsigned int *out, const size_t *dims, unsigned int max_val, float
                       roundf(GET(ln, float, 3)), roundf(GET(ln, float, 2))};
 
         plot_line_width(oarr, oarr->dims, pts, GET(ln, float, 4) + dilation, max_val,
-                        set_pixel_color, profile);
+                        set_pixel_int, profile);
     }
 
     DEALLOC(ln); free_array(larr); free_array(oarr);
@@ -233,7 +238,38 @@ int draw_line(unsigned int *out, const size_t *dims, unsigned int max_val, float
     return 0;
 }
 
-int draw_line_index(unsigned int **out, size_t *n_idxs, const size_t *dims, unsigned int max_val,
+int draw_line_float(float *out, const size_t *dims, float *lines, const size_t *ldims, float dilation,
+                    line_profile profile)
+{
+    /* check parameters */
+    if (!out || !lines || !profile) {ERROR("draw_line: one of the arguments is NULL."); return -1;}
+    if (!dims[0] && !dims[1]) {ERROR("draw_line: image size must be positive."); return -1;}
+    if (dilation < 0.0) {ERROR("draw_line: dilation must be a positive number"); return -1;}
+
+    if (ldims[0] == 0) return 0;
+
+    array larr = new_array(2, ldims, sizeof(float), lines);
+    array oarr = new_array(2, dims, sizeof(float), out);
+    line ln = init_line(larr, 1);
+
+    for (int i = 0; i < (int)ldims[0]; i++)
+    {
+        UPDATE_LINE(ln, i);
+
+        /* Convert coordinates to points */
+        int pts[4] = {roundf(GET(ln, float, 1)), roundf(GET(ln, float, 0)),
+                      roundf(GET(ln, float, 3)), roundf(GET(ln, float, 2))};
+
+        plot_line_width(oarr, oarr->dims, pts, GET(ln, float, 4) + dilation, 1,
+                        set_pixel_float, profile);
+    }
+
+    DEALLOC(ln); free_array(larr); free_array(oarr);
+
+    return 0;
+}
+
+int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, size_t *n_idxs, const size_t *dims,
                     float *lines, const size_t *ldims, float dilation, line_profile profile)
 {
     /* check parameters */
@@ -244,7 +280,7 @@ int draw_line_index(unsigned int **out, size_t *n_idxs, const size_t *dims, unsi
     if (ldims[0] == 0) return 0;
 
     array larr = new_array(2, ldims, sizeof(float), lines);
-    ntuple_list idxs = new_ntuple_list(4, 1);
+    index_tuple idxs = new_index_tuple(1);
 
     line ln = init_line(larr, 1);
     float wd;
@@ -263,14 +299,14 @@ int draw_line_index(unsigned int **out, size_t *n_idxs, const size_t *dims, unsi
 
         // Expand the list if needed
         if (idxs->max_size < idxs->size + (size_t)ln_area)
-            realloc_ntuple_list(idxs, idxs->size + (size_t)ln_area);
+            realloc_index_tuple(idxs, idxs->size + (size_t)ln_area);
 
         // Write down the indices
-        plot_line_width(idxs, dims, pts, wd, max_val, set_pixel_index, profile);
+        plot_line_width(idxs, dims, pts, wd, 1, set_pixel_index, profile);
     }
 
-    realloc_ntuple_list(idxs, idxs->size);
-    *out = idxs->values;
+    realloc_index_tuple(idxs, idxs->size);
+    *idx = idxs->idx; *x = idxs->x; *y = idxs->y; *val = idxs->val;
     *n_idxs = idxs->size;
 
     DEALLOC(ln); free_array(larr); DEALLOC(idxs);
@@ -278,8 +314,8 @@ int draw_line_index(unsigned int **out, size_t *n_idxs, const size_t *dims, unsi
     return 0;
 }
 
-static void create_line_image_pair(unsigned int **out, int **pts, const size_t *dims, unsigned int max_val,
-                                   float *ln0, float *ln1, float dilation, line_profile profile)
+static void create_line_image_pair(float **out, int **pts, const size_t *dims, float *ln0, float *ln1,
+                                   float dilation, line_profile profile)
 {
     /* Convert coordinates 'ln0' to points */
     int pts0[4] = {roundf(ln0[1]), roundf(ln0[0]), roundf(ln0[3]), roundf(ln0[2])};
@@ -324,10 +360,10 @@ static void create_line_image_pair(unsigned int **out, int **pts, const size_t *
 
     /* Create an image 'oarr' */
     size_t odims[2] = {(*pts)[2] - (*pts)[0], (*pts)[3] - (*pts)[1]};
-    unsigned int *img1 = calloc(odims[0] * odims[1], sizeof(unsigned int));
-    unsigned int *img2 = calloc(odims[0] * odims[1], sizeof(unsigned int));
-    array arr1 = new_array(2, odims, sizeof(unsigned int), img1);
-    array arr2 = new_array(2, odims, sizeof(unsigned int), img2);
+    float *img1 = calloc(odims[0] * odims[1], sizeof(float));
+    float *img2 = calloc(odims[0] * odims[1], sizeof(float));
+    array arr1 = new_array(2, odims, sizeof(float), img1);
+    array arr2 = new_array(2, odims, sizeof(float), img2);
 
     /* Offset points 'pts0', 'pts1' by the origin of 'orect' */
     pts0[0] -= (*pts)[0]; pts0[1] -= (*pts)[1];
@@ -336,21 +372,19 @@ static void create_line_image_pair(unsigned int **out, int **pts, const size_t *
     pts1[2] -= (*pts)[0]; pts1[3] -= (*pts)[1];
 
     /* Plot the lines */
-    plot_line_width(arr1, arr1->dims, pts0, ln0[4] + dilation, max_val,
-                    set_pixel_color, profile);
-    plot_line_width(arr2, arr2->dims, pts1, ln1[4] + dilation, max_val,
-                    set_pixel_color, profile);
+    plot_line_width(arr1, arr1->dims, pts0, ln0[4] + dilation, 1, set_pixel_float, profile);
+    plot_line_width(arr2, arr2->dims, pts1, ln1[4] + dilation, 1, set_pixel_float, profile);
 
     free_array(arr1); free_array(arr2);
 
-    (*out) = MALLOC(unsigned int, odims[0] * odims[1]);
+    (*out) = MALLOC(float, odims[0] * odims[1]);
     for (int i = 0; i < (int)(odims[0] * odims[1]); i++) (*out)[i] = MAX(img1[i], img2[i]);
 
     DEALLOC(img1); DEALLOC(img2);
 }
 
-static void create_line_image(unsigned int **out, int **opts, const size_t *dims, unsigned int max_val,
-                              float *ln, float dilation, line_profile profile)
+static void create_line_image(float **out, int **opts, const size_t *dims, float *ln, float dilation,
+                              line_profile profile)
 {
     /* Convert coordinates 'ln' to points */
     int pts[4] = {roundf(ln[1]), roundf(ln[0]), roundf(ln[3]), roundf(ln[2])};
@@ -383,31 +417,28 @@ static void create_line_image(unsigned int **out, int **opts, const size_t *dims
 
     /* Create an image 'oarr' */
     size_t odims[2] = {(*opts)[2] - (*opts)[0], (*opts)[3] - (*opts)[1]};
-    (*out) = (unsigned int *)calloc(odims[0] * odims[1], sizeof(unsigned int));
-    array oarr = new_array(2, odims, sizeof(unsigned int), *out);
+    (*out) = (float *)calloc(odims[0] * odims[1], sizeof(float));
+    array oarr = new_array(2, odims, sizeof(float), *out);
 
     /* Offset points 'pts' by the origin of 'opts' */
     pts[0] -= (*opts)[0]; pts[1] -= (*opts)[1];
     pts[2] -= (*opts)[0]; pts[3] -= (*opts)[1];
 
     /* Plot the lines */
-    plot_line_width(oarr, oarr->dims, pts, ln[4] + dilation, max_val,
-                    set_pixel_color, profile);
+    plot_line_width(oarr, oarr->dims, pts, ln[4] + dilation, 1, set_pixel_float, profile);
 
     free_array(oarr);
 }
 
-static float collapse_pair(float *oln, unsigned int *img, int *pts, float *data, const size_t *dims,
+static float collapse_pair(float *oln, float *img, int *pts, float *data, const size_t *dims,
                            float *ln0, float *ln1, size_t lsize)
 {
-    int i, idx;
-    float MX, MY, MXY, MXX, MYY, M0, pt[2];
+    int i, idx, pt[2];
+    float MX, MY, MXY, MXX, MYY, M0;
     float mu_x, mu_y, mu_xy, mu_xx, mu_yy, th, val;
+    /* Create data array */
     array darr = new_array(2, dims, sizeof(float), data);
     rect_iter ri;
-
-    // fprintf(stderr, "ln0 = (%.2f, %.2f, %.2f, %.2f, %.2f)\n", ln0[0], ln0[1], ln0[2], ln0[3]);
-    // fprintf(stderr, "ln1 = (%.2f, %.2f, %.2f, %.2f, %.2f)\n", ln1[0], ln1[1], ln1[2], ln1[3]);
 
     /* Calculate image moments */
     M0 = MX = MY = MXY = MXX = MYY = 0.0f;
@@ -418,7 +449,7 @@ static float collapse_pair(float *oln, unsigned int *img, int *pts, float *data,
         pt[1] = ri->coord[1] + pts[1];
         RAVEL_INDEX(pt, &idx, darr);
 
-        val = data[idx] * (float)(img[ri->index]);
+        val = data[idx] * img[ri->index];
         val = (val < 0.0f) ? 0.0f : val;
         M0 += val; MX += pt[1] * val; MY += pt[0] * val;
         MXY += pt[0] * pt[1] * val; MYY += SQ(pt[0]) * val; MXX += SQ(pt[1]) * val;
@@ -432,7 +463,7 @@ static float collapse_pair(float *oln, unsigned int *img, int *pts, float *data,
         mu_xy = 2.0f * (MXY / M0 - mu_x * mu_y);
         mu_xx = MXX / M0 - mu_x * mu_x; mu_yy = MYY / M0 - mu_y * mu_y;
 
-        /* Orientation and major axis length */ 
+        /* Line inclination */ 
         th = 0.5f * atanf(mu_xy / (mu_xx - mu_yy));
         if (mu_xx < mu_yy) th += M_PI_2;
 
@@ -459,14 +490,12 @@ static float collapse_pair(float *oln, unsigned int *img, int *pts, float *data,
         for (i = 4; i < (int)lsize; i++) oln[i] = 0.5f * (ln0[i] + ln1[i]);
     }
 
-    // fprintf(stderr, "oln = (%.2f, %.2f, %.2f, %.2f, %.2f)\n", oln[0], oln[1], oln[2], oln[3]);
-
     free_array(darr);
 
     return M0;
 }
 
-static float find_overlap(unsigned int *img0, int *pts0, unsigned int *img1, int *pts1, float *data, const size_t *dims)
+static float find_overlap(float *img0, int *pts0, float *img1, int *pts1, float *data, const size_t *dims)
 {
     /* Define overlap rectangle */
     /* Points are given by [j0, i0, j1, i1], where {j <-> y, i <-> x} */
@@ -483,28 +512,26 @@ static float find_overlap(unsigned int *img0, int *pts0, unsigned int *img1, int
     /* Calculate overlap and union */
     float ovl = 0.0f, unn = 0.0f;
     int i0, j0, i1, j1;
-    unsigned int val0, val1;
+    float val0, val1;
     for (int j = pts[0]; j < pts[2]; j++)
     {
         for (int i = pts[1]; i < pts[3]; i++)
         {
             i0 = i - pts0[1]; j0 = j - pts0[0];
             if ((i0 >= 0) && (i0 < (int)s0[1]) && (j0 >= 0) && (j0 < (int)s0[0])) val0 = img0[j0 * s0[1] + i0];
-            else val0 = 0;
+            else val0 = 0.0f;
 
             i1 = i - pts1[1]; j1 = j - pts1[0];
             if ((i1 >= 0) && (i1 < (int)s1[1]) && (j1 >= 0) && (j1 < (int)s1[0])) val1 = img1[j1 * s1[1] + i1];
-            else val1 = 0;
+            else val1 = 0.0f;
 
             if (data[j * dims[1] + i] > 0.0)
             {
-                ovl += data[j * dims[1] + i] * MIN(val0, val1) / LVAL_MAX;
-                unn += data[j * dims[1] + i] * MAX(val0, val1) / LVAL_MAX;
+                ovl += data[j * dims[1] + i] * MIN(val0, val1);
+                unn += data[j * dims[1] + i] * MAX(val0, val1);
             }
         }
     }
-
-    // fprintf(stderr, "overlap = %.2f\n", unn ? ovl / unn : 0.0f);
 
     if (unn) return ovl / unn;
     return 0.0f;
@@ -520,11 +547,10 @@ int filter_line(float *olines, unsigned char *proc, float *data, const size_t *d
     if (ldims[0] == 0) return 0;
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
 
-    int i, idx, pts[4];
+    int i, idx, pts[4], pt[2];
     int *ptp = pts;
-    float I0, val, pt[2];
-    float *ln;
-    unsigned int *img;
+    float I0, val;
+    float *ln, *img;
     array darr = new_array(2, dims, sizeof(float), data);
     rect_iter ri;
 
@@ -535,7 +561,7 @@ int filter_line(float *olines, unsigned char *proc, float *data, const size_t *d
         if (proc[i] == 0) continue;
 
         /* Draw a line */
-        create_line_image(&img, &ptp, dims, LVAL_MAX, ln, dilation, profile);
+        create_line_image(&img, &ptp, dims, ln, dilation, profile);
 
         /* Calculate zero-th image moment */
         I0 = 0.0f;
@@ -545,7 +571,7 @@ int filter_line(float *olines, unsigned char *proc, float *data, const size_t *d
             pt[1] = ri->coord[1] + pts[1];
             RAVEL_INDEX(pt, &idx, darr);
 
-            val = data[idx] * (float)(img[ri->index]) / LVAL_MAX;
+            val = data[idx] * img[ri->index];
             I0 += (val < 0.0f) ? 0.0f : val;
         }
         ri_del(ri);
@@ -592,7 +618,7 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
     }
 
     kd_tree tree = kd_build(coords, ldims[0], 2, idxs, sizeof(int));
-    unsigned int *img_pair, *oimg;
+    float *img_pair, *oimg;
     int pts_pair[4], opts[4];
     int *ptp_pair = pts_pair, *optp = opts;
     float *oln = MALLOC(float, ldims[1]);
@@ -612,21 +638,15 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
                 /* find all the lines in a range */
                 query_stack stack = kd_find_range(tree, coords + 2 * i, cutoff);
 
-                // fprintf(stderr, "Checking for neighbours: ln0 = (%.2f, %.2f, %.2f, %.2f)\n",
-                //         ln0[0], ln0[1], ln0[2], ln0[3]);
-
                 for (query_stack node = stack; node; node = node->next)
                 {
                     j = *(int *)node->query->node->data;
                     ln1 = olines + j * ldims[1];
 
-                    // fprintf(stderr, "Found neighbour: ln1 = (%.2f, %.2f, %.2f, %.2f)\n",
-                    //         ln1[0], ln1[1], ln1[2], ln1[3]);
-
                     if (proc[j] && i != j)
                     {
                         /* Create an image of a pair */
-                        create_line_image_pair(&img_pair, &ptp_pair, dims, LVAL_MAX, ln0, ln1, dilation, profile);
+                        create_line_image_pair(&img_pair, &ptp_pair, dims, ln0, ln1, dilation, profile);
                         
                         /* Collapse a pair of lines */
                         M0 = collapse_pair(oln, img_pair, pts_pair, data, dims, ln0, ln1, ldims[1]);
@@ -634,7 +654,7 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
                         if (M0 > 0.0f)
                         {
                             /* Create an image of oln */
-                            create_line_image(&oimg, &optp, dims, LVAL_MAX, oln, dilation, profile);
+                            create_line_image(&oimg, &optp, dims, oln, dilation, profile);
 
                             /* Find overlap between imp_pair and imp_oln */
                             corr = find_overlap(img_pair, pts_pair, oimg, opts, data, dims);
@@ -678,11 +698,10 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
     int i, idx, len, pts[4], pt[2];
     int *ptp = pts;
     float bgd, div, val;
-    float *ln, *buffer;
-    unsigned int *img;
+    float *ln, *buffer, *img;
     rect_iter ri;
 
-    array marr = new_array(2, dims, sizeof(unsigned int), calloc(dims[0] * dims[1], sizeof(unsigned int)));
+    array marr = new_array(2, dims, sizeof(unsigned), calloc(dims[0] * dims[1], sizeof(unsigned)));
     array Iarr = new_array(2, dims, sizeof(float), calloc(dims[0] * dims[1], sizeof(float)));
     array Warr = new_array(2, dims, sizeof(int), calloc(dims[0] * dims[1], sizeof(int)));
 
@@ -692,13 +711,13 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
         pts[0] = roundf(ln[1]); pts[1] = roundf(ln[0]);
         pts[2] = roundf(ln[3]); pts[3] = roundf(ln[2]);
         plot_line_width(marr, marr->dims, pts, ln[4] + dilations[1], 1,
-                        set_pixel_color, tophat_profile);
+                        set_pixel_int, tophat_profile);
     }
 
     for (i = 0, ln = lines; i < (int)ldims[0]; i++, ln += ldims[1])
     {
         /* Calculate bgd = median((img - streak_mask) * data) */
-        create_line_image(&img, &ptp, dims, 1, ln, dilations[2], tophat_profile);
+        create_line_image(&img, &ptp, dims, ln, dilations[2], tophat_profile);
         buffer = MALLOC(float, (pts[2] - pts[0]) * (pts[3] - pts[1]));
         len = 0;
 
@@ -709,7 +728,7 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
 
             RAVEL_INDEX(pt, &idx, Iarr);
 
-            if (img[ri->index] && !GET(marr, unsigned int, idx))
+            if (img[ri->index] > 0.0f && !GET(marr, unsigned, idx))
             {
                 buffer[len++] = data[idx];
             }
@@ -717,24 +736,24 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
         DEALLOC(img); ri_del(ri);
 
         bgd = *(float *)wirthmedian(buffer, len, sizeof(float), compare_float);
-        // fprintf(stderr, "bgd = %f\n", bgd);
+
         DEALLOC(buffer);
 
         /* Calculate div = max(img * data) */
-        create_line_image(&img, &ptp, dims, LVAL_MAX, ln, dilations[0], profile);
+        create_line_image(&img, &ptp, dims, ln, dilations[0], profile);
         div = 0.0f;
         for (ri = ri_ini(2, pts, pts + 2); !ri_end(ri); ri_inc(ri))
         {
             pt[0] = ri->coord[0] + pts[0];
             pt[1] = ri->coord[1] + pts[1];
             RAVEL_INDEX(pt, &idx, Iarr);
-            val = data[idx] * (float)img[ri->index] / LVAL_MAX;
+            val = data[idx] * img[ri->index];
             if (div < val) div = val;
         }
         ri_del(ri);
 
         /* Write down a normalised reflection profile
-           rp = (data * img - bgd) / (div - bgd)
+           p = (data * img - bgd) / (div - bgd)
          */
         div = 1.0f / (div - bgd);
         for (ri = ri_ini(2, pts, pts + 2); !ri_end(ri); ri_inc(ri))
@@ -745,7 +764,7 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
 
             if (img[ri->index])
             {
-                GET(Iarr, float, idx) += div * (data[idx] * (float)img[ri->index] / LVAL_MAX - bgd);
+                GET(Iarr, float, idx) += div * (data[idx] * img[ri->index] - bgd);
                 GET(Warr, int, idx) += 1;
             }
         }
@@ -761,6 +780,64 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
 
     DEALLOC(Iarr->data); free_array(Iarr);
     DEALLOC(Warr->data); free_array(Warr);
+
+    return 0;
+}
+
+int refine_line(float *olines, float *data, const size_t *dims, float *ilines, const size_t *ldims,
+                float dilation, line_profile profile)
+{
+    if (!olines || !data || !ilines) {ERROR("refine_line: one of the arguments is NULL."); return -1;}
+    if (!dims[0] && !dims[1]) {ERROR("refine_line: data array must have a positive size."); return -1;}
+
+    if (ldims[0] == 0) return 0;
+    if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
+
+    int i, idx, pts[4], pt[2];
+    int *ptp = pts;
+    float M0, MX, MXX, mu_x, mu_xx, x, val, tmax, tau[2];
+    float *ln, *img;
+
+    /* Create data array */
+    array darr = new_array(2, dims, sizeof(float), data);
+    rect_iter ri;
+
+    for (i = 0, ln = olines; i < (int)ldims[0]; i++, ln += ldims[1])
+    {
+        create_line_image(&img, &ptp, dims, ln, dilation, profile);
+
+        tmax = sqrtf(SQ(ln[2] - ln[0]) + SQ(ln[3] - ln[1]));
+        tau[0] = (ln[2] - ln[0]) / tmax; tau[1] = (ln[3] - ln[1]) / tmax;
+
+        /* Calculate image moments */
+        M0 = MX = MXX = 0.0f;
+        for (ri = ri_ini(2, pts, pts + 2); !ri_end(ri); ri_inc(ri))
+        {
+            /* point is given by [j, i], where {j <-> y, i <-> x} */
+            pt[0] = ri->coord[0] + pts[0];
+            pt[1] = ri->coord[1] + pts[1];
+            RAVEL_INDEX(pt, &idx, darr);
+
+            val = data[idx] * img[ri->index];
+            val = (val < 0.0f) ? 0.0f : val;
+            x = (pt[0] - ln[1]) * tau[0] - (pt[1] - ln[0]) * tau[1];
+            M0 += val; MX += x * val; MXX += SQ(x) * val;
+        }
+        DEALLOC(img); ri_del(ri);
+
+        if (M0 > 0.0f)
+        {
+            /* Central moments */
+            mu_x = MX / M0; mu_xx = MXX / M0 - mu_x * mu_x;
+
+            /* Shift the line */
+            ln[0] -= tau[1] * mu_x; ln[1] += tau[0] * mu_x;
+            ln[2] -= tau[1] * mu_x; ln[3] += tau[0] * mu_x;
+            ln[4] = sqrtf(8.0f * mu_xx);
+        }
+    }
+
+    free_array(darr);
 
     return 0;
 }
@@ -912,7 +989,6 @@ int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats)
     return 0;
 }
 
-
 static void tilt_to_rotmat(double *rm, double *ang)
 {
     float a = cos(0.5 * ang[0]), b = -sin(ang[1]) * cos(ang[2]) * sin(0.5 * ang[0]);
@@ -1009,4 +1085,89 @@ int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats)
     DEALLOC(rm_ln); free_array(rm_arr);
 
     return 0;
+}
+
+/*---------------------------------------------------------------------------
+                        Model refinement criterion
+---------------------------------------------------------------------------*/
+
+double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, size_t *dims, float **lines, const size_t *ldims,
+                     size_t lsize, float dilation, float epsilon, line_profile profile, unsigned threads)
+{
+    if (!ij || !p || !dims || !lines || !ldims) {ERROR("cross_entropy: one of the arguments is NULL."); return 0.0;}
+    if (lsize == 0 || dims[0] == 0 || dims[1] == 0) return 0.0;
+
+    double entropy = 0.0;
+    threads = (threads > lsize) ? lsize : threads;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        int j, ln_area, k0, k, pts[4];
+        float wd, tmax, val, t, tau[2];
+        float *ln;
+        double crit;
+
+        index_tuple idxs;
+        array iarr = new_array(2, dims, sizeof(float), MALLOC(float, dims[0] * dims[1]));
+
+        #pragma omp for
+        for (int i = 0; i < (int)lsize; i++)
+        {
+            idxs = new_index_tuple(1);
+            memset(iarr->data, 0, iarr->size * iarr->item_size);
+
+            for (j = 0, ln = lines[i]; j < (int)ldims[2 * i]; j++, ln += ldims[2 * i + 1])
+            {
+                /* Convert coordinates to points */
+                pts[0] = roundf(ln[1]); pts[1] = roundf(ln[0]); pts[2] = roundf(ln[3]); pts[3] = roundf(ln[2]);
+
+                wd = ln[4] + dilation;
+                k0 = idxs->size;
+                ln_area = (2 * ((int)wd + 1.0f) + abs(pts[2] - pts[0])) * (2 * ((int)wd + 1.0f) + abs(pts[3] - pts[1]));
+
+                /* Expand the list if needed */
+                if (idxs->max_size < idxs->size + (size_t)ln_area)
+                    realloc_index_tuple(idxs, idxs->size + (size_t)ln_area);
+
+                /* Write down the indices */
+                plot_line_width(idxs, dims, pts, wd + 1.0f, 1, set_pixel_index, profile);
+
+                /* Find the unit vector */
+                tmax = sqrtf(SQ(ln[2] - ln[0]) + SQ(ln[3] - ln[1]));
+                tau[0] = (ln[2] - ln[0]) / tmax; tau[1] = (ln[3] - ln[1]) / tmax;
+                wd = 0.5f * (wd + 1.0f);
+
+                for (k = k0; k < (int)idxs->size; k++)
+                {
+                    if (idxs->val[k] > 0.0f)
+                    {
+                        /* Find distance to the line */
+                        val = SQ((idxs->y[k] - ln[1]) * tau[0] - (idxs->x[k] - ln[0]) * tau[1]);
+                        t = (idxs->x[k] - ln[0]) * tau[0] + (idxs->y[k] - ln[1]) * tau[1];
+                        if (t < 0.0) val += SQ(t);
+                        if (t > tmax) val += SQ(t - tmax);
+
+                        val = profile(sqrtf(val), wd);
+                        set_pixel_float(iarr, idxs->x[k], idxs->y[k], val);
+                    }
+                }
+            }
+
+            free_index_tuple(idxs);
+
+            /* Calculate the cross entropy: ce = -p * log(q) */
+            crit = 0.0;
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
+            {
+                crit -= p[j] * log(MAX(GET(iarr, float, ij[j]), epsilon)); 
+            }
+
+            #pragma omp atomic
+            entropy += crit;
+        }
+
+        DEALLOC(iarr->data); free_array(iarr);
+    }
+
+    return entropy;
 }

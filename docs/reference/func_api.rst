@@ -36,12 +36,25 @@ Bresenham's algorithm [BSH]_.
 .. toctree::
     :maxdepth: 1
 
-    funcs/draw_line
-    funcs/draw_line_index
-    funcs/draw_line_stack
+    funcs/draw_line_image
+    funcs/draw_line_mask
+    funcs/draw_line_table
 
-CBD pattern simulation
-----------------------
+CBC patterns processing
+-----------------------
+
+Routines used to prepare and create sparse CBC patterns out of exerimentally measured patterns.
+
+.. toctree::
+    :maxdepth: 1
+
+    funcs/normalise_pattern
+    funcs/refine_pattern
+    funcs/subtract_background
+    funcs/project_effs
+
+CBD forward model
+-----------------
 
 Some of the routines required to implement the CBD geometry and simulate a CBD pattern are implemented in C to boost the
 performance and enable the concurrent computations.
@@ -57,18 +70,18 @@ performance and enable the concurrent computations.
     funcs/cartesian_to_spherical
     funcs/calc_source_lines
     funcs/filter_hkl
+    funcs/ce_criterion
 
-Diffraction signal processing
------------------------------
+Intensity scaling
+-----------------
 
 A set of functions used in the CBC intensity scaling and the estimation of a crystal diffraction efficiency map.
 
 .. toctree::
     :maxdepth: 1
 
-    funcs/find_kins
-    funcs/update_sf
-    funcs/scaling_criterion
+    funcs/binterpolate
+    funcs/poisson_criterion
+    funcs/ls_criterion
     funcs/kr_predict
     funcs/kr_grid
-    funcs/xtal_interpolate

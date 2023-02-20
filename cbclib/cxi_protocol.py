@@ -77,6 +77,23 @@ class CXIProtocol(INIContainer):
         """
         return cls.import_ini(CXI_PROTOCOL)
 
+    def add_attribute(self, attr: str, datatype: str, load_paths: List[str],
+                      kind: str) -> CXIProtocol:
+        """Add a data attribute to the protocol.
+
+        Args:
+            attr : Attribute's name.
+            datatype : Attribute's data type.
+            load_paths : List of attribute's CXI paths.
+            kind : Attribute's kind.
+
+        Returns:
+            A new protocol with the new attribute included.
+        """
+        return self.replace(datatypes=dict(**self.datatypes, **{attr: datatype}),
+                            load_paths = dict(**self.load_paths, **{attr: load_paths}),
+                            kinds=dict(**self.kinds, **{attr: kind}))
+
     def find_path(self, attr: str, cxi_file: h5py.File) -> str:
         """Find attribute's path in a CXI file `cxi_file`.
 

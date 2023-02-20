@@ -1,6 +1,6 @@
-SampleProblem
+SampleRefiner
 =============
 
-.. autoclass:: cbclib.SampleProblem
+.. autoclass:: cbclib.SampleRefiner
     :members:
     :inherited-members:

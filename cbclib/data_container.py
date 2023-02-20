@@ -222,8 +222,9 @@ class INIContainer(DataContainer):
         for section, val in self.ini_dict().items():
             ini_parser[section] = val
 
-        with open(ini_file, 'w') as out_file:
-            ini_parser.write(out_file)
+        with np.printoptions(precision=None):
+            with open(ini_file, 'w') as out_file:
+                ini_parser.write(out_file)
 
 class Transform(DataContainer):
     """Abstract transform class."""

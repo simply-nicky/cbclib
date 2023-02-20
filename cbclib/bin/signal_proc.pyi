@@ -19,88 +19,7 @@ def unique_indices(frames: np.ndarray, indices: np.ndarray) -> Tuple[np.ndarray,
     """
     ...
 
-def find_kins(x: np.ndarray, y: np.ndarray, hkl: np.ndarray, fidxs: np.ndarray,
-              smp_pos: np.ndarray, rot_mat: np.ndarray, basis: np.ndarray,
-              x_pixel_size: float, y_pixel_size: float, num_threads: int=1) -> np.ndarray:
-    """Convert detector coordinates to incoming wavevectors. The incoming wavevectors are normalised
-    and specify the spatial frequencies of the incoming beam that bring about the diffraction signal
-    at a given coordinate on the detector.
-
-    Args:
-        x : Detector x coordinates in pixels.
-        y : Detector y coordinates in pixels.
-        hkl : Miller indices.
-        fidxs : Indices that give the unique frames.
-        smp_pos : Sample positions for each frame.
-        rot_mat : Rotation matrices of the sample for each frames.
-        basis : Basis vectors of crystal lattice unit cell.
-        x_pixel_size : Detector pixel size along the x axis in meters.
-        y_pixel_size : Detector pixel size along the y axis in meters.
-        num_threads : Number of threads used in the calculations.
-
-    Returns:
-        A set of incoming wavevectors.
-    """
-    ...
-
-def update_sf(bp: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray,
-              hkl_idxs: np.ndarray, iidxs: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
-    """Calculate crystal structure factors by using the ordinary least squares solution.
-
-    Args:
-        bp : Bragg profile.
-        sgn : Diffraction signal.
-        xidx : Crystal diffraction map frame indices.
-        xmap : Mapping of diffraction signal into the crystal plane grid.
-        xtal : Crystal diffraction efficiency map.
-        hkl_idxs : Miller indices.
-        iidxs : Indices on the input arrays that give the unique diffraction streak indices.
-        num_threads : Number of threads used in the calculations.
-
-    Raises:
-        ValueError : If ``bp``, ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
-        ValueError : If ``iiidxs`` last index is not equal to ``sgn`` size.
-
-    Returns:
-        A new set of crystal structure factors and structure factor uncertainties.
-    """
-    ...
-
-def scaling_criterion(sf: np.ndarray, bp: np.ndarray, sgn: np.ndarray, xidx: np.ndarray, xmap: np.ndarray,
-                      xtal: np.ndarray, iidxs: np.ndarray, num_threads: int=1) -> float:
-    r"""Return the mean abolute error (MAE) of the CBC dataset intensity scaling.
-
-    Args:
-        sf : Crystal structure factors.
-        bp : Bragg profile
-        sgn : Diffraction signal.
-        xidx : Crystal diffraction map frame indices.
-        xmap : Mapping of diffraction signal into the crystal plane grid.
-        xtal : Crystal diffraction efficiency map.
-        iidxs : Indices on the input arrays that give the unique diffraction streak indices.
-        num_threads : Number of threads used in the calculations.
-
-    Notes:
-        The MAE is given by:
-
-        .. math::
-            L(I, D_{xtal}, F_{xtal}) = \frac{1}{N} \sum_{i = 0}^N \left| I - D_{xtal}(x_i, y_i)
-            p_{bragg}(x_i, y_i) F_{xtal}(hkl_i) \right|,
-
-        where :math:`I` - diffraction signal, :math:`p_{bragg}` - Bragg reflection profile,
-        :math:`D_{xtal}` - crystal diffraction efficiency map, and
-        :math:`F_{xtal}` - crystal structure factors.
-
-    Raises:
-        ValueError : If ``bp``, ``sf``, ``sgn``, ``xidx``, and ``xmap`` have incompatible shapes.
-        ValueError : If ``iiidxs`` last index is not equal to ``sf`` size.
-
-    Returns:
-        Mean absolute error.
-    """
-    ...
-
-def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float, cutoff: float,
+def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
                w: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
     """Perform the multi-dimensional Nadaraya-Watson kernel regression [KerReg]_.
 
@@ -109,7 +28,6 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float, cu
         x : Coordinates array.
         x_hat : Set of coordinates where the fit is to be calculated.
         sigma : Kernel bandwidth.
-        cutoff : Distance cutoff used for the calculations.
         w : A set of weights, unitary weights are assumed if it's not provided.
         num_threads : Number of threads used in the calculations.
 
@@ -121,13 +39,13 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float, cu
         ValueError : If ``x`` and ``y`` have incompatible shapes.
 
     References:
-        .. [KerReg] E. A. Nadaraya, “On estimating regression,” Theory Probab. & Its
-                    Appl. 9, 141-142 (1964).
+        .. [KerReg] E. A. Nadaraya, “On estimating regression,” Theory Probab. & Its Appl. 9,
+            141-142 (1964).
     """
     ...
 
-def kr_grid(y: np.ndarray, x: np.ndarray, step: Tuple[float, float], sigma: float,
-            cutoff: float, w: Optional[np.ndarray]=None, return_roi: bool=True,
+def kr_grid(y: np.ndarray, x: np.ndarray, grid: Tuple[np.ndarray, ...], sigma: float,
+            w: Optional[np.ndarray]=None, return_roi: bool=True,
             num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     """Perform the multi-dimensional Nadaraya-Watson kernel regression [KerReg]_ over a grid of
     points.
@@ -137,7 +55,6 @@ def kr_grid(y: np.ndarray, x: np.ndarray, step: Tuple[float, float], sigma: floa
         x : Coordinates array.
         step : Grid sampling interval.
         sigma : Kernel bandwidth.
-        cutoff : Distance cutoff used for the calculations.
         w : A set of weights, unitary weights are assumed if it's not provided.
         return_roi : Return region of interest of the sampling grid if True.
         num_threads : Number of threads used in the calculations.
@@ -150,19 +67,120 @@ def kr_grid(y: np.ndarray, x: np.ndarray, step: Tuple[float, float], sigma: floa
     """
     ...
 
-def xtal_interpolate(xidx: np.ndarray, xmap: np.ndarray, xtal: np.ndarray, num_threads: int=1) -> np.ndarray:
-    """Find the crystal efficiency values at the given coordinates by using the bilinear
-    interpolation.
+def binterpolate(data: np.ndarray, coords: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Perform bilinear multidimensional interpolation on regular grids. The integer grid starting
+    from ``(0, 0, ...)`` to ``(data.shape[0] - 1, data.shape[1] - 1, ...)`` is implied.
 
     Args:
-        xidx : Crystal diffraction map frame indices.
-        xmap : Mapping of diffraction signal into the crystal plane grid.
-        xtal : Crystal diffraction efficiency map.
+        data : The data on the regular grid in n dimensions.
+        coords : The coordinates to sample the gridded data at.
+        num_threads : Number of threads used in the calculations.
 
     Raises:
-        ValueError : If ``xidx`` and ``xmap`` have incompatible shapes.
+        ValueError : If ``data`` and ``coords`` have incompatible shapes.
 
     Returns:
-        Interpolated crystall efficiency values.
+        Interpolated values at input coordinates.
     """
     ...
+
+def poisson_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.ndarray,
+                      xtal_bi: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray,
+                      num_threads: int=1) -> Tuple[float, np.ndarray]:
+    r"""Calculate the Poisson negative log likelihood that the measured intensities ``I0`` are
+    explained by the current estimate of crystal structure factors ``x`` and sample projection
+    maps ``xtal_bi``.
+
+    Args:
+        x : Current estimate of crystal structure factors and intercept values.
+        prof : Standard profiles.
+        I0 : Measured diffracted signal.
+        bgd : Background level.
+        xtal_bi : Sample's projection maps.
+        hkl_idxs : Set of indices that numerate different Bragg reflections.
+        iidxs : Array of first indices pertaining to different diffraction streaks.
+        num_threads : Number of threads used in the calculations.
+
+    Notes:
+        The intensity profile :math:`I_{hkl}(\mathbf{x})` of a particular Bragg reflection
+        captured on the detector is given by:
+
+        .. math::
+            I_{hkl}(\mathbf{x}) = |q_{hkl}|^2 \chi(\mathbf{u}(\mathbf{x})) f^2_{hkl}(\mathbf{x})
+
+        where :math:`q_{hkl}` are the structure factors and :math:`\chi(\mathbf{u}(\mathbf{x}))`
+        are the projection maps of the sample, and :math:`f_{hkl}(\mathbf{x})` are the standard
+        reflection profiles.
+
+        The Poisson negative log likelihood crietion is given by:
+
+        .. math::
+            \epsilon^{NLL} = \sum_{ni} \log \mathrm{P}(I_n(\mathbf{x}_i), I_{hkl}(\mathbf{x}_i)
+            + I_{bgd}(\mathbf{x}_i)),
+
+        where the likelihood :math:`\mathrm{P}` follows the Poisson distribution :math:`\log
+        \mathrm{P}(I, \lambda) = I \log \lambda - I`.
+
+    Returns:
+        Negative log likelihood.
+    """
+
+def ls_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.ndarray,
+                 xtal_bi: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray,
+                 loss: str='l2', num_threads: int=1) -> Tuple[float, np.ndarray]:
+    r"""Calculate the least-squares error between the measured intensities ``I0`` and the
+    modelled intenisty profiles of Bragg reflections.
+
+    Args:
+        x : Current estimate of crystal structure factors and intercept values.
+        prof : Standard profiles.
+        I0 : Measured diffracted signal.
+        bgd : Background level.
+        xtal_bi : Sample's projection maps.
+        hkl_idxs : Set of indices that numerate different Bragg reflections.
+        iidxs : Array of first indices pertaining to different diffraction streaks.
+        loss : Loss function used to calculate the MSE. The following keyword arguments are
+            allowed:
+
+            * `l1`: L1 loss (absolute) function.
+            * `l2` : L2 loss (squared) function.
+            * `Huber` : Huber loss function.
+
+        num_threads : Number of threads used in the calculations.
+
+    Notes:
+        The intensity profile :math:`I_{hkl}(\mathbf{x})` of a particular Bragg reflection
+        captured on the detector is given by:
+
+        .. math::
+            I_{hkl}(\mathbf{x}) = |q_{hkl}|^2 \chi(\mathbf{u}(\mathbf{x})) f^2_{hkl}(\mathbf{x})
+
+        where :math:`q_{hkl}` are the structure factors and :math:`\chi(\mathbf{u}(\mathbf{x}))`
+        are the projection maps of the sample, and :math:`f_{hkl}(\mathbf{x})` are the standard
+        reflection profiles.
+
+        The least squares criterion is given by:
+
+        .. math::
+            \epsilon^{LS} = \sum_{ni} f\left( \frac{I_n(\mathbf{x}_i) - I_{hkl}(\mathbf{x}_i) -
+            I_{bgd}}{\sigma_I^2} \right),
+
+        where :math:`f(x)` is either l2, l1, or Huber loss function, and :math:`\sigma_I` is the
+        standard deviation of measured photon counts for a given diffraction streak.
+
+    Returns:
+        The least squares criterion.
+    """
+
+def model_fit(x: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray) -> Tuple[np.ndarray,
+                                                                               np.ndarray]:
+    """Unmerge the structure factors and intercepts.
+
+    Args:
+        x : Current estimate of crystal structure factors and intercept values.
+        hkl_idxs : Set of indices that numerate different Bragg reflections.
+        iidxs : Array of first indices pertaining to different diffraction streaks.
+
+    Returns:
+        List of unmerged structure factors and intercepts.
+    """

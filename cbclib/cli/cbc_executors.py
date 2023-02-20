@@ -1,20 +1,25 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from multiprocessing import cpu_count
 import os
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from tqdm.auto import tqdm
 import hdf5plugin
 import numpy as np
 import pandas as pd
 import pygmo
 from scipy.optimize import differential_evolution
-from .. import Basis, CBCTable, Crop, CrystData, CXIStore, SampleProblem, ScanSamples, ScanSetup
-from ..data_container import INIContainer
+from ..cbc_setup import  Basis, ScanSetup, ScanSamples
+from ..cbc_scaling import CBCTable, Refiner, SetupRefiner, SampleRefiner
+from ..cxi_protocol import CXIStore
+from ..data_container import INIContainer, Crop
+from ..data_processing import CrystData
+from ..log_protocol import LogContainer
 
 @dataclass
 class Executor():
     out_path            : str = 'None'
     basis_path          : str = 'None'
+    hkl_path            : str = 'None'
     samples_path        : str = 'None'
     setup_path          : str = 'None'
     table_path          : str = 'None'
@@ -25,6 +30,7 @@ class Executor():
     samples             : Optional[ScanSamples] = None
     setup               : Optional[ScanSetup] = None
     table               : Optional[CBCTable] = None
+    q_abs               : float = 0.0
 
     def __post_init__(self):
         if os.path.isfile(self.basis_path):
@@ -35,34 +41,44 @@ class Executor():
             self.setup = ScanSetup.import_ini(self.setup_path)
         if os.path.isfile(self.table_path) and self.setup:
             self.table = CBCTable.import_hdf(self.table_path, 'data', self.setup)
+        if os.path.isfile(self.hkl_path):
+            self.hkl = np.load(self.hkl_path)
+        elif self.basis is not None:
+            self.hkl = self.basis.generate_hkl(self.q_abs)
+        else:
+            self.hkl = None
 
 @dataclass
 class DetectExecutor(Executor, INIContainer):
-    __ini_fields__ = {'system': ('out_path', 'basis_path', 'dir_path', 'samples_path', 'setup_path',
-                                 'table_path', 'wf_path', 'detector', 'num_chunks', 'num_threads',
-                                 'verbose'),
-                      'detection': ('scan_num', 'roi', 'frames', 'imax', 'cor_rng', 'quant',
-                                    'cutoff', 'filter_thr', 'group_thr', 'dilations', 'q_abs',
-                                    'width', 'snr_thr')}
+    __ini_fields__ = {'system': ('basis_path', 'h5_files', 'hkl_path', 'out_path', 'samples_path',
+                                 'setup_path', 'table_path', 'wf_path', 'detector', 'num_chunks',
+                                 'num_threads', 'verbose'),
+                      'detection': ('cor_rng', 'cutoff', 'dilations', 'filter_thr', 'frames',
+                                    'group_thr', 'vrange', 'quant', 'q_abs', 'roi', 'snr_thr', 'width')}
 
-    dir_path            : str = 'None'
+    h5_files            : List[str] = field(default_factory=list)
     wf_path             : str = 'None'
     detector            : str = 'lsd'
     num_chunks          : int = 100
 
-    scan_num            : int = 0
     roi                 : Tuple[int, int, int, int] = (0, 0, 0, 0)
     frames              : Tuple[int, int] = (0, 0)
-    imax                : int = 10000000
+    vrange              : Tuple[int, int] = (0, 0)
     cor_rng             : Tuple[float, float] = (0.0, 0.0)
     quant               : float = 0.02
     cutoff              : float = 0.0
     filter_thr          : float = 0.0
     group_thr           : float = 1.0
     dilations           : Tuple[float, float, float] = (0.0, 1.0, 6.0)
-    q_abs               : float = 0.0
     width               : float = 0.0
     snr_thr             : float = 1.0
+
+    def __post_init__(self):
+        super(DetectExecutor, self).__post_init__()
+        if os.path.isfile(self.wf_path):
+            self.whitefield = np.load(self.wf_path)
+        else:
+            self.whitefield = None
 
     def detect_lsd(self, data: CrystData) -> pd.DataFrame:
         lsd_det = data.lsd_detector()
@@ -71,13 +87,16 @@ class DetectExecutor(Executor, INIContainer):
         lsd_det = lsd_det.update_lsd(quant=self.quant)
         lsd_det = lsd_det.detect(cutoff=self.cutoff, filter_threshold=self.filter_thr,
                                  group_threshold=self.group_thr, dilation=self.dilations[0])
+        lsd_det = lsd_det.refine_streaks(self.dilations[1])
         lsd_det = lsd_det.update_patterns(dilations=self.dilations)
         return lsd_det.export_table(concatenate=True)
 
     def detect_model(self, data: CrystData) -> pd.DataFrame:
-        data = data.import_patterns(self.table.table).update_background()
+        if self.table is not None:
+            data = data.import_patterns(self.table.table).update_background()
         mdl_det = data.model_detector(self.basis, self.samples, self.setup)
-        mdl_det = mdl_det.detect(q_abs=self.q_abs, width=self.width, threshold=self.snr_thr)
+        mdl_det = mdl_det.detect(hkl=self.hkl, width=self.width, threshold=self.snr_thr)
+        mdl_det = mdl_det.refine_streaks(self.dilations[1])
         mdl_det = mdl_det.update_patterns(dilations=self.dilations)
         return mdl_det.export_table(concatenate=True)
 
@@ -89,56 +108,67 @@ class DetectExecutor(Executor, INIContainer):
         raise ValueError(f'Invalid detector: {self.detector}')
 
     def run(self):
-        scan_setup = ScanSetup.import_ini(self.setup_path)
-
-        h5_dir = os.path.join(self.dir_path, f'scan_frames/Scan_{self.scan_num:d}')
-        h5_files = sorted([os.path.join(h5_dir, path) for path in os.listdir(h5_dir)
-                           if path.endswith(('LambdaFar.nxs', '.h5'))])
-        data = CrystData(CXIStore(h5_files, 'r'), Crop(self.roi))
+        data = CrystData(CXIStore(self.h5_files, 'r'), Crop(self.roi),
+                         whitefield=self.whitefield)
+        atts = ['data', 'good_frames', 'mask', 'frames', 'cor_data', 'background']
 
         tables = []
         indices = np.array_split(data.input_file.indices()[self.frames[0]:self.frames[1]],
                                  self.num_chunks)
         detector = self.get_detector()
         for idxs in tqdm(indices, total=self.num_chunks, disable=not self.verbose,
-                        desc=f'Processing scan {self.scan_num:d}'):
-            data = data.clear().load(idxs=idxs, processes=self.num_threads, verbose=False)
-            data = data.update_mask(method='range-bad', vmax=self.imax)
-            data = data.mask_pupil(scan_setup, padding=60)
-            data = data.import_whitefield(np.load(self.wf_path))
-            data = data.blur_pupil(scan_setup, padding=80, blur=20)
+                         desc='Processing scan'):
+            data = data.clear(atts).load(idxs=idxs, processes=self.num_threads, verbose=False)
+            if 'mask' not in data.input_file:
+                data = data.update_mask(vmin=self.vrange[0], vmax=self.vrange[1])
+            data = data.mask_pupil(self.setup, padding=40)
+            data = data.update_background()
+            data = data.blur_pupil(self.setup, padding=60, blur=20)
             tables.append(detector(data))
 
         table = pd.concat(tables, ignore_index=True)
         table.to_hdf(self.out_path, 'data')
 
-def criterion(x: np.ndarray, problem: SampleProblem) -> float:
-    return problem.fitness(x)[0]
+def criterion(x: np.ndarray, refiner: Refiner) -> float:
+    return refiner.fitness(x)[0]
 
 @dataclass
 class RefineExecutor(Executor, INIContainer):
-    __ini_fields__ = {'system': ('out_path', 'basis_path', 'focii_path', 'samples_path',
-                                 'setup_path', 'table_path', 'backend', 'num_threads',
+    __ini_fields__ = {'system': ('out_path', 'basis_path', 'hkl_path', 'log_path', 'samples_path',
+                                 'setup_path', 'table_path', 'x0_path', 'backend', 'num_threads',
                                  'verbose'),
-                      'indexing': ('tilt_tol', 'smp_tol', 'foc_tol', 'q_abs', 'width',
-                                   'alpha', 'num_gen', 'pop_size')}
+                      'refinement': ('refine', 'tols', 'q_abs', 'width', 'alpha', 'num_gen',
+                                     'pop_size')}
 
-    focii_path          : str = 'None'
+    log_path            : str = 'None'
+    x0_path             : str = 'None'
     backend             : str = 'pygmo'
 
-    tilt_tol            : float = 0.0
-    smp_tol             : float = 0.0
-    foc_tol             : float = 0.0
-    q_abs               : float = 0.0
+    refine              : str = 'scan'
+    tols                : List[float] = field(default_factory=list)
     width               : float = 0.0
     alpha               : float = 0.0
     num_gen             : int = 0
     pop_size            : int = 0
 
-    def fit_pygmo(self, problem: SampleProblem) -> np.ndarray:
+    def __post_init__(self):
+        super(RefineExecutor, self).__post_init__()
+        if os.path.isfile(self.log_path):
+            if self.table.frames[0]:
+                idxs = np.insert(self.table.frames, 0, 0)
+            else:
+                idxs = self.table.frames
+            ldata = LogContainer().read_logs(self.log_path, idxs=idxs).read_translations()
+            self.tilts = ldata.translations[-self.table.frames.size:, 3] - ldata.translations[0, 3]
+        if os.path.isfile(self.x0_path):
+            self.x0 = np.load(self.x0_path)
+        else:
+            self.x0 = None
+
+    def fit_pygmo(self, refiner: Refiner) -> np.ndarray:
         uda = pygmo.de(gen=self.num_gen)
         algo = pygmo.algorithm(uda)
-        prob = pygmo.problem(problem)
+        prob = pygmo.problem(refiner)
         pops = [pygmo.population(size=self.pop_size, prob=prob, b=pygmo.bfe())
                 for _ in range(self.num_threads)]
         archi = pygmo.archipelago()
@@ -150,51 +180,57 @@ class RefineExecutor(Executor, INIContainer):
 
         return archi.get_champions_x()[np.argmin(archi.get_champions_f())]
 
-    def fit_scipy(self, problem: SampleProblem) -> np.ndarray:
-        res = differential_evolution(criterion, bounds=np.stack(problem.get_bounds()).T,
+    def fit_scipy(self, refiner: Refiner) -> np.ndarray:
+        res = differential_evolution(criterion, bounds=np.stack(refiner.get_bounds()).T,
                                      maxiter=self.num_gen, popsize=self.pop_size,
                                      workers=self.num_threads, updating='deferred',
-                                     args=(problem,))
+                                     args=(refiner,))
 
         return res.x
 
-    def get_fitter(self) -> Callable[[SampleProblem], np.ndarray]:
+    def get_fitter(self) -> Callable[[Refiner], np.ndarray]:
         if self.backend == 'pygmo':
             return self.fit_pygmo
         if self.backend == 'scipy':
             return self.fit_scipy
         raise ValueError(f'Invalid backend: {self.backend}')
 
-    def run(self):
-        frames = self.table.table['frames'].unique()
-
-        patterns, focii = [], {}
+    def refine_samples(self):
+        bnds = SampleRefiner.generate_bounds(z_tol=self.tols[0], tilt_tol=self.tols[1],
+                                             frames=np.arange(1), x0=self.x0)
         fitter = self.get_fitter()
-        for frame in tqdm(frames, total=frames.size, disable=not self.verbose,
-                        desc='Run CBC indexing refinement'):
-            problem = self.table.refine_sample(frame=frame, basis=self.basis, sample=self.samples[frame],
-                                               bounds=(self.tilt_tol, self.smp_tol, self.foc_tol),
-                                               q_abs=self.q_abs, width=self.width, alpha=self.alpha)
+        size = np.asarray(bnds[1] - bnds[0], dtype=bool).sum()
+        np.save(self.out_path, np.zeros((self.table.frames.size, size)))
+        champions = np.load(self.out_path, mmap_mode='r+')
 
-            if self.num_gen:
-                champion = fitter(problem)
-            else:
-                champion = problem.x0
+        for idx, frame in tqdm(enumerate(self.table.frames), total=self.table.frames.size,
+                               disable=not self.verbose, desc='Run CBC sample refinement'):
+            part = self.table.get_frames(frame)
+            refiner = part.refine_samples(bounds=bnds, basis=self.basis,
+                                          samples=self.samples, hkl=self.hkl,
+                                          width=self.width, alpha=self.alpha)
+            refiner.filter_hkl(refiner.x0)
+            champions[idx] = fitter(refiner)
+            champions.flush()
 
-            patterns.append(problem.index_frame(champion, frame=frame, 
-                                                num_threads=self.num_threads))
-            if self.num_gen:
-                if self.smp_tol or self.tilt_tol:
-                    self.samples[frame] = problem.generate_sample(champion)
-                if self.foc_tol:
-                    focii[frame] = problem.generate_setup(champion).foc_pos
+    def refine_setup(self):
+        bnds = SetupRefiner.generate_bounds(lat_tol=self.tols[:2], foc_tol=self.tols[2],
+                                            rot_tol=self.tols[3], z_tol=self.tols[4],
+                                            tilt_tol=self.tols[5], frames=self.table.frames,
+                                            x0=self.x0)
+        refiner = self.table.refine_setup(bounds=bnds, basis=self.basis, tilts=self.tilts,
+                                          hkl=self.hkl, width=self.width, alpha=self.alpha)
+        refiner.filter_hkl(refiner.x0)
 
-        if self.out_path != 'None':
-            pd.concat(patterns).to_hdf(self.out_path, 'data')
+        fitter = self.get_fitter()
+        champion = fitter(refiner)
 
-        if self.num_gen:
-            if self.smp_tol or self.tilt_tol:
-                self.samples.to_dataframe().to_hdf(self.samples_path, 'data')
-            if self.foc_tol and self.focii_path != 'None':
-                df = pd.DataFrame.from_dict(focii, orient='index', columns=('fx', 'fy', 'fz'))
-                df.to_hdf(self.focii_path, 'data')
+        np.save(self.out_path, champion)
+
+    def run(self):
+        if self.refine == 'setup':
+            self.refine_setup()
+        elif self.refine == 'samples':
+            self.refine_samples()
+        else:
+            raise ValueError(f'Invalid refine keyword: {self.refine}')

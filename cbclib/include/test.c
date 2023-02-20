@@ -22,13 +22,12 @@ int main(int argc, char *argv[])
 
 static int test_draw_line()
 {
-    size_t X = 32;
-    size_t Y = 48;
+    size_t dims[2] = {48, 32};
     size_t n_lines = 1;
     size_t ldims[2] = {n_lines, 7};
 
     float *lines = MALLOC(float, n_lines * 7);
-    unsigned int *out = (unsigned int *)calloc(X * Y, sizeof(unsigned int));
+    unsigned int *out = (unsigned int *)calloc(dims[0] * dims[1], sizeof(unsigned int));
 
     if (!lines || !out)
     {
@@ -38,16 +37,16 @@ static int test_draw_line()
 
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
 
-    draw_line(out, Y, X, 1, lines, ldims, 0.0, linear_profile);
+    draw_line(out, dims, 1, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("%3d ", 666);
-    for (int j = 0; j < (int)X; j++) printf("%3d ", j);
+    for (int j = 0; j < (int)dims[1]; j++) printf("%3d ", j);
     printf("\n");
-    for (int i = 0; i < (int)Y; i++)
+    for (int i = 0; i < (int)dims[0]; i++)
     {
         printf("%3d ", i);
-        for (int j = 0; j < (int)X; j++) printf("%03d ", out[j + X * i]);
+        for (int j = 0; j < (int)dims[1]; j++) printf("%03d ", out[j + dims[1] * i]);
         printf("\n");
     }
     printf("\n");
@@ -59,8 +58,7 @@ static int test_draw_line()
 
 static int test_draw_line_index()
 {
-    size_t X = 32;
-    size_t Y = 48;
+    size_t dims = {48, 32};
     size_t n_lines = 2;
     size_t ldims[2] = {n_lines, 7};
 
@@ -77,7 +75,7 @@ static int test_draw_line_index()
     lines[0] = 10.; lines[1] = 10.; lines[2] = 20.; lines[3] = 20.; lines[4] = 3.5;
     lines[7] = 30.; lines[8] = 15.; lines[9] = 5.; lines[10] = 10.; lines[11] = 3.5;
 
-    draw_line_index(&out, &n_idxs, Y, X, 255, lines, ldims, 0.0, linear_profile);
+    draw_line_index(&out, &n_idxs, dims, 255, lines, ldims, 0.0, linear_profile);
 
     printf("Result:\n");
     printf("idx  x   y   I \n");
@@ -98,26 +96,25 @@ static int test_lsd()
     float *image;
     float *out;
     int x, y, i, j, n;
-    int X = 128;  /* x image size */
-    int Y = 128;  /* y image size */
+    size_t dims[2] = {128, 128};  /* Y, X */
 
     /* create a simple image: left half black, right half gray */
-    image = MALLOC(float, X * Y);
+    image = MALLOC(float, dims[0] * dims[1]);
     if (image == NULL)
     {
         fprintf(stderr, "error: not enough memory\n");
         exit(EXIT_FAILURE);
     }
-    for(x = 0; x < X; x++)
+    for(x = 0; x < dims[1]; x++)
     {
-        for(y = 0; y < Y; y++)
+        for(y = 0; y < dims[0]; y++)
         {
-            image[x + y * X] = x < X / 2 ? 0.0 : 64.; /* image(x,y) */
+            image[x + y * dims[1]] = x < dims[1] / 2 ? 0.0 : 64.; /* image(x, y) */
         }
     }
 
     /* LSD call */
-    lsd(&out, &n, image, X, Y);
+    lsd(&out, &n, image, dims);
 
     /* print output */
     printf("%d line segments found:\n",n);
@@ -208,19 +205,18 @@ static const float LINES[14] =
 
 static int test_pairs()
 {
-    int X = 10;
-    int Y = 10;
+    size_t dims[2] = {10, 10};
     int n_lines = 2;
     size_t ldims[2] = {n_lines, 7};
 
-    float *data = MALLOC(float, X * Y);
+    float *data = MALLOC(float, dims[0] * dims[1]);
     float *ilines = (float *)LINES;
     unsigned char *proc = MALLOC(unsigned char, n_lines);
     for (int i = 0; i < n_lines; i++) proc[i] = 1;
     float *olines = MALLOC(float, n_lines * 7);
-    for (int i = 0; i < X * Y; i++) data[i] = 1.0;
+    for (int i = 0; i < dims[0] * dims[1]; i++) data[i] = 1.0;
 
-    filter_line(olines, proc, data, Y, X, ilines, ldims, 1.0, 0.0);
+    filter_line(olines, proc, data, dims, ilines, ldims, 1.0, 0.0, gauss_profile);
 
     int out_lines = 0;
     for (int i = 0; i < n_lines; i++) out_lines += proc[i];

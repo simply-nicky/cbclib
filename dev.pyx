@@ -1,21 +1,36 @@
 #cython: language_level=3, boundscheck=False, wraparound=False, initializedcheck=False, cdivision=True, embedsignature=True
 import numpy as np
 import cython
-from libc.string cimport memcmp
+from libc.string cimport memcmp, memcpy
 from libc.math cimport ceil, exp, sqrt, atan, atan2, acos, fabs, sin, cos, log, floor
 from libc.float cimport DBL_EPSILON
 from cython.parallel import parallel, prange
 
-cdef line_profile profiles[3]
+cdef line_profile profiles[4]
 cdef void build_profiles():
     profiles[0] = linear_profile
     profiles[1] = quad_profile
     profiles[2] = tophat_profile
+    profiles[3] = gauss_profile
 
 cdef dict profile_scheme
-profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2}
+profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2, 'gauss': 3}
 
 build_profiles()
+
+cdef loss_func lfuncs[3]
+cdef loss_func gfuncs[3]
+cdef void build_loss():
+    lfuncs[0] = l2_loss
+    lfuncs[1] = l1_loss
+    lfuncs[2] = huber_loss
+    gfuncs[0] = l2_grad
+    gfuncs[1] = l1_grad
+    gfuncs[2] = huber_grad
+
+cdef dict loss_scheme = {'l2': 0, 'l1': 1, 'huber': 2}
+
+build_loss()
 
 # Numpy must be initialized. When using numpy from C or Cython you must
 # *ALWAYS* do that, or you will have segfaults
@@ -23,69 +38,55 @@ np.import_array()
 
 DEF N_BINS = 1024
 DEF LINE_SIZE = 7
-DEF CUTOFF = 3.0
 
-def searchsorted(np.ndarray a not None, np.ndarray v not None, str side='left'):
-    if not np.PyArray_IS_C_CONTIGUOUS(a):
-        a = np.PyArray_GETCONTIGUOUS(a)
-    if not np.PyArray_IS_C_CONTIGUOUS(v):
-        v = np.PyArray_GETCONTIGUOUS(v)
+def refine_pattern(np.ndarray inp not None, object lines not None, float dilation,
+                   str profile='gauss', unsigned int num_threads=1):
+    if inp.ndim != 3:
+        raise ValueError('Input array must be a 3D array.')
+    inp = check_array(inp, np.NPY_FLOAT32)
 
-    cdef int type_num = np.PyArray_TYPE(a)
-    if np.PyArray_TYPE(v) != type_num:
-        raise ValueError('Input arrays have incompatible data types')
-    
-    cdef int i, i_end = v.size
-    cdef unsigned long _asize = a.size
-    cdef void *_a = np.PyArray_DATA(a)
-    cdef void *_v = np.PyArray_DATA(v)
-    cdef np.ndarray out = np.PyArray_SimpleNew(v.ndim, v.shape, np.NPY_UINT64)
-    cdef unsigned long *_out = <unsigned long *>np.PyArray_DATA(out)
-    cdef int _side = side_to_code(side)
+    if profile not in profile_scheme:
+        raise ValueError(f"Invalid profile keyword: '{profile}'")
 
-    with nogil:
-        if type_num == np.NPY_FLOAT64:
-            for i in range(i_end):
-                _out[i] = searchsorted_c(_v + i * sizeof(double), _a, _asize, sizeof(double), _side, compare_double)
-        elif type_num == np.NPY_FLOAT32:
-            for i in range(i_end):
-                _out[i] = searchsorted_c(_v + i * sizeof(float), _a, _asize, sizeof(float), _side, compare_float)
-        elif type_num == np.NPY_INT32:
-            for i in range(i_end):
-                _out[i] = searchsorted_c(_v + i * sizeof(int), _a, _asize, sizeof(int), _side, compare_int)
-        elif type_num == np.NPY_UINT32:
-            for i in range(i_end):
-                _out[i] = searchsorted_c(_v + i * sizeof(unsigned int), _a, _asize, sizeof(unsigned int), _side, compare_uint)
-        elif type_num == np.NPY_UINT64:
-            for i in range(i_end):
-                _out[i] = searchsorted_c(_v + i * sizeof(unsigned long), _a, _asize, sizeof(unsigned long), _side, compare_ulong)
-        else:
-            raise TypeError(f'a argument has incompatible type: {str(a.dtype)}')
-    return out
+    cdef float *_inp = <float *>np.PyArray_DATA(inp)
+    cdef unsigned long *_dims = <unsigned long *>inp.shape + 1
+    cdef int repeats = inp.size / _dims[0] / _dims[1]
 
-def xtal_interpolate(np.ndarray xidx not None, np.ndarray xmap not None,
-                     np.ndarray xtal not None, unsigned num_threads=1):
-    if xidx.size != xmap.shape[0]:
-        raise ValueError('Input arrays have incompatible shapes')
-    
-    xidx = check_array(xidx, np.NPY_UINT32)
-    xmap = check_array(xmap, np.NPY_FLOAT32)
-    xtal = check_array(xtal, np.NPY_FLOAT32)
+    cdef np.ndarray out = np.PyArray_SimpleNew(3, inp.shape, np.NPY_FLOAT32)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
 
-    cdef int fail = 0
-    cdef unsigned long *_ddims = <unsigned long *>xtal.shape
-    cdef unsigned long _isize = xidx.size
+    cdef int i, N = len(lines)
+    cdef np.ndarray arr
+    cdef float **_lptrs = <float **>malloc(N * sizeof(float *))
+    cdef unsigned long *_ldims = <unsigned long *>malloc(2 * N * sizeof(unsigned long))
+    for i in range(N):
+        arr = check_array(lines[i], np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+        _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
+        _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
+        memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
 
-    cdef np.ndarray xtal_bi = np.PyArray_SimpleNew(1, xidx.shape, np.NPY_FLOAT32)
-    cdef float *_xtal_bi = <float *>np.PyArray_DATA(xtal_bi)
-    cdef unsigned *_xidx = <unsigned *>np.PyArray_DATA(xidx)
-    cdef float *_xmap = <float *>np.PyArray_DATA(xmap)
-    cdef float *_xtal = <float *>np.PyArray_DATA(xtal)
+    cdef line_profile _prof = profiles[profile_scheme[profile]]
 
-    with nogil:
-        fail = xtal_interp(_xtal_bi, _xidx, _xmap, _xtal, _ddims, _isize, num_threads)
+    if N < repeats:
+        repeats = N
+    num_threads = repeats if <int>num_threads > repeats else <int>num_threads
+    cdef int fail
 
-    if fail:
-        raise RuntimeError('C backend exited with error.')
+    for i in prange(repeats, schedule='guided', num_threads=num_threads, nogil=True):
+        fail = refine_line(_lptrs[i], _inp + i * _dims[0] * _dims[1], _dims,
+                           _lptrs[i], _ldims + 2 * i, dilation, _prof)
 
-    return xtal_bi
+        if fail:
+            with gil:
+                raise RuntimeError('C backend exited with error.')
+
+    cdef dict line_dict = {}
+    for i in range(repeats):
+        arr = ArrayWrapper.from_ptr(<void *>_lptrs[i]).to_ndarray(2, <np.npy_intp *>(_ldims + 2 * i), np.NPY_FLOAT32)
+        line_dict[i] = arr
+
+    free(_lptrs); free(_ldims)
+
+    return line_dict

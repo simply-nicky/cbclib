@@ -1,7 +1,6 @@
 import os
 import sys
-from setuptools import setup, find_namespace_packages
-from distutils.core import Extension
+from setuptools import setup, find_namespace_packages, Extension
 import numpy
 
 try:
@@ -57,7 +56,7 @@ with open('README.md', 'r') as readme:
     long_description = readme.read()
 
 setup(name='cbclib',
-      version='0.6.2',
+      version='0.7.0',
       author='Nikolay Ivanov',
       author_email="nikolay.ivanov@desy.de",
       long_description=long_description,

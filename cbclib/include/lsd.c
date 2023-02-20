@@ -269,8 +269,7 @@ static void enlarge_ntuple_list(ntuple_list n_tuple)
     n_tuple->max_size *= 2;
 
     /* realloc memory */
-    n_tuple->values = (float *)realloc((void *)n_tuple->values,
-                                       n_tuple->dim * n_tuple->max_size * sizeof(float));
+    n_tuple->values = REALLOC((void *)n_tuple->values, float, n_tuple->dim * n_tuple->max_size);
     if (n_tuple->values == NULL) LSD_ERROR("not enough memory.");
 }
 

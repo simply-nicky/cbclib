@@ -16,7 +16,8 @@ def generate_data(models: List[cbc.CBDModel], shape: Tuple[int, int, int],
     background = bgd_lvl[0] + background * (bgd_lvl[1] - bgd_lvl[0])
     patterns = []
     for model in models:
-        hkl = model.generate_hkl(q_abs)
+        hkl = model.basis.generate_hkl(q_abs)
+        hkl = hkl[model.filter_hkl(q_abs)]
         patterns.append(model.generate_streaks(hkl, stk_w).pattern_image(shape[1:]))
     data = sgn_lvl * np.stack(patterns) + background
     data = np.random.poisson(data)
@@ -42,12 +43,12 @@ def setup(request: pytest.FixtureRequest) -> cbc.ScanSetup:
     foc_pos = np.array([0.5 * request.param['shape'][1] * request.param['pixel_size'],
                         0.5 * request.param['shape'][0] * request.param['pixel_size'],
                         request.param['det_dist']])
-    pupil_min = (0.5 * (request.param['shape'][1] - request.param['pupil_size']),
-                 0.5 * (request.param['shape'][0] - request.param['pupil_size']))
-    pupil_max = (0.5 * (request.param['shape'][1] + request.param['pupil_size']),
+    pupil_roi = (0.5 * (request.param['shape'][1] - request.param['pupil_size']),
+                 0.5 * (request.param['shape'][1] + request.param['pupil_size']),
+                 0.5 * (request.param['shape'][0] - request.param['pupil_size']),
                  0.5 * (request.param['shape'][0] + request.param['pupil_size']))
-    return cbc.ScanSetup(foc_pos=foc_pos, pupil_min=pupil_min, pupil_max=pupil_max,
-                         rot_axis=np.array([0.0, 1.0, 0.0]), x_pixel_size=request.param['pixel_size'],
+    return cbc.ScanSetup(foc_pos=foc_pos, pupil_roi=pupil_roi, rot_axis=np.array([0.0, 1.0, 0.0]),
+                         x_pixel_size=request.param['pixel_size'],
                          y_pixel_size=request.param['pixel_size'], wavelength=wavelength)
 
 @pytest.fixture(params=[{'n_frames': 50, 'foc_dist': 0.01, 'tilt': np.deg2rad(1.0)},],

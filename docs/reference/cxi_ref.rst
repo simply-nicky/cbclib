@@ -31,10 +31,10 @@ attribute (`data`, `whitefield`, etc.):
 
 .. note::
 
-    You can save protocol to an INI file with :func:`cbclib.CXIProtocol.to_ini`
-    and import protocol from INI file with :func:`cbclib.CXIProtocol.import_ini`.
+    You can save protocol to an INI file with :func:`to_ini <cbclib.CXIProtocol.to_ini>`
+    and import protocol from INI file with :func:`import_ini <cbclib.CXIProtocol.import_ini>`.
 
-The default protocol can be accessed with :func:`cbclib.CXIProtocol.import_default`. The protocol
+The default protocol can be accessed with :func:`import_default <cbclib.CXIProtocol.import_default>`, which
 is given by:
 
 .. code-block:: ini

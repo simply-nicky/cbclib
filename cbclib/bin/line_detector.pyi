@@ -64,6 +64,7 @@ class LSD:
                 * `tophat` : Top-hat (rectangular) function profile.
                 * `linear` : Linear (triangular) function profile.
                 * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian funtion profile.
 
             return_labels : Return line labels mask if True.
             num_threads : A number of threads used in the computations.

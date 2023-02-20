@@ -1,14 +1,12 @@
+cimport numpy as np
+cimport openmp
+from libc.stdlib cimport free, calloc, malloc
+from libc.math cimport exp, sqrt, cos, sin, tan, acos, atan2, fabs, log
+from libc.float cimport DBL_EPSILON
+
 cdef enum:
     SEARCH_LEFT = 0
     SEARCH_RIGHT = 1
-
-cdef inline int side_to_code(str side) except -1:
-    if side == 'left':
-        return SEARCH_LEFT
-    elif side == 'right':
-        return SEARCH_RIGHT
-    else:
-        raise RuntimeError(f'Invalid side keyword: {side}')
 
 cdef extern from "array.h":
     int compare_double(void *a, void *b) nogil
@@ -17,8 +15,8 @@ cdef extern from "array.h":
     int compare_uint(void *a, void *b) nogil
     int compare_ulong(void *a, void *b) nogil
 
-    unsigned long searchsorted_c "searchsorted" (void *key, void *base, unsigned long npts,
-                                 unsigned long size, int side, int (*compar)(void*, void*)) nogil
+    unsigned long searchsorted(void *key, void *base, unsigned long npts, unsigned long size,
+                               int side, int (*compar)(void*, void*)) nogil
 
 cdef extern from "img_proc.h":
     int compute_euler_angles(double *angles, double *rot_mats, unsigned long n_mats) nogil

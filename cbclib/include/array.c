@@ -554,7 +554,7 @@ static size_t binary_right_r(const void *key, const void *array, int l, int r, s
         // the last found index then we search
         // for more in right side of m
         // so we now search in [m + 1, r]
-        else {out = m; l = m + 1; }
+        else {out = m; l = m + 1;}
 
     }
     return out;

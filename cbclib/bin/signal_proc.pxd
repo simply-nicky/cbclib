@@ -1,31 +1,39 @@
 cimport numpy as np
+from libc.math cimport exp
 from libc.stdlib cimport free, malloc
-from .image_proc cimport check_array, normalize_sequence
-from .line_detector cimport ArrayWrapper
+from libc.string cimport memcpy
 
-ctypedef double (*kernel)(double, double)
+ctypedef float (*kernel)(float, float)
+ctypedef float (*loss_func)(float)
 
 cdef extern from "sgn_proc.h":
-    double rbf(double dist, double sigma) nogil
+    int interp_bi(float *out, float *data, int ndim, unsigned long *dims, float **grid, float *crds,
+                  unsigned long ncrd, unsigned threads) nogil
 
-    int predict_kerreg(double *y, double *w, double *x, unsigned long npts, unsigned long ndim, double *y_hat,
-                       double *x_hat, unsigned long nhat, kernel krn, double sigma, double cutoff,
-                       unsigned threads) nogil
+    float rbf(float dist, float sigma) nogil
 
-    int predict_grid(double *y, double *w, double *x, unsigned long npts, unsigned long ndim, double *y_hat,
-                     unsigned long *roi, double *step, kernel krn, double sigma, double cutoff,
+    int predict_kerreg(float *y, float *w, float *x, unsigned long npts, unsigned long ndim, float *y_hat,
+                       float *x_hat, unsigned long nhat, kernel krn, float sigma, unsigned threads) nogil
+
+    int predict_grid(float **y_hat, unsigned long *roi, float *y, float *w, float *x, unsigned long npts,
+                     unsigned long ndim, float **grid, unsigned long *gdims, kernel krn, float sigma,
                      unsigned threads) nogil
 
     int unique_indices_c "unique_indices" (unsigned **funiq, unsigned **fidxs, unsigned long *fpts,
                       unsigned **iidxs, unsigned long *ipts, unsigned *frames, unsigned *indices,
                       unsigned long npts) nogil
 
-    int update_sf_c "update_sf" (float *sf, float *dsf, float *bp, float *sgn, unsigned *xidx, float *xmap,
-                    float *xtal, unsigned long *ddims, unsigned *hkl_idxs, unsigned long hkl_size,
-                    unsigned *iidxs, unsigned long isize, unsigned threads) nogil
+    float l2_loss(float x) nogil
+    float l2_grad(float x) nogil
+    float l1_loss(float x) nogil
+    float l1_grad(float x) nogil
+    float huber_loss(float x) nogil
+    float huber_grad(float x) nogil
 
-    float scale_crit(float *sf, float *bp, float *sgn, unsigned *xidx, float *xmap, float *xtal, unsigned long *ddims,
-                     unsigned *iidxs, unsigned long isize, unsigned threads) nogil
+    float poisson_likelihood(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
+                             float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
+                             unsigned threads) nogil
 
-    int xtal_interp(float *xtal_bi, unsigned *xidx, float *xmap, float *xtal, unsigned long *ddims,
-                    unsigned long isize, unsigned threads) nogil
+    float least_squares(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
+                        float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
+                        loss_func func, loss_func grad, unsigned threads) nogil

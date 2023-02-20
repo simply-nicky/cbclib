@@ -2,7 +2,6 @@ cimport numpy as np
 from cpython.ref cimport Py_INCREF
 from libc.stdlib cimport free, malloc, calloc
 from libc.string cimport memset, memcpy
-from .image_proc cimport check_array, normalize_sequence
 
 cdef extern from "array.h":
     int compare_double(void *a, void *b) nogil
@@ -18,13 +17,13 @@ cdef extern from "lsd.h":
                              float sigma_scale, float quant, float ang_th, float log_eps, float density_th,
                              int n_bins, int **reg_img, int *reg_x, int *reg_y) nogil
 
-ctypedef int (*line_profile)(int, float, float)
+ctypedef float (*line_profile)(float, float)
 
 cdef extern from "img_proc.h":
-    int linear_profile(int max_val, float err, float wd) nogil
-    int tophat_profile(int max_val, float err, float wd) nogil
-    int quad_profile(int max_val, float err, float wd) nogil
-    int gauss_profile(int max_val, float err, float wd) nogil
+    float linear_profile(float err, float wd) nogil
+    float tophat_profile(float err, float wd) nogil
+    float quad_profile(float err, float wd) nogil
+    float gauss_profile(float err, float wd) nogil
 
     int filter_line(float *olines, unsigned char *proc, float *data, unsigned long *dims, float *ilines,
                     unsigned long *ldims, float threshold, float dilation, line_profile profile) nogil

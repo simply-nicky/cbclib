@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Sequence, Tuple
 import numpy as np
 
 def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
@@ -50,6 +50,38 @@ def tilt_matrix(angles: np.ndarray) -> np.ndarray:
 
     Returns:
         A set of rotation matrices.
+    """
+    ...
+
+def det_to_k(x: np.ndarray, y: np.ndarray, src: np.ndarray, x_ps: float, y_ps: float,
+             num_threads: int=1) -> np.ndarray:
+    """Convert coordinates on the detector ``x`, ``y`` to wave-vectors originating from
+    the source points ``src``.
+
+    Args:
+        x : x coordinates in pixels.
+        y : y coordinates in pixels.
+        src : Source points in meters (relative to the detector).
+        x_ps : Pixel size along the x axis [m].
+        y_ps : Pixel size along the y axis [m].
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        A set of wave-vectors.
+    """
+    ...
+
+def k_to_det(karr: np.ndarray, src: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
+    """Convert wave-vectors originating from the source points ``src`` to coordinates on
+    the detector.
+
+    Args:
+        karr : An array of wave-vectors.
+        src : Source points in meters (relative to the detector).
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        A tuple of x and y coordinates in meters.
     """
     ...
 
@@ -143,22 +175,6 @@ def calc_source_lines(basis: np.ndarray, hkl: np.ndarray, kin_min: np.ndarray, k
 
     Returns:
         A set of source lines in the aperture function.
-    """
-    ...
-
-def cross_entropy(x: np.ndarray, p: np.ndarray, q: np.ndarray, q_max: float, epsilon: float) -> float:
-    """Calculate the cross-entropy criterion between an experimental pattern ``p`` and a simulated
-    pattern ``q``.
-
-    Args:
-        x : A set of detector indices for the experimental pattern.
-        p : Likelihood values for the experimental pattern.
-        q : Simulated pattern, has the same size as the detector grid.
-        q_max : Maximum value of the simulated pattern.
-        epsilon : Epsilon value in the log term.
-
-    Returns:
-        Cross-entropy value.
     """
     ...
 

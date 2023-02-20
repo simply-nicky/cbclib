@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 def next_fast_len(target: int, backend: str='numpy') -> int:
@@ -296,8 +296,8 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
     """
     ...
 
-def draw_line(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: float=0.0,
-              profile: str='tophat') -> np.ndarray:
+def draw_line_mask(shape: Tuple[int, ...], lines: Union[np.ndarray, Sequence[np.ndarray]], max_val: int=255,
+                   dilation: float=0.0, profile: str='tophat') -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame
     by using the Bresenham's algorithm [BSH]_. The lines must follow the LSD convention,
     see the parameters for more info.
@@ -319,6 +319,7 @@ def draw_line(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: f
             * `tophat` : Top-hat (rectangular) function profile.
             * `linear` : Linear (triangular) function profile.
             * `quad` : Quadratic (parabola) function profile.
+            * `gauss` : Gaussian funtion profile.
 
     Raises:
         ValueError : If `inp` is not a 2-dimensional array.
@@ -337,8 +338,8 @@ def draw_line(inp : np.ndarray, lines: np.ndarray, max_val: int=255, dilation: f
     """
     ...
 
-def draw_line_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int=1,
-                    dilation: float=0.0, profile: str='tophat', num_threads: int=1) -> np.ndarray:
+def draw_line_image(shape: Tuple[int, ...], lines: Union[np.ndarray, Sequence[np.ndarray]],
+                    dilation: float=0.0, profile: str='gauss', num_threads: int=1) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
     The lines must follow the LSD convention, see the parameters for more info.
 
@@ -360,6 +361,7 @@ def draw_line_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int
             * `tophat` : Top-hat (rectangular) function profile.
             * `linear` : Linear (triangular) function profile.
             * `quad` : Quadratic (parabola) function profile.
+            * `gauss` : Gaussian funtion profile.
 
         num_threads : Number of threads used in the calculations.
 
@@ -376,8 +378,8 @@ def draw_line_stack(mask: np.ndarray, lines: Dict[str, np.ndarray], max_val: int
     """
     ...
 
-def draw_line_index(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: int=255,
-                    dilation: float=0.0, profile: str='tophat') -> np.ndarray:
+def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, dilation: float=0.0,
+                    profile: str='gauss') -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Return an array of rasterized thick lines indices and their corresponding pixel values.
     The lines are drawn with variable thickness and the antialiasing applied. The lines must
     follow the LSD convention, see the parameters for more info.
@@ -400,6 +402,7 @@ def draw_line_index(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, ma
             * `tophat` : Top-hat (rectangular) function profile.
             * `linear` : Linear (triangular) function profile.
             * `quad` : Quadratic (parabola) function profile.
+            * `gauss` : Gaussian funtion profile.
 
     Raises:
         ValueError : If `lines` has an incompatible shape.
@@ -415,8 +418,52 @@ def draw_line_index(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, ma
 
 def normalise_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilations: Tuple[float, float, float],
                       profile: str='tophat', num_threads: int=1) -> np.ndarray:
+    """Perform the normalisation of measured CBC patterns ``inp`` based on two-zone masking.
+    The inner and outer zone are defined by a set of dilation radii ``dilations``. The normalised
+    reflection is given by :math:`(inp[i, j] - b) / (c - b)`, where ``c`` is the maximum intensity
+    in the inner zone and ``b`` is the median intensity in the outer zone.
+
+    Args:
+        inp : Measured CBC patterns.
+        lines : Detected diffraction streaks.
+        dilations : Dilation radii of two-zone masking in pixels.
+        profile : Line width profile used to calculate ``c`` and ``b``. The following keyword
+            values are allowed:
+
+            * `tophat` : Top-hat (rectangular) function profile.
+            * `linear` : Linear (triangular) function profile.
+            * `quad` : Quadratic (parabola) function profile.
+            * `gauss` : Gaussian funtion profile.
+
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        Normalised CBC patterns.
     """
+    ...
+
+def refine_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilation: float, profile: str='tophat',
+                   num_threads: int=1) -> Dict[int, np.ndarray]:
+    """Refine detected diffraction streaks by fitting a Gaussian across the line.
+
+    Args:
+        inp : Measured CBC patterns.
+        lines : Detected diffraction streaks.
+        dilation : Dilation radius in pixels used for the Gaussian fit.
+        profile : Line width profile used for the Gaussian fit. The following keyword values
+            are allowed:
+
+            * `tophat` : Top-hat (rectangular) function profile.
+            * `linear` : Linear (triangular) function profile.
+            * `quad` : Quadratic (parabola) function profile.
+            * `gauss` : Gaussian funtion profile.            
+
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        Refined diffraction streaks.
     """
+    ...
 
 def project_effs(inp: np.ndarray, mask: np.ndarray, effs: np.ndarray, num_threads: int=1) -> np.ndarray:
     """Calculate a projection of eigen flat-fields ``effs`` on a set of 2D arrays ``inp``.
@@ -443,5 +490,38 @@ def subtract_background(inp: np.ndarray, mask: np.ndarray, bgd: np.ndarray, num_
 
     Returns:
         An output projection of eigen flat-fields.
+    """
+    ...
+
+def ce_criterion(ij: np.ndarray, p: np.ndarray, fidxs: np.ndarray, shape: Tuple[int, int],
+                 lines: Sequence[np.ndarray], dilation: float=0.0, epsilon: float=1e-12,
+                 profile: str='gauss', num_threads: int=1) -> float:
+    r"""Calculate the cross-entropy criterion between an experimental pattern ``p`` and
+    simulated diffraction streaks ``lines``.
+
+    Args:
+        ij : Detector coordinates, where the measured pattern ``p`` is above zero.
+        p : Measured normalised intensities.
+        fidxs : Frame indices.
+        shape : Shape of the detector pixel grid.
+        lines : Simulated diffraction streaks.
+        dilation : Dilation radius in pixels used to rasterise simulated diffraction
+            streaks ``lines``.
+        epsilon : Epsilon value used to calculated logarithm of simulated standart
+            profiles.
+
+    Notes:
+        The cross-entropy between the measured patterns :math:`i_n(\mathbf{x}_i)` and the
+        simulated streaks is given by:
+
+        .. math::
+            \mathcal{L} = -\sum_{ni} i_n(\mathbf{x}_i) \log(\max(f^2_{hkl},
+            \epsilon)),
+
+        where :math:`f^2_{hkl}` is a set of standard profile patterns calculated with the
+        help of Bresenham's algorithm.
+
+    Returns:
+        Cross-entropy value.
     """
     ...

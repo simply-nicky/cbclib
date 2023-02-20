@@ -2,38 +2,40 @@
 #define IMG_PROC_H
 #include "include.h"
 
-typedef int (*line_profile)(int max_val, float err, float wd);
+typedef float (*line_profile)(float err, float wd);
 
-static inline int tophat_profile(int max_val, float err, float wd)
+static inline float tophat_profile(float err, float wd)
 {
-    return max_val * (1.0f - fmaxf((fabsf(err) - wd + 1.0f), 0.0f));
+    return fminf(fmaxf(wd - fabsf(err), 0.0f), 1.0f);
 }
 
-static inline int linear_profile(int max_val, float err, float wd)
+static inline float linear_profile(float err, float wd)
 {
-    return max_val * (1.0f - fminf(fabsf(err) / wd, 1.0f));
+    return fmaxf(1.0f - fabsf(err) / wd, 0.0f);
 }
 
-static inline int quad_profile(int max_val, float err, float wd)
+static inline float quad_profile(float err, float wd)
 {
-    return max_val * (1.0f - powf(fminf(fabsf(err) / wd, 1.0f), 2.0f));
+    return fmaxf(1.0f - powf(fabsf(err) / wd, 2.0f), 0.0f);
 }
 
 #define GS_MIN 0.01831563888873418
 #define GS_DIV 1.018657360363774
 
-static inline int gauss_profile(int max_val, float err, float wd)
+static inline float gauss_profile(float err, float wd)
 {
-    return max_val * GS_DIV * fmaxf(exp(-SQ(err) / (0.25 * SQ(wd))) - GS_MIN, 0.0f);
+    return GS_DIV * fmaxf(exp(-SQ(err) / (0.25 * SQ(wd))) - GS_MIN, 0.0f);
 }
 
 /*---------------------------------------------------------------------------
                         Drawing lines routines
 ---------------------------------------------------------------------------*/
 
-int draw_line(unsigned int *out, const size_t *dims, unsigned int max_val, float *lines,
-              const size_t *ldims, float dilation, line_profile profile);
-int draw_line_index(unsigned int **out, size_t *n_idxs, const size_t *dims, unsigned int max_val,
+int draw_line_int(unsigned *out, const size_t *dims, unsigned max_val, float *lines, const size_t *ldims,
+                  float dilation, line_profile profile);
+int draw_line_float(float *out, const size_t *dims, float *lines, const size_t *ldims, float dilation,
+                    line_profile profile);
+int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, size_t *n_idxs, const size_t *dims,
                     float *lines, const size_t *ldims, float dilation, line_profile profile);
 
 /*-------------------------------------------------------------------------------*/
@@ -81,10 +83,20 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
 int normalise_line(float *out, float *data, const size_t *dims, float *lines, const size_t *ldims,
                    float dilations[3], line_profile profile);
 
+int refine_line(float *out, float *data, const size_t *dims, float *lines, const size_t *ldims,
+                float dilation, line_profile profile);
+
 int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats);
 int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats);
 int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats);
 int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats);
 int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats);
+
+/*---------------------------------------------------------------------------
+                        Model refinement criterion
+---------------------------------------------------------------------------*/
+
+double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, size_t *dims, float **lines, const size_t *ldims,
+                     size_t lsize, float dilation, float epsilon, line_profile profile, unsigned threads);
 
 #endif

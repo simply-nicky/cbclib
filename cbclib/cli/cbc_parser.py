@@ -17,7 +17,9 @@ class CBCParser():
                'filter_thr': "Streaks filtering threshold",
                'frames': "Frame range",
                'group_thr': "Streaks grouping threshold",
+               'hkl_path': "Path to the array of Miller indices",
                'imax': "The upper bound of good photon counts interval",
+               'log_path': "Path to the log file",
                'num_chunks': "Number of dataset chunks",
                'num_gen': "Number of DE generations",
                'num_threads': "Number of threads used in the calculations",
@@ -25,17 +27,18 @@ class CBCParser():
                'pop_size': "Population size in DE refinement",
                'quant': "LSD gradient step",
                'q_abs': "Reciprocal space radius",
+               'refine': "Choose one of two refinement types: 'setup' or 'samples'",
                'roi': "Detector region of interest",
                'samples_path': "Path to the samples table",
                'scan_num': "Scan number",
                'setup_path': "Path to the experimental setup config file",
-               'smp_tol': "Sample position tolerance",
                'snr_thr': "Signal-to-noise threshold used in the detection",
                'table_path': "Path to the CBC table file",
-               'tilt_tol': "Sample tilting tolerance",
+               'tols': "A list of tolerance used in the refinement",
                'verbose': "Set the verbosity",
                'wf_path': "Path to the file containing the white-field profile",
-               'width': "Streak width in pixels"}
+               'width': "Streak width in pixels",
+               'z_smp': "Sample z coordinate in meters"}
 
     @property
     def parser(self) -> argparse.ArgumentParser:

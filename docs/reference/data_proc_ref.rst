@@ -7,11 +7,15 @@ Preprocessing and streak detection
 
 The following classes are central to the processing of CBC datasets:
 
-* :class:`cbclib.CrystData` is the main detector data container, which provides an interface for the preprocessing of
+* **CrystData** : :class:`cbclib.CrystData` is the main detector data container, which provides an interface for the preprocessing of
   sets of measured CBD patterns. It also provides a method to return a streak detector.
-* :class:`cbclib.LSDetector` is a streak detector, based on the Line Segment Detection [LSD]_ algorithm. The detector
+* **LSDetector** : :class:`cbclib.LSDetector` is a streak detector, based on the Line Segment Detection [LSD]_ algorithm. The detector
   class provides an interface to perform the LSD detection and to create a normalised and sparse CBD pattern image.
-  The results are then can be exported as a CBC table (:class:`cbclib.CBCTable`) used for indexing and sample refinement.
+  The results are then can be exported as a CBC table (:class:`cbclib.CBCTable`) used for the setup and lattice refinement.
+* **ModelDetector** : After the corect experimental geometry and sample lattice are obtained, one can detect the diffraction streaks by using
+  the forward modelling of CBC patterns with :class:`cbclib.ModelDetector`. The forward modelling also asigns the Miller
+  indices to the detected diffraction streaks. The results are then can be exported as a CBC table (:class:`cbclib.CBCTable`)
+  used for CBC intensity scaling.
 
 :class:`CrystData <cbclib.CrystData>`
 -------------------------------------
@@ -40,7 +44,7 @@ the [LSD]_ algorithm. The detection algorithm comprises three stages:
    step. The pixel gradients incur clusterring if the gradient directions are not more than :attr:`cbclib.bin.LSD.ang_th` apart.
 2. The adjacent lines are grouped into pairs, then the pairs are collapsed into a single line as follows:
 
-   a. Each line in the pair is rasterised by the dint of :func:`cbclib.bin.draw_line` method that uses Bresenham's algorithm [BSH]_.
+   a. Each line in the pair is rasterised by the dint of :func:`cbclib.bin.draw_line_image` method that uses Bresenham's algorithm [BSH]_.
    b. A union of rasterised image traces is used to calculate the image moments. An average line direction and line coordinates are
       then calculated based on the image moments.
    c. A new collapsed line overwrites a pair of lines if the intersection-to-union ratio of a rasterised image of the collapsed line
@@ -48,9 +52,18 @@ the [LSD]_ algorithm. The detection algorithm comprises three stages:
 
 3. The lines with a zero-th image moment below the ``filter_threshold`` are discarded.
 
-The resulting set of detected streaks is used to generate a streak mask (:func:`cbclib.LSDetector.draw_streaks`), which is required
-to calculate sparse CBC patterns (:func:`cbclib.LSDetector.update_pattern`). Finally, sparse CBC patterns can be exported to a
-CBC table used for the next stage of indexing and sample refinement (:func:`cbclib.LSDetector.export_table`).
+:class:`ModelDetector <cbclib.ModelDetector>`
+---------------------------------------------
+:class:`cbclib.ModelDetector` takes the refined crystal lattice (:class:`cbclib.Basis`), sample parameters (:class:`cbclib.ScanSamples`),
+and experimental geometry (:class:`cbclib.ScanSetup`) to model the locations of Bragg reflection on the detector. The predicted
+reflection is presumed to be present in the measured patterns if the signal-to-noise ratio is above the threshold (see
+:func:`cbclib.ModelDetector.detect`).
+
+.. note::
+
+    After obtaining a set of detected streaks, both :class:`cbclib.LSDetector` and :class:`cbclib.ModelDetector` can generate the normalised
+    sparse patterns with a two-zone masking method (see :class:`cbclib.bin.normalise_pattern`). At the end, the sparse CBC patterns can
+    be exported to a :class:`CBC table <cbclib.CBCTable>` with :func:`cbclib.LSDetector.export_table` or :func:`cbclib.ModelDetector.export_table`.
 
 Contents
 --------

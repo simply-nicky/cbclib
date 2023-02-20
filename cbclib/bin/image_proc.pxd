@@ -1,4 +1,6 @@
 cimport numpy as np
+from libc.string cimport memcmp, memcpy
+from libc.stdlib cimport malloc, free
 
 cdef extern from "Python.h":
     int Py_AtExit(void(*func)())
@@ -66,23 +68,33 @@ cdef extern from "median.h":
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                         unsigned threads) nogil
 
-ctypedef int (*line_profile)(int, float, float)
+ctypedef float (*line_profile)(float, float)
 
 cdef extern from "img_proc.h":
-    int linear_profile(int max_val, float err, float wd) nogil
-    int tophat_profile(int max_val, float err, float wd) nogil
-    int quad_profile(int max_val, float err, float wd) nogil
-    int gauss_profile(int max_val, float err, float wd) nogil
+    float linear_profile(float err, float wd) nogil
+    float tophat_profile(float err, float wd) nogil
+    float quad_profile(float err, float wd) nogil
+    float gauss_profile(float err, float wd) nogil
     
-    int draw_line_c "draw_line" (unsigned int *out, unsigned long *dims, unsigned int max_val, float *lines,
-                     unsigned long *ldims, float dilation, line_profile profile) nogil
+    int draw_line_int(unsigned *out, unsigned long *dims, unsigned max_val, float *lines,
+                      unsigned long *ldims, float dilation, line_profile profile) nogil
 
-    int draw_line_index_c "draw_line_index" (unsigned int **out, unsigned long *n_idxs, unsigned long *dims,
-                          unsigned int max_val, float *lines, unsigned long *ldims, float dilation,
-                          line_profile profile) nogil
+    int draw_line_float(float *out, unsigned long *dims, float *lines, unsigned long *ldims,
+                        float dilation, line_profile profile) nogil
+
+    int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, unsigned long *n_idxs,
+                        unsigned long *dims, float *lines, unsigned long *ldims, float dilation,
+                        line_profile profile) nogil
 
     int normalise_line(float *out, float *data, unsigned long *dims, float *lines, unsigned long *ldims,
                        float *dilations, line_profile profile) nogil
+
+    int refine_line(float *olines, float *data, unsigned long *dims, float *ilines, unsigned long *ldims,
+                    float dilation, line_profile profile) nogil
+
+    double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, unsigned long *dims, float **lines,
+                         unsigned long *ldims, unsigned long lsize, float dilation, float epsilon,
+                         line_profile profile, unsigned threads) nogil
 
 cdef extern from "fftw3.h":
     void fftw_init_threads() nogil

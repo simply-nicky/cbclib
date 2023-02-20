@@ -7,7 +7,7 @@ are inherited from the abstract :class:`cbclib.Transform` class. Use :func:`cbcl
 transform to an image.
 
 :class:`Transform <cbclib.Transform>`
------------------------------------------------------
+-------------------------------------
 
 .. autoclass:: cbclib.Transform
     :members:
