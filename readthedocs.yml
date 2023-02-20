@@ -9,17 +9,18 @@ version: 2
 sphinx:
   configuration: docs/conf.py
 
+build:
+  os: "ubuntu-20.04"
+  tools:
+    python: "mambaforge-4.10"
+  
 conda:
   environment: docs/rtd_environment.yml
-
-build:
-  image: latest
 
 submodules:
   include: all
 
 python:
-  version: 3.7
   install:
     - method: setuptools
       path: .
