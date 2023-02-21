@@ -7,18 +7,22 @@ import pytest
 import numpy as np
 import cbclib as cbc
 
-def generate_data(models: List[cbc.CBDModel], shape: Tuple[int, int, int],
-                  bgd_lvl: Tuple[float, float], q_abs: float, stk_w: float, sgn_lvl: float,
-                  bad_n: int, bad_lvl: Tuple[int, int]) -> np.ndarray:
+def generate_data(samples: cbc.ScanSamples, basis: cbc.Basis, setup: cbc.ScanSetup,
+                  shape: Tuple[int, int, int], bgd_lvl: Tuple[float, float],
+                  q_abs: float, stk_w: float, sgn_lvl: float, bad_n: int,
+                  bad_lvl: Tuple[int, int]) -> np.ndarray:
     y, x = np.meshgrid(np.arange(shape[1]), np.arange(shape[2]), indexing='ij')
     background = 1.0 - 2.0 * np.sqrt((x - shape[2] // 2)**2 + (y - shape[1] // 2)**2) / \
                  np.sqrt(shape[2]**2 + shape[1]**2)
     background = bgd_lvl[0] + background * (bgd_lvl[1] - bgd_lvl[0])
+    hkl = basis.generate_hkl(q_abs)
     patterns = []
-    for model in models:
-        hkl = model.basis.generate_hkl(q_abs)
-        hkl = hkl[model.filter_hkl(q_abs)]
-        patterns.append(model.generate_streaks(hkl, stk_w).pattern_image(shape[1:]))
+    for sample in samples.values():
+        model = cbc.CBDModel(basis, sample, setup, shape=shape[1:])
+        hkl = hkl[model.filter_hkl(hkl)]
+        streaks = model.generate_streaks(hkl, stk_w)
+        pattern = streaks.pattern_image(model.shape)
+        patterns.append(pattern)
     data = sgn_lvl * np.stack(patterns) + background
     data = np.random.poisson(data)
 
@@ -35,8 +39,8 @@ def basis(request: pytest.FixtureRequest) -> cbc.Basis:
     rotation = cbc.Rotation.import_euler(request.param['angles'])
     return cbc.Basis.import_matrix(rotation(mat))
 
-@pytest.fixture(params=[{'shape': (500, 500), 'det_dist': 0.1, 'pupil_size': 25,
-                         'pixel_size': 7.5e-5, 'energy': 1e4}],
+@pytest.fixture(params=[{'shape': (500, 500), 'det_dist': 0.1, 'smp_dist': 0.01,
+                         'pupil_size': 25, 'pixel_size': 7.5e-5, 'energy': 1e4}],
                 scope='session')
 def setup(request: pytest.FixtureRequest) -> cbc.ScanSetup:
     wavelength = 12398.419297617678 / request.param['energy']
@@ -47,20 +51,17 @@ def setup(request: pytest.FixtureRequest) -> cbc.ScanSetup:
                  0.5 * (request.param['shape'][1] + request.param['pupil_size']),
                  0.5 * (request.param['shape'][0] - request.param['pupil_size']),
                  0.5 * (request.param['shape'][0] + request.param['pupil_size']))
-    return cbc.ScanSetup(foc_pos=foc_pos, pupil_roi=pupil_roi, rot_axis=np.array([0.0, 1.0, 0.0]),
-                         x_pixel_size=request.param['pixel_size'],
-                         y_pixel_size=request.param['pixel_size'], wavelength=wavelength)
+    return cbc.ScanSetup(foc_pos=foc_pos, smp_dist=request.param['pixel_size'], pupil_roi=pupil_roi,
+                         x_pixel_size=request.param['pixel_size'], wavelength=wavelength,
+                         rot_axis=np.array([1.5707963267948966, 1.5707963267948966]),
+                         y_pixel_size=request.param['pixel_size'])
 
 @pytest.fixture(params=[{'n_frames': 50, 'foc_dist': 0.01, 'tilt': np.deg2rad(1.0)},],
                 scope='session')
 def samples(request: pytest.FixtureRequest, setup: cbc.ScanSetup) -> cbc.ScanSamples:
-    smp_pos = np.array([setup.foc_pos[0], setup.foc_pos[1],
-                        setup.foc_pos[2] - request.param['foc_dist']])
-    samples = {}
-    for frame in range(request.param['n_frames']):
-        samples[frame] = cbc.Sample(setup.tilt_rotation(request.param['tilt'] * frame),
-                                    smp_pos)
-    return cbc.ScanSamples(samples)
+    samples = setup.tilt_samples(np.arange(request.param['n_frames']),
+                                 request.param['tilt'] * np.arange(request.param['n_frames']))
+    return samples
 
 @pytest.fixture(params=[{'bgd_lvl': (5.0, 10.0), 'stk_w': 3.0, 'sgn_lvl': 10.0,
                          'bad_n': 300, 'bad_lvl': (200, 400), 'q_abs': 0.3},],
@@ -69,8 +70,7 @@ def data(request: pytest.FixtureRequest, basis: cbc.Basis, samples: cbc.ScanSamp
          setup: cbc.ScanSetup) -> np.ndarray:
     shape = (len(samples), int(2.0 * setup.foc_pos[1] / setup.y_pixel_size),
              int(2.0 * setup.foc_pos[0] / setup.x_pixel_size))
-    models = [cbc.CBDModel(basis, sample, setup, shape=shape[1:]) for sample in samples.values()]
-    return generate_data(**request.param, shape=shape, models=models)
+    return generate_data(**request.param, shape=shape, samples=samples, basis=basis, setup=setup)
 
 @pytest.fixture(scope='session')
 def temp_dir() -> str:
@@ -148,17 +148,14 @@ def test_cryst_data(cryst_data: cbc.CrystData):
 @pytest.fixture(scope='session')
 def lsd_detector(cryst_data: cbc.CrystData) -> cbc.LSDetector:
     lsd_det = cryst_data.lsd_detector()
-    lsd_det = lsd_det.generate_pattern(vmin=0.0, vmax=10.0, size=(1, 3, 3))
+    lsd_det = lsd_det.generate_patterns(vmin=0.0, vmax=10.0, size=(1, 3, 3))
     lsd_det = lsd_det.detect(cutoff=10.0, filter_threshold=1.0, group_threshold=0.9, dilation=3.5)
-    lsd_det = lsd_det.draw_streaks(dilation=3.5)
-    lsd_det = lsd_det.draw_background(dilation=10.5)
-    return lsd_det.update_pattern()
+    lsd_det = lsd_det.update_patterns(dilations=(0.0, 3.5, 10.5))
+    return lsd_det
 
 @pytest.mark.data_processing
 def test_lsd_detector(lsd_detector: cbc.LSDetector):
-    bgd_mask = np.subtract(lsd_detector.bgd_mask, lsd_detector.streak_mask, dtype=int)
-    assert bgd_mask.min() == 0 and bgd_mask.max() == 1
-    assert lsd_detector.pattern.min() == 0.0 and lsd_detector.pattern.max() == 1.0
+    assert lsd_detector.patterns.min() == 0.0 and lsd_detector.patterns.max() == 1.0
 
 @pytest.fixture(scope='session')
 def table_file(lsd_detector: cbc.LSDetector, temp_dir: str) -> str:

@@ -764,7 +764,8 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines,
 
             if (img[ri->index])
             {
-                GET(Iarr, float, idx) += div * (data[idx] * img[ri->index] - bgd);
+                val = data[idx] * img[ri->index];
+                if (val > bgd) GET(Iarr, float, idx) += div * (val - bgd);
                 GET(Warr, int, idx) += 1;
             }
         }
