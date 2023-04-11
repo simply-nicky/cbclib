@@ -60,8 +60,7 @@ int predict_kerreg(float *y, float *w, float *x, size_t npts, size_t ndim, float
 int predict_grid(float **y_hat, size_t *roi, float *y, float *w, float *x, size_t npts, size_t ndim, float **grid,
                  const size_t *gdims, kernel krn, float sigma, unsigned threads);
 
-int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **iidxs, size_t *ipts, unsigned *frames,
-                   unsigned *indices, size_t npts);
+int unique_idxs(unsigned **unique, unsigned **iidxs, size_t *isize, unsigned *indices, unsigned *inverse, size_t npts);
 
 /*----------------------------------------------------------------------------*/
 /*---------------------- Intensity scaling criterions ------------------------*/
@@ -70,14 +69,19 @@ static inline float l2_loss(float x) {return SQ(x);}
 static inline float l2_grad(float x) {return 2.0f * x;}
 static inline float l1_loss(float x) {return fabsf(x);}
 static inline float l1_grad(float x) {return (x > 0.0f) ? 1.0f : -1.0f;}
-static inline float huber_loss(float x) {float xx = fabsf(x); return (xx < 1.345) ? SQ(xx) : 2.69 * (xx - 0.7625);}
-static inline float huber_grad(float x) {float xx = fabsf(x); return (xx < 1.345) ? 2.0f * x : 2.69 * x / xx;}
+static inline float huber_loss(float x) {float xx = fabsf(x); return (xx < 1.345f) ? SQ(xx) : 2.69f * (xx - 0.7625f);}
+static inline float huber_grad(float x) {float xx = fabsf(x); return (xx < 1.345f) ? 2.0f * x : 2.69f * x / xx;}
 
-float poisson_likelihood(float *grad, float *x, size_t xsize, float *rp, unsigned *I0, float *bgd, float *xtal_bi,
-                         unsigned *hkl_idxs, unsigned *iidxs, size_t isize, unsigned threads);
+int poisson_likelihood(double *out, double *grad, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd,
+                       float *xtal_bi, float *rp, unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize,
+                       unsigned *hkl_idxs, size_t hkl_size, unsigned *oidxs, size_t osize, unsigned threads);
 
-float least_squares(float *grad, float *x, size_t xsize, float *rp, unsigned *I0, float *bgd, float *xtal_bi,
-                    unsigned *hkl_idxs, unsigned *iidxs, size_t isize, float (*loss_func)(float), float (*grad_func)(float),
-                    unsigned threads);
+int least_squares(double *out, double *grad, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd, float *xtal_bi,
+                  float *rp, unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize, unsigned *hkl_idxs, size_t hkl_size,
+                  unsigned *oidxs, size_t osize, float (*loss_func)(float), float (*grad_func)(float), unsigned threads);
+
+int unmerge_sgn(float *I_hat, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd, float *xtal_bi, float *rp,
+                unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize, unsigned *hkl_idxs, size_t hkl_size,
+                unsigned threads);
 
 #endif

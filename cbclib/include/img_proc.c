@@ -1,8 +1,7 @@
 #include "img_proc.h"
 #include "array.h"
 #include "kd_tree.h"
-
-#define TOL 3.1425926535897937e-05
+#include "cephes.h"
 
 #define WRAP_DIST(_dist, _dx, _hb, _fb, _div)                   \
     do {float _dx1; if ((_dx) < -(_hb)) _dx1 = (_dx) + (_fb);   \
@@ -86,17 +85,37 @@ typedef void (*set_pixel)(void *out, int x, int y, float val);
 static void set_pixel_int(void *out, int x, int y, float val)
 {
     array image = (array)out;
-    unsigned *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
-    unsigned new = MAX(*ptr, (unsigned)val);
-    *ptr = new;
+    int idx = image->strides[1] * x + image->strides[0] * y;
+    if (idx >= 0 && idx < (int)image->size)
+    {
+        unsigned *ptr = image->data + idx * image->item_size;
+        unsigned new = MAX(*ptr, (unsigned)val);
+        *ptr = new;
+    }
+    else
+    {
+        char buf[64];
+        sprintf(buf, "set_pixel_float: invalid pixel index %d", idx);
+        ERROR(buf);
+    }
 }
 
 static void set_pixel_float(void *out, int x, int y, float val)
 {
     array image = (array)out;
-    float *ptr = image->data + (image->strides[1] * x + image->strides[0] * y) * image->item_size;
-    float new = MAX(*ptr, val);
-    *ptr = new;
+    int idx = image->strides[1] * x + image->strides[0] * y;
+    if (idx >= 0 && idx < (int)image->size)
+    {
+        float *ptr = image->data + idx * image->item_size;
+        float new = MAX(*ptr, val);
+        *ptr = new;
+    }
+    else
+    {
+        char buf[64];
+        sprintf(buf, "set_pixel_float: invalid pixel index %d", idx);
+        ERROR(buf);
+    }
 }
 
 static void set_pixel_index(void *out, int x, int y, float val)
@@ -125,9 +144,12 @@ static void set_pixel_index(void *out, int x, int y, float val)
         pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
         url: http://members.chello.at/~easyfilter/bresenham.html
 ------------------------------------------------------------------------------*/
-static void plot_line_width(void *out, const size_t *dims, int *points, float wd, unsigned max_val,
+static void plot_line_width(void *out, const size_t *dims, int *points, float width, unsigned max_val,
                             set_pixel setter, line_profile profile)
 {
+    /* check if dims are non-zerro */
+    if (dims[0] * dims[1] == 0) return;
+
     /* create a volatile copy of the input line */
     /* the points are given by [j0, i0, j1, i1] */
     int pts[4] = {points[0], points[1], points[2], points[3]};
@@ -137,10 +159,10 @@ static void plot_line_width(void *out, const size_t *dims, int *points, float wd
     int dy = abs(pts[2] - pts[0]), sy = pts[0] < pts[2] ? 1 : -1;
     int err = dx - dy, derr = 0, dx0 = 0, e2, x2, y2;    /* error value e_xy */
     float ed = (dx + dy == 0) ? 1.0f : sqrtf((float)dx * dx + (float)dy * dy), val;
-    wd = 0.5f * (wd + 1.0f);
+    float wd = 0.5f * (width + 1.0f);
 
     /* define image bounds */
-    int wi = roundf(0.5 * wd);
+    int wi = roundf(0.5f * wd);
     int bnd[4];
 
     if (pts[1] < pts[3])
@@ -283,8 +305,8 @@ int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, siz
     index_tuple idxs = new_index_tuple(1);
 
     line ln = init_line(larr, 1);
-    float wd;
-    int ln_area;
+    float width;
+    int ln_area, wi;
 
     for (idxs->iter = 0; idxs->iter < (int)ldims[0]; idxs->iter++)
     {
@@ -294,15 +316,16 @@ int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, siz
         int pts[4] = {roundf(GET(ln, float, 1)), roundf(GET(ln, float, 0)),
                       roundf(GET(ln, float, 3)), roundf(GET(ln, float, 2))};
 
-        wd = GET(ln, float, 4) + dilation;
-        ln_area = (2 * (int)wd + abs(pts[2] - pts[0])) * (2 * (int)wd + abs(pts[3] - pts[1]));
+        width = GET(ln, float, 4) + dilation;
+        wi = roundf(0.25f * (width + 1.0f));
+        ln_area = (2 * wi + abs(pts[2] - pts[0])) * (2 * wi + abs(pts[3] - pts[1]));
 
         // Expand the list if needed
         if (idxs->max_size < idxs->size + (size_t)ln_area)
             realloc_index_tuple(idxs, idxs->size + (size_t)ln_area);
 
         // Write down the indices
-        plot_line_width(idxs, dims, pts, wd, 1, set_pixel_index, profile);
+        plot_line_width(idxs, dims, pts, width, 1, set_pixel_index, profile);
     }
 
     realloc_index_tuple(idxs, idxs->size);
@@ -323,7 +346,7 @@ static void create_line_image_pair(float **out, int **pts, const size_t *dims, f
     /* Convert coordinates 'ln1' to points */
     int pts1[4] = {roundf(ln1[1]), roundf(ln1[0]), roundf(ln1[3]), roundf(ln1[2])};
 
-    int wi = roundf(MAX(ln0[4], ln1[4]));
+    int wi = roundf(0.25f * (MAX(ln0[4], ln1[4]) + dilation + 1.0f));
 
     /* Find the outer bounds 'orect' */
     if (pts0[0] < pts0[2])
@@ -389,7 +412,7 @@ static void create_line_image(float **out, int **opts, const size_t *dims, float
     /* Convert coordinates 'ln' to points */
     int pts[4] = {roundf(ln[1]), roundf(ln[0]), roundf(ln[3]), roundf(ln[2])};
 
-    int wi = roundf(ln[4]);
+    int wi = roundf(0.25f * (ln[4] + dilation + 1.0f));
 
     /* Define the image bounds 'opts' */
     if (pts[0] < pts[2])
@@ -834,7 +857,7 @@ int refine_line(float *olines, float *data, const size_t *dims, float *ilines, c
             /* Shift the line */
             ln[0] -= tau[1] * mu_x; ln[1] += tau[0] * mu_x;
             ln[2] -= tau[1] * mu_x; ln[3] += tau[0] * mu_x;
-            ln[4] = sqrtf(8.0f * mu_xx);
+            if (mu_xx > 0.0f) ln[4] = sqrtf(8.0f * mu_xx);
         }
     }
 
@@ -843,247 +866,48 @@ int refine_line(float *olines, float *data, const size_t *dims, float *ilines, c
     return 0;
 }
 
-/*----------------------------------------------------------------------------*/
-/*------------------------------- Euler angles -------------------------------*/
-/*----------------------------------------------------------------------------*/
-
-/*----------------------------------------------------------------------------*/
-/*  Euler angles with Bunge convention
-
-        ang   =  [phi1, Phi, phi2]
-        phi1 \el [0, 2 * M_PI)
-        Phi  \el [0, M_PI)
-        phi2 \el [0, 2 * M_PI)
-
-    See the following article for more info:
-    http://eecs.qmul.ac.uk/~gslabaugh/publications/euler.pdf
- */
-
-static void rotmat_to_euler(double *ang, double *rm)
+int count_outliers(unsigned *outs, unsigned *cnts, size_t osize, unsigned *data, float *bgd, unsigned *hkl_idxs,
+                   unsigned *iidxs, size_t isize, float alpha, unsigned threads)
 {
-    ang[1] = acos(rm[8]);
-    if (ang[1] < 1e-8) {ang[0] = atan2(-rm[3], rm[0]); ang[2] = 0.0; }
-    else if (M_PI - ang[1] < TOL)
-    {ang[0] = atan2(rm[3], rm[0]); ang[2] = 0.0; }
-    else {ang[0] = atan2(rm[6], -rm[7]); ang[2] = atan2(rm[2], rm[5]); }
-    if (ang[0] < 0.0) ang[0] += M_2__PI;
-    if (ang[2] < 0.0) ang[2] += M_2__PI;
-}
+    /* Check parameters */
+    if (!outs || !cnts || !data || !bgd || !hkl_idxs || !iidxs)
+    {ERROR("filter_hkl: one of the arguments is NULL."); return -1;}
+    if (alpha > 1.0f || alpha < 0.0f) {ERROR("filter_hkl: invalid alpha."); return -1;}
+    
+    if (isize == 0 || osize == 0) return 0;
 
-int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats)
-{
-    /* check parameters */
-    if (!angles || !rot_mats) {ERROR("compute_euler_angles: one of the arguments is NULL."); return -1;}
-    if (!n_mats) {ERROR("compute_euler_angles: number of matrices must be positive."); return -1;}   
-
-    size_t rm_dims[2] = {n_mats, 9};
-    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
-    line rm_ln = init_line(rm_arr, 1);
-
-    size_t a_dims[2] = {n_mats, 3};
-    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
-    line ang_ln = init_line(ang_arr, 1);
-
-    for (int i = 0; i < (int)n_mats; i++)
+    #pragma omp parallel num_threads(threads)
     {
-        UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(ang_ln, i);
+        int i, j, count, idx;
+        float lambda, quant;
 
-        rotmat_to_euler(ang_ln->data, rm_ln->data);
+        #pragma omp for
+        for (i = 0; i < (int)isize; i++)
+        {
+            if (iidxs[i + 1] > iidxs[i])
+            {
+                lambda = 0.0f;
+                for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++) lambda += bgd[j];
+                lambda /= (iidxs[i + 1] - iidxs[i]);
+
+                /* Calculate the upper bound of confidence interval for the Poisson distribution
+                see https://en.wikipedia.org/wiki/Poisson_distribution
+                */
+                quant = 0.5 * chdtri(2.0 * lambda, 0.5 * alpha);
+
+                count = 0, idx = hkl_idxs[iidxs[i]];
+                for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
+                {
+                    if (data[j] > quant) count++;
+                }
+
+                #pragma omp atomic
+                outs[idx] += count;
+                #pragma omp atomic
+                cnts[idx] += iidxs[i + 1] - iidxs[i];
+            }
+        }
     }
-
-    DEALLOC(ang_ln); DEALLOC(rm_ln);
-    free_array(ang_arr); free_array(rm_arr);
-
-    return 0;
-}
-
-static void euler_to_rotmat(double *rm, double *ang)
-{
-    double c0 = cos(ang[0]), c1 = cos(ang[1]), c2 = cos(ang[2]);
-    double s0 = sin(ang[0]), s1 = sin(ang[1]), s2 = sin(ang[2]);
-
-    rm[0] = c0 * c2 - s0 * s2 * c1;
-    rm[1] = s0 * c2 + c0 * s2 * c1;
-    rm[2] = s2 * s1;
-    rm[3] = -c0 * s2 - s0 * c2 * c1;
-    rm[4] = -s0 * s2 + c0 * c2 * c1;
-    rm[5] = c2 * s1;
-    rm[6] = s0 * s1;
-    rm[7] = -c0 * s1;
-    rm[8] = c1;
-}
-
-int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats)
-{
-    /* check parameters */
-    if (!angles || !rot_mats) {ERROR("compute_euler_matrix: one of the arguments is NULL."); return -1;}
-    if (!n_mats) {ERROR("compute_euler_matrix: number of matrices must be positive."); return -1;}   
-
-    size_t rm_dims[2] = {n_mats, 9};
-    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
-    line rm_ln = init_line(rm_arr, 1);
-
-    size_t a_dims[2] = {n_mats, 3};
-    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
-    line ang_ln = init_line(ang_arr, 1);
-
-    for (int i = 0; i < (int)n_mats; i++)
-    {
-        UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(ang_ln, i);
-
-        euler_to_rotmat(rm_ln->data, ang_ln->data);
-    }
-
-    DEALLOC(ang_ln); DEALLOC(rm_ln);
-    free_array(ang_arr); free_array(rm_arr);
-
-    return 0;
-}
-
-/*----------------------------------------------------------------------------*/
-/*  Tilt around an axis
-
-        ang    =  [theta, alpha, beta]
-        theta \el [0, 2 * M_PI)         Angle of rotation
-        alpha \el [0, M_PI)             Angle between the axis of rotation and 0Z
-        phi   \el [0, 2 * M_PI)         Polar angle of the axis of rotation
- */
-
-static void rotmat_to_tilt(double *ang, double *rm)
-{
-    double a0 = rm[7] - rm[5];
-    double a1 = rm[2] - rm[6];
-    double a2 = rm[3] - rm[1];
-    double l = sqrt(SQ(a0) + SQ(a1) + SQ(a2));
-    ang[0] = acos(0.5 * (rm[0] + rm[4] + rm[8] - 1.0));
-    ang[1] = acos(a2 / l);
-    ang[2] = atan2(a1, a0);
-}
-
-int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats)
-{
-    /* check parameters */
-    if (!angles || !rot_mats) {ERROR("compute_tilt_angles: one of the arguments is NULL."); return -1;}
-    if (!n_mats) {ERROR("compute_tilt_angles: number of matrices must be positive."); return -1;}   
-
-    size_t rm_dims[2] = {n_mats, 9};
-    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
-    line rm_ln = init_line(rm_arr, 1);
-
-    size_t a_dims[2] = {n_mats, 3};
-    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
-    line ang_ln = init_line(ang_arr, 1);
-
-    for (int i = 0; i < (int)n_mats; i++)
-    {
-        UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(ang_ln, i);
-
-        rotmat_to_tilt(ang_ln->data, rm_ln->data);
-    }
-
-    DEALLOC(ang_ln); DEALLOC(rm_ln);
-    free_array(ang_arr); free_array(rm_arr);
-
-    return 0;
-}
-
-static void tilt_to_rotmat(double *rm, double *ang)
-{
-    float a = cos(0.5 * ang[0]), b = -sin(ang[1]) * cos(ang[2]) * sin(0.5 * ang[0]);
-    float c = -sin(ang[1]) * sin(ang[2]) * sin(0.5 * ang[0]), d = -cos(ang[1]) * sin(0.5 * ang[0]);
-
-    rm[0] = a * a + b * b - c * c - d * d;
-    rm[1] = 2.0 * (b * c + a * d);
-    rm[2] = 2.0 * (b * d - a * c);
-    rm[3] = 2.0 * (b * c - a * d);
-    rm[4] = a * a + c * c - b * b - d * d;
-    rm[5] = 2.0 * (c * d + a * b);
-    rm[6] = 2.0 * (b * d + a * c);
-    rm[7] = 2.0 * (c * d - a * b);
-    rm[8] = a * a + d * d - b * b - c * c;
-}
-
-int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats)
-{
-    /* check parameters */
-    if (!angles || !rot_mats) {ERROR("compute_tilt_matrix: one of the arguments is NULL."); return -1;}
-    if (!n_mats) {ERROR("compute_tilt_matrix: number of matrices must be positive."); return -1;}   
-
-    size_t rm_dims[2] = {n_mats, 9};
-    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
-    line rm_ln = init_line(rm_arr, 1);
-
-    size_t a_dims[2] = {n_mats, 3};
-    array ang_arr = new_array(2, a_dims, sizeof(double), angles);
-    line ang_ln = init_line(ang_arr, 1);
-
-    for (int i = 0; i < (int)n_mats; i++)
-    {
-        UPDATE_LINE(rm_ln, i);
-        UPDATE_LINE(ang_ln, i);
-
-        tilt_to_rotmat(rm_ln->data, ang_ln->data);
-    }
-
-    DEALLOC(ang_ln); DEALLOC(rm_ln);
-    free_array(ang_arr); free_array(rm_arr);
-
-    return 0;
-}
-
-/*-------------------------------------------------------------------------------*/
-/** Calculate the rotation matrix rm, that rotates unit vector a to unit vector b.
-
-    @param rm       Output rotation matrix.
-    @param a        Unit vector a.
-    @param b        Unit vector b.
-
-    @note           Yields nan, if cos(a, b) = -1.0.
- */
-static void rotation_of_a_to_b(double *rm, double *a, double *b)
-{
-    double vx = a[1] * b[2] - a[2] * b[1];
-    double vy = a[2] * b[0] - a[0] * b[2];
-    double vz = a[0] * b[1] - a[1] * b[0];
-    double rat = 1.0 / (1.0 + a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
-    rm[0] = 1.0 - rat * (SQ(vy) + SQ(vz));
-    rm[1] = -vz + rat * vx * vy;
-    rm[2] =  vy + rat * vx * vz;
-    rm[3] =  vz + rat * vx * vy;
-    rm[4] = 1.0 - rat * (SQ(vx) + SQ(vz));
-    rm[5] = -vx + rat * vy * vz;
-    rm[6] = -vy + rat * vx * vz;
-    rm[7] =  vx + rat * vy * vz;
-    rm[8] = 1.0 - rat * (SQ(vx) + SQ(vy));
-}
-
-int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats)
-{
-    /* check parameters */
-    if (!as || !bs || !rot_mats) {ERROR("compute_rotations: one of the arguments is NULL."); return -1;}
-    if (!n_mats) {ERROR("compute_rotations: number of matrices must be positive."); return -1;}   
-
-    size_t rm_dims[2] = {n_mats, 9};
-    array rm_arr = new_array(2, rm_dims, sizeof(double), rot_mats);
-    line rm_ln = init_line(rm_arr, 1);
-    double a[3], b[3];
-    double a_abs, b_abs;
-
-    for (int i = 0; i < (int)n_mats; i++)
-    {
-        UPDATE_LINE(rm_ln, i);
-
-        a_abs = sqrt(SQ(as[3 * i]) + SQ(as[3 * i + 1]) + SQ(as[3 * i + 2]));
-        a[0] = as[3 * i] / a_abs; a[1] = as[3 * i + 1] / a_abs; a[2] = as[3 * i + 2] / a_abs;
-        b_abs = sqrt(SQ(bs[3 * i]) + SQ(bs[3 * i + 1]) + SQ(bs[3 * i + 2]));
-        b[0] = bs[3 * i] / b_abs; b[1] = bs[3 * i + 1] / b_abs; b[2] = bs[3 * i + 2] / b_abs;
-        rotation_of_a_to_b(rm_ln->data, a, b);
-    }
-
-    DEALLOC(rm_ln); free_array(rm_arr);
 
     return 0;
 }
@@ -1103,7 +927,7 @@ double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, size_t *dims, floa
 
     #pragma omp parallel num_threads(threads)
     {
-        int j, ln_area, k0, k, pts[4];
+        int j, ln_area, k0, k, wi, pts[4];
         float wd, tmax, val, t, tau[2];
         float *ln;
         double crit;
@@ -1122,21 +946,20 @@ double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, size_t *dims, floa
                 /* Convert coordinates to points */
                 pts[0] = roundf(ln[1]); pts[1] = roundf(ln[0]); pts[2] = roundf(ln[3]); pts[3] = roundf(ln[2]);
 
-                wd = ln[4] + dilation;
-                k0 = idxs->size;
-                ln_area = (2 * ((int)wd + 1.0f) + abs(pts[2] - pts[0])) * (2 * ((int)wd + 1.0f) + abs(pts[3] - pts[1]));
+                wd = 0.5f * (ln[4] + dilation + 1.0f);
+                wi = roundf(0.5f * wd); k0 = idxs->size;
+                ln_area = (2 * wi + abs(pts[2] - pts[0])) * (2 * wi + abs(pts[3] - pts[1]));
 
                 /* Expand the list if needed */
                 if (idxs->max_size < idxs->size + (size_t)ln_area)
                     realloc_index_tuple(idxs, idxs->size + (size_t)ln_area);
 
                 /* Write down the indices */
-                plot_line_width(idxs, dims, pts, wd + 1.0f, 1, set_pixel_index, profile);
+                plot_line_width(idxs, dims, pts, ln[4] + dilation, 1, set_pixel_index, profile);
 
                 /* Find the unit vector */
                 tmax = sqrtf(SQ(ln[2] - ln[0]) + SQ(ln[3] - ln[1]));
                 tau[0] = (ln[2] - ln[0]) / tmax; tau[1] = (ln[3] - ln[1]) / tmax;
-                wd = 0.5f * (wd + 1.0f);
 
                 for (k = k0; k < (int)idxs->size; k++)
                 {

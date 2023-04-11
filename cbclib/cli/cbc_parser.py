@@ -6,12 +6,13 @@ from .cbc_executors import Executor, RefineExecutor, DetectExecutor
 class CBCParser():
     desc : str = "Command-line Interface for CBC data processing"
 
-    helpers = {'alpha': "Regularisation coefficient",
+    helpers = {'alpha': "Regularisation coefficient in refinement / Quantile level in model detection",
                'backend': "Choose the back-end for DE refinement between 'pygmo' and 'scipy'",
                'basis_path': "Path to the lattice basis config file",
                'cor_rng': "Range of background corrected intensities used in the detection",
                'cutoff': "Streaks grouping cut-off",
                'detector': "Choose the type of the streak detector between 'lsd' and 'model'",
+               'det_thr': "Model detection threshold",
                'dilation': "Pattern masking dilation in pixels",
                'dir_path': "Folder where the experimental data is saved",
                'filter_thr': "Streaks filtering threshold",
@@ -32,7 +33,6 @@ class CBCParser():
                'samples_path': "Path to the samples table",
                'scan_num': "Scan number",
                'setup_path': "Path to the experimental setup config file",
-               'snr_thr': "Signal-to-noise threshold used in the detection",
                'table_path': "Path to the CBC table file",
                'tols': "A list of tolerance used in the refinement",
                'verbose': "Set the verbosity",

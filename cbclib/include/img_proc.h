@@ -86,11 +86,8 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines, co
 int refine_line(float *out, float *data, const size_t *dims, float *lines, const size_t *ldims,
                 float dilation, line_profile profile);
 
-int compute_euler_angles(double *angles, double *rot_mats, size_t n_mats);
-int compute_euler_matrix(double *rot_mats, double *angles, size_t n_mats);
-int compute_tilt_angles(double *angles, double *rot_mats, size_t n_mats);
-int compute_tilt_matrix(double *rot_mats, double *angles, size_t n_mats);
-int compute_rotations(double *rot_mats, double *as, double *bs, size_t n_mats);
+int count_outliers(unsigned *outs, unsigned *cnts, size_t osize, unsigned *data, float *bgd, unsigned *hkl_idxs,
+                   unsigned *iidxs, size_t isize, float alpha, unsigned threads);
 
 /*---------------------------------------------------------------------------
                         Model refinement criterion

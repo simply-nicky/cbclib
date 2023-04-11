@@ -76,7 +76,8 @@ def data(request: pytest.FixtureRequest, basis: cbc.Basis, samples: cbc.ScanSamp
 def temp_dir() -> str:
     now = datetime.now()
     path = now.strftime("temp_%m_%d_%H%M%S")
-    os.mkdir(path)
+    if not os.path.isdir(path):
+        os.mkdir(path)
     yield path
     shutil.rmtree(path)
 

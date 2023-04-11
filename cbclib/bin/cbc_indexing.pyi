@@ -1,4 +1,4 @@
-from typing import Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 import numpy as np
 
 def euler_angles(rot_mats: np.ndarray) -> np.ndarray:
@@ -53,7 +53,7 @@ def tilt_matrix(angles: np.ndarray) -> np.ndarray:
     """
     ...
 
-def det_to_k(x: np.ndarray, y: np.ndarray, src: np.ndarray, x_ps: float, y_ps: float,
+def det_to_k(x: np.ndarray, y: np.ndarray, src: np.ndarray, idxs: Optional[np.ndarray]=None,
              num_threads: int=1) -> np.ndarray:
     """Convert coordinates on the detector ``x`, ``y`` to wave-vectors originating from
     the source points ``src``.
@@ -62,8 +62,6 @@ def det_to_k(x: np.ndarray, y: np.ndarray, src: np.ndarray, x_ps: float, y_ps: f
         x : x coordinates in pixels.
         y : y coordinates in pixels.
         src : Source points in meters (relative to the detector).
-        x_ps : Pixel size along the x axis [m].
-        y_ps : Pixel size along the y axis [m].
         num_threads : Number of threads used in the calculations.
 
     Returns:
@@ -71,17 +69,51 @@ def det_to_k(x: np.ndarray, y: np.ndarray, src: np.ndarray, x_ps: float, y_ps: f
     """
     ...
 
-def k_to_det(karr: np.ndarray, src: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
+def k_to_det(karr: np.ndarray, src: np.ndarray, idxs: Optional[np.ndarray]=None,
+             num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     """Convert wave-vectors originating from the source points ``src`` to coordinates on
     the detector.
 
     Args:
         karr : An array of wave-vectors.
         src : Source points in meters (relative to the detector).
+        idxs : Source point indices.
         num_threads : Number of threads used in the calculations.
 
     Returns:
         A tuple of x and y coordinates in meters.
+    """
+    ...
+
+def k_to_smp(karr: np.ndarray, z: np.ndarray, src: np.ndarray,
+             idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+    """Convert wave-vectors originating from the source point ``src`` to sample
+    planes at the z coordinate ``z``.
+
+    Args:
+        karr : An array of wave-vectors.
+        src : Source point in meters (relative to the detector).
+        z : Plane z coordinates in meters (relative to the detector).
+        idxs : Plane indices.
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        An array of points belonging to the ``z`` planes.
+    """
+    ...
+
+def rotate(vecs: np.ndarray, rmats: np.ndarray, idxs: Optional[np.ndarray]=None,
+           num_threads: int=1) -> np.ndarray:
+    """Rotate vectors ``vecs`` by rotation matrices ``rmats``.
+
+    Args:
+        vecs : Array of vectors.
+        rmats : Array of rotation matrices.
+        idxs : Rotation matrix indices.
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        An array of rotated vectors.
     """
     ...
 
@@ -175,25 +207,5 @@ def calc_source_lines(basis: np.ndarray, hkl: np.ndarray, kin_min: np.ndarray, k
 
     Returns:
         A set of source lines in the aperture function.
-    """
-    ...
-
-def filter_hkl(sgn: np.ndarray, bgd: np.ndarray, coord: np.ndarray, prof: np.ndarray, idxs: np.ndarray,
-               threshold: float, num_threads: int=1) -> np.ndarray:
-    """Filter generated diffraction streaks that have the signal-to-noise ratio above ``threshold``.
-    The SNR value is calculated as the ratio between the absolute value of background corrected
-    signal ``sgn`` and the square root of the background signal ``bgd``.
-
-    Args:
-        sgn : Background corrected measured intensities.
-        bgd : Background intensities.
-        coord : Coordinates of the generated pattern.
-        prof : Reflection profiles.
-        idxs : Streak indices of the generated pattern.
-        threshold : SNR ratio threshold.
-        num_threads : Number of threads used in the calculations.
-
-    Returns:
-        A mask of diffraction streaks, True if :code:`SNR > threshold` for the given streak.
     """
     ...

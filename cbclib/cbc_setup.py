@@ -22,8 +22,8 @@ import pandas as pd
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import WhiteKernel, RBF, ConstantKernel
 from .bin import (tilt_matrix, cartesian_to_spherical, spherical_to_cartesian, euler_angles,
-                  det_to_k, k_to_det, euler_matrix, tilt_angles, draw_line_image, draw_line_mask,
-                  draw_line_table, calc_source_lines, filter_hkl)
+                  det_to_k, k_to_det, k_to_smp, rotate, euler_matrix, tilt_angles, draw_line_image,
+                  draw_line_mask, draw_line_table, calc_source_lines)
 from .cxi_protocol import Indices
 from .data_container import DataContainer, INIContainer, Transform, Crop
 
@@ -158,7 +158,7 @@ class ScanSetup(INIContainer):
                                                y=np.mean(self.pupil_roi[:2]))[0]
 
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, pos: np.ndarray,
-                         num_threads: int=1) -> np.ndarray:
+                         idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
         """Project detector coordinates ``(x, y)`` to the output wave-vectors space originating
         from the point ``pos``.
 
@@ -166,27 +166,30 @@ class ScanSetup(INIContainer):
             x : A set of x coordinates.
             y : A set of y coordinates.
             pos : Source point of the output wave-vectors.
+            idxs : Source point indices.
             num_threads : Number of threads used in the calculations.
 
         Returns:
             An array of output wave-vectors.
         """
-        return det_to_k(x=np.atleast_1d(x), y=np.atleast_1d(y), src=pos,
-                        x_ps=self.x_pixel_size, y_ps=self.y_pixel_size, num_threads=num_threads)
+        x = np.atleast_1d(x * self.x_pixel_size)
+        y = np.atleast_1d(y * self.y_pixel_size)
+        return det_to_k(x, y, pos, idxs=idxs, num_threads=num_threads)
 
-    def kout_to_detector(self, kout: np.ndarray, pos: np.ndarray,
+    def kout_to_detector(self, kout: np.ndarray, pos: np.ndarray, idxs: Optional[np.ndarray]=None,
                          num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
         """Project output wave-vectors originating from the point ``pos`` to the detector plane.
 
         Args:
             kout : Output wave-vectors.
             pos : Source point of the output wave-vectors.
+            idxs : Source point indices.
             num_threads : Number of threads used in the calculations.
 
         Returns:
             A tuple of x and y detector coordinates.
         """
-        det_x, det_y = k_to_det(karr=kout, src=pos, num_threads=num_threads)
+        det_x, det_y = k_to_det(kout, pos, idxs=idxs, num_threads=num_threads)
         return det_x / self.x_pixel_size, det_y / self.y_pixel_size
 
     def detector_to_kin(self, x: np.ndarray, y: np.ndarray, num_threads: int=1) -> np.ndarray:
@@ -200,8 +203,9 @@ class ScanSetup(INIContainer):
         Returns:
             An array of incident wave-vectors.
         """
-        return det_to_k(x=np.atleast_1d(x), y=np.atleast_1d(y), src=self.foc_pos,
-                        x_ps=self.x_pixel_size, y_ps=self.y_pixel_size, num_threads=num_threads)
+        x = np.atleast_1d(x * self.x_pixel_size)
+        y = np.atleast_1d(y * self.y_pixel_size)
+        return det_to_k(x, y, self.foc_pos, num_threads=num_threads)
 
     def kin_to_detector(self, kin: np.ndarray, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
         """Project incident wave-vectors to the detector plane.
@@ -213,25 +217,27 @@ class ScanSetup(INIContainer):
         Returns:
             A tuple of x and y detector coordinates.
         """
-        det_x, det_y = k_to_det(karr=kin, src=self.foc_pos, num_threads=num_threads)
+        det_x, det_y = k_to_det(kin, self.foc_pos, num_threads=num_threads)
         return det_x / self.x_pixel_size, det_y / self.y_pixel_size
 
-    def kin_to_sample(self, kin: np.ndarray, z: Optional[float]=None,
-                      num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
-        """Project incident wave-vectors to the detector plane.
+    def kin_to_sample(self, kin: np.ndarray, smp_z: Union[np.ndarray, float, None]=None,
+                      idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+        """Project incident wave-vectors to the sample planes located at the z coordinates
+        ``smp_z``.
 
         Args:
             kin : Incident wave-vectors.
-            z : z coordinate of the sample [m].
+            smp_z : z coordinates of the sample [m].
+            idxs : Sample indices.
             num_threads : Number of threads used in the calculations.
 
         Returns:
-            A tuple of x and y detector coordinates.
+            An array of points pertaining to the sample planes.
         """
-        if z is None:
-            z = self.foc_pos[2] + self.smp_dist
-        source = np.array([self.foc_pos[0], self.foc_pos[1], self.foc_pos[2] - z])
-        return k_to_det(karr=kin, src=source, num_threads=num_threads)
+        if smp_z is None:
+            smp_z = self.foc_pos[2] + self.smp_dist
+        return k_to_smp(kin, np.atleast_1d(smp_z), self.foc_pos, idxs=idxs,
+                        num_threads=num_threads)
 
     def tilt_rotation(self, theta: float) -> Rotation:
         """Return a tilt rotation by the angle ``theta`` arount the axis of rotation.
@@ -394,19 +400,22 @@ class Sample():
         return cls(rotation=Rotation(data[list(cls.mat_columns)].to_numpy()),
                    z=data[cls.z_column])
 
-    def position(self, setup: ScanSetup) -> np.ndarray:
-        """Return sample coordinates relative to the detector.
+    def kin_to_sample(self, setup: ScanSetup, kin: Optional[np.ndarray]=None,
+                      num_threads: int=1) -> np.ndarray:
+        """Project incident wave-vectors ``kin`` to the sample plane.
 
         Args:
             setup : Experimental setup.
+            kin : Incident wave-vectors.
+            num_threads : Number of threads used in the calculations.
 
         Returns:
-            An array of x, y, and z sample coordinates.
+            An array of points belonging to the sample plane.
         """
-        smp_x, smp_y = setup.kin_to_sample(setup.kin_center, self.z)
-        return np.array([smp_x, smp_y, self.z])
+        kin = setup.kin_center if kin is None else kin
+        return setup.kin_to_sample(kin, self.z, num_threads=num_threads)
 
-    def rotate(self, basis: Basis) -> Basis:
+    def rotate_basis(self, basis: Basis) -> Basis:
         """Rotate a :class:`cbclib.Basis` by the ``rotation`` attribute.
 
         Args:
@@ -451,12 +460,12 @@ class Sample():
         Returns:
             An array of output wave-vectors.
         """
-        if rec_vec is None:
-            return setup.detector_to_kout(x, y, self.position(setup), num_threads)
-        kout = setup.detector_to_kout(x, y, self.position(setup), num_threads)
-        smp_x, smp_y = setup.kin_to_sample(kout - rec_vec, self.z, num_threads)
-        smp_pos = np.stack((smp_x, smp_y, self.z * np.ones(smp_x.shape)), axis=-1)
-        return setup.detector_to_kout(x, y, smp_pos, num_threads)
+        kout = setup.detector_to_kout(x, y, self.kin_to_sample(setup), num_threads=num_threads)
+        if rec_vec is not None:
+            smp_pos = self.kin_to_sample(setup, kout - rec_vec, num_threads=num_threads)
+            idxs = np.arange(x.size, dtype=np.uint32)
+            kout = setup.detector_to_kout(x, y, smp_pos, idxs, num_threads=num_threads)
+        return kout
 
     def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup, rec_vec: Optional[np.ndarray]=None,
                          num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
@@ -472,11 +481,12 @@ class Sample():
         Returns:
             A tuple of x and y detector coordinates.
         """
-        if rec_vec is None:
-            return setup.kout_to_detector(kout, self.position(setup), num_threads)
-        smp_x, smp_y = setup.kin_to_sample(kout - rec_vec, self.z, num_threads)
-        smp_pos = np.stack((smp_x, smp_y, self.z * np.ones(smp_x.shape)), axis=-1)
-        return setup.kout_to_detector(kout, smp_pos, num_threads)
+        x, y = setup.kout_to_detector(kout, self.kin_to_sample(setup), num_threads=num_threads)
+        if rec_vec is not None:
+            smp_pos = self.kin_to_sample(setup, kout - rec_vec, num_threads=num_threads)
+            idxs = np.arange(smp_pos.size / smp_pos.shape[-1], dtype=np.uint32)
+            x, y = setup.kout_to_detector(kout, smp_pos, idxs, num_threads=num_threads)
+        return x, y
 
     def to_dataframe(self) -> pd.Series:
         """Export the sample object to a :class:`pandas.Series` array.
@@ -517,6 +527,14 @@ class ScanSamples():
         frames = df.index
         samples = df.apply(Sample.import_dataframe, axis=1)
         return cls(zip(frames, samples))
+
+    @property
+    def z(self) -> np.ndarray:
+        return np.array([sample.z for sample in self.values()])
+
+    @property
+    def rmats(self) -> np.ndarray:
+        return np.stack([sample.rotation.matrix for sample in self.values()])
 
     def __getitem__(self, frame: int) -> Sample:
         return self._dct.__getitem__(frame)
@@ -569,24 +587,85 @@ class ScanSamples():
         """
         return self._dct.items()
 
-    def positions(self, setup: ScanSetup) -> np.ndarray:
-        """Return an array of sample coordinates relative to the detector.
+    def kin_to_sample(self, setup: ScanSetup, kin: Optional[np.ndarray]=None,
+                      idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+        """Project incident wave-vectors to the sample planes.
 
         Args:
             setup : Experimental setup.
+            kin : An array of incident wave-vectors.
+            idxs : Sample indices.
+            num_threads : Number of threads used in the calculations.
 
         Returns:
             Array of sample coordinates.
         """
-        return np.stack([sample.position(setup) for sample in self.values()])
+        if kin is None:
+            kin = np.tile(setup.kin_center[None], (len(self), 1))
+            idxs = np.arange(len(self), dtype=np.uint32)
+        return setup.kin_to_sample(kin, self.z, idxs, num_threads=num_threads)
 
-    def rotations(self) -> np.ndarray:
-        """Return an array of sample rotations.
+    def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup, idxs: np.ndarray,
+                         rec_vec: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+        """Project detector coordinates ``(x, y)`` to the output wave-vectors space originating
+        from the samples' locations.
+
+        Args:
+            x : A set of x coordinates.
+            y : A set of y coordinates.
+            setup : Experimental setup.
+            idxs : Sample indices.
+            rec_vec : A set of scattering vectors corresponding to the detector points.
+            num_threads : Number of threads used in the calculations.
 
         Returns:
-            Array of rotation matrices.
+            An array of output wave-vectors.
         """
-        return np.stack([sample.rotation.matrix for sample in self.values()])
+        kout = setup.detector_to_kout(x, y, self.kin_to_sample(setup), idxs, num_threads)
+        if rec_vec is not None:
+            smp_pos = self.kin_to_sample(setup, kout - rec_vec, idxs, num_threads)
+            idxs = np.arange(x.size, dtype=np.uint32)
+            kout = setup.detector_to_kout(x, y, smp_pos, idxs, num_threads)
+        return kout
+
+    def kout_to_detector(self, kout: np.ndarray, setup: ScanSetup,
+                         idxs: np.ndarray, rec_vec: Optional[np.ndarray]=None,
+                         num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
+        """Project output wave-vectors originating from the samples' locations to the detector
+        plane.
+
+        Args:
+            kout : Output wave-vectors.
+            setup : Experimental setup.
+            idxs : Sample indices.
+            rec_vec : A set of scattering vectors corresponding to the output wave-vectors.
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            A tuple of x and y detector coordinates.
+        """
+        x, y = setup.kout_to_detector(kout, self.kin_to_sample(setup), idxs, num_threads)
+        if rec_vec is not None:
+            smp_pos = self.kin_to_sample(setup, kout - rec_vec, idxs, num_threads)
+            idxs = np.arange(smp_pos.size / smp_pos.shape[-1], dtype=np.uint32)
+            x, y = setup.kout_to_detector(kout, smp_pos, idxs, num_threads)
+        return x, y
+
+    def rotate(self, vectors: np.ndarray, idxs: np.ndarray, reciprocate: bool=False,
+               num_threads: int=1) -> np.ndarray:
+        """Rotate an array of vectors into the samples' system of coordinates.
+
+        Args:
+            vectors : An array of vectors.
+            idxs : Sample indices.
+            reciprocate : Apply the inverse sample rotations if True.
+            num_threads : Number of threads used in the calculations.
+
+        Returns:
+            An array of rotated vectors.
+        """
+        rmats = np.swapaxes(self.rmats, 1, 2) if reciprocate else self.rmats
+        return rotate(vectors, rmats, idxs, num_threads)
 
     def regularise(self, kernel_bandwidth: Tuple[int, int]) -> ScanSamples:
         """Regularise sample positions by applying a Gaussian Process with a gaussian kernel
@@ -662,6 +741,7 @@ class Streaks(DataContainer):
         h : First Miller index.
         k : Second Miller index.
         l : Third Miller index.
+        hkl_id : Bragg reflection index.
     """
     x0          : np.ndarray
     y0          : np.ndarray
@@ -672,10 +752,11 @@ class Streaks(DataContainer):
     h           : Optional[np.ndarray] = None
     k           : Optional[np.ndarray] = None
     l           : Optional[np.ndarray] = None
+    hkl_id      : Optional[np.ndarray] = None
 
     @property
     def hkl(self) -> Optional[np.ndarray]:
-        if self.h is None:
+        if self.h is None or self.k is None or self.l is None:
             return None
         return np.stack((self.h, self.k, self.l), axis=1)
 
@@ -684,18 +765,18 @@ class Streaks(DataContainer):
             self.length = np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
 
     def __len__(self) -> int:
-        return self.length.shape[0]
+        return self.width.shape[0]
 
-    def mask_streaks(self, indices: Indices) -> Streaks:
+    def mask_streaks(self, idxs: Indices) -> Streaks:
         """Return a new streaks container with a set of streaks discarded.
 
         Args:
-            indices : A set of indices of the streaks to discard.
+            idxs : A set of indices of the streaks to discard.
 
         Returns:
             A new :class:`cbclib.Streaks` container.
         """
-        return Streaks(**{attr: self[attr][indices] for attr in self.contents()})
+        return Streaks(**{attr: self[attr][idxs] for attr in self.contents()})
 
     def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dilation: float=0.0,
                           profile: str='tophat', reduce: bool=True) -> pd.DataFrame:
@@ -739,12 +820,13 @@ class Streaks(DataContainer):
         Returns:
             A pattern in dictionary format.
         """
-        idx, x, y, rp = draw_line_table(lines=self.to_numpy(), shape=shape, dilation=dilation,
+        idx, x, y, rp = draw_line_table(lines=self.to_lines(), shape=shape, dilation=dilation,
                                         profile=profile)
         pattern = {'index': idx, 'x': x, 'y': y, 'rp': rp}
-        for attr in ['h', 'k', 'l']:
-            if attr in self.contents():
-                pattern[attr] = self[attr][idx]
+        if self.hkl is not None:
+            pattern.update(h=self.h[idx], k=self.k[idx], l=self.l[idx])
+        if self.hkl_id is not None:
+            pattern['hkl_id'] = self.hkl_id[idx]
         return pattern
 
     def pattern_image(self, shape: Tuple[int, int], dilation: float=0.0,
@@ -764,7 +846,7 @@ class Streaks(DataContainer):
         Returns:
             A pattern in :class:`numpy.ndarray` format.
         """
-        return draw_line_image(shape, lines=self.to_numpy(), dilation=dilation,
+        return draw_line_image(shape, lines=self.to_lines(), dilation=dilation,
                                profile=profile)
 
     def pattern_mask(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
@@ -785,7 +867,7 @@ class Streaks(DataContainer):
         Returns:
             A pattern mask.
         """
-        return draw_line_mask(shape, lines=self.to_numpy(), max_val=max_val,
+        return draw_line_mask(shape, lines=self.to_lines(), max_val=max_val,
                               dilation=dilation, profile=profile)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -796,13 +878,16 @@ class Streaks(DataContainer):
         """
         return pd.DataFrame(dict(self))
 
-    def to_numpy(self) -> np.ndarray:
-        """Export a streaks container into :class:`numpy.ndarray`.
+    def to_lines(self) -> np.ndarray:
+        """Export a streaks container into line parameters ``x0, y0, x1, y1, width``:
+
+        * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
+        * `width` : Line's width.
 
         Returns:
-            An array with all the data specified in :class:`cbclib.Streaks`.
+            An array of line parameters.
         """
-        return np.stack([self[attr] for attr in self.contents()], axis=1)
+        return np.stack((self.x0, self.y0, self.x1, self.y1, self.width), axis=1)
 
 @dataclass
 class CBDModel():
@@ -829,7 +914,7 @@ class CBDModel():
     shape       : Optional[Tuple[int, int]] = None
 
     def __post_init__(self):
-        self.basis = self.sample.rotate(self.basis)
+        self.basis = self.sample.rotate_basis(self.basis)
         if isinstance(self.transform, Crop):
             self.shape = (self.transform.roi[1] - self.transform.roi[0],
                           self.transform.roi[3] - self.transform.roi[2])
@@ -850,13 +935,13 @@ class CBDModel():
         src_th = rec_th - np.arccos(0.5 * rec_abs)
         return np.abs(np.sin(src_th)) < np.arccos(self.setup.kin_max[2])
 
-    def generate_streaks(self, hkl: np.ndarray, width: float, return_idxs: bool=False) -> Streaks:
+    def generate_streaks(self, hkl: np.ndarray, width: float, hkl_index: bool=False) -> Streaks:
         """Generate a CBD pattern. Return a set of streaks in :class:`cbclib.Streaks` container.
 
         Args:
             hkl : Set of Miller indices.
             width : Width of diffraction streaks in pixels.
-            return_idxs : Return a set of input streak indices that satisfy the Bragg condition.
+            hkl_index : Save ``hkl`` indices in the streaks container if True.
 
         Returns:
             A set of streaks, that constitute the predicted CBD pattern.
@@ -874,49 +959,12 @@ class CBDModel():
             mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
                    (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
             x, y, idxs = x[mask], y[mask], idxs[mask]
-        streaks = Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1],
-                          h=hkl[idxs][:, 0], k=hkl[idxs][:, 1], l=hkl[idxs][:, 2],
-                          width=width * np.ones(x.shape[0]))
+        return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1], h=hkl[idxs][:, 0],
+                       k=hkl[idxs][:, 1], l=hkl[idxs][:, 2], width=width * np.ones(x.shape[0]),
+                       hkl_id=idxs if hkl_index else None)
 
-        if return_idxs:
-            return streaks, idxs
-        return streaks
-
-    def filter_streaks(self, hkl: np.ndarray, signal: np.ndarray, background: np.ndarray,
-                       width: float,  threshold: float=0.95, profile: str='gauss',
-                       num_threads: int=1) -> Streaks:
-        """Generate a predicted pattern and filter out all the streaks, which signal-to-noise ratio
-        is below the ``threshold``.
-
-        Args:
-            hkl : Set of reciprocal lattice point to use for prediction.
-            signal : Measured signal.
-            background : Measured background, standard deviation of the signal is the square root of
-                background.
-            width : Difrraction streak width in pixels of a predicted pattern.
-            threshold : SNR threshold.
-            profile : Line width profiles of generated streaks. The following keyword values are
-                allowed:
-
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
-
-            num_threads : Number of threads used in the calculations.
-
-        Returns:
-            A set of filtered out streaks, SNR of which is above the ``threshold``.
-        """
-        streaks = self.generate_streaks(hkl, width)
-        pattern = streaks.pattern_dataframe(self.shape, profile=profile)
-        pattern = pattern.drop_duplicates(['x', 'y'], keep=False).reset_index(drop=True)
-        idxs = filter_hkl(sgn=signal, bgd=background, coord=pattern[['x', 'y']].to_numpy(),
-                          prof=pattern['rp'].to_numpy(), idxs=pattern['index'].to_numpy(),
-                          threshold=threshold, num_threads=num_threads)
-        return streaks.mask_streaks(idxs)
-
-    def pattern_dataframe(self, hkl: np.ndarray, width: float, profile: str='gauss') -> pd.DataFrame:
+    def pattern_dataframe(self, hkl: np.ndarray, width: float, profile: str='gauss',
+                          hkl_index: bool=False) -> pd.DataFrame:
         """Predict a CBD pattern and return in the :class:`pandas.DataFrame` format.
 
         Args:
@@ -929,8 +977,10 @@ class CBDModel():
                 * `quad` : Quadratic (parabola) function profile.
                 * `gauss` : Gaussian function profile.
 
+            hkl_index : Save ``hkl`` indices in the streaks container if True.
+
         Returns:
             A pattern in :class:`pandas.DataFrame` format.
         """
-        streaks = self.generate_streaks(hkl, width)
+        streaks = self.generate_streaks(hkl=hkl, width=width, hkl_index=hkl_index)
         return streaks.pattern_dataframe(self.shape, profile=profile)

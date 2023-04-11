@@ -29,6 +29,14 @@ cdef extern from "array.h":
     unsigned long searchsorted(void *key, void *base, unsigned long npts, unsigned long size, int side,
                                int (*compar)(void*, void*)) nogil
 
+cdef extern from "geometry.h":
+    int det2k(double *karr, double *x, double *y, unsigned *idxs, unsigned long ksize, double *src,
+              unsigned threads) nogil
+    int k2det(double *x, double *y, double *karr, unsigned *idxs, unsigned long ksize, double *src,
+              unsigned threads) nogil
+    int rotate_vec(double *out, double *vecs, unsigned *idxs, unsigned long vsize, double *rmats,
+                   unsigned threads) nogil
+
 ctypedef float (*kernel)(float, float)
 ctypedef float (*loss_func)(float)
 
@@ -45,9 +53,8 @@ cdef extern from "sgn_proc.h":
                      unsigned long ndim, float **grid, unsigned long *gdims, kernel krn, float sigma,
                      unsigned threads) nogil
 
-    int unique_indices_c "unique_indices" (unsigned **funiq, unsigned **fidxs, unsigned long *fpts,
-                      unsigned **iidxs, unsigned long *ipts, unsigned *frames, unsigned *indices,
-                      unsigned long npts) nogil
+    int unique_idxs(unsigned **unique, unsigned **iidxs, unsigned long *isize, unsigned *indices,
+                    unsigned *inverse, unsigned long npts) nogil
 
     float l2_loss(float x) nogil
     float l2_grad(float x) nogil
@@ -56,13 +63,19 @@ cdef extern from "sgn_proc.h":
     float huber_loss(float x) nogil
     float huber_grad(float x) nogil
 
-    float poisson_likelihood(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
-                             float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
-                             unsigned threads) nogil
+    int poisson_likelihood(double *out, double *grad, float *x, unsigned *ij, unsigned long *dims, unsigned *I0,
+                           float *bgd, float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize,
+                           unsigned *idxs, unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size,
+                           unsigned *odixs, unsigned long osize, unsigned threads) nogil
 
-    float least_squares(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
-                        float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
-                        loss_func func, loss_func grad, unsigned threads) nogil
+    int least_squares(double *out, double *grad, float *x, unsigned *ij, unsigned long *dims, unsigned *I0,
+                      float *bgd, float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize,
+                      unsigned *idxs, unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size,
+                      unsigned *oidxs, unsigned long osize, loss_func func, loss_func grad, unsigned threads) nogil
+
+    int unmerge_sgn(float *I_hat, float *x, unsigned *ij, unsigned long *dims, unsigned *I0, float *bgd,
+                    float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize, unsigned *idxs,
+                    unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size, unsigned threads) nogil
 
 ctypedef float (*line_profile)(float, float)
 
@@ -93,6 +106,10 @@ cdef extern from "img_proc.h":
 
     int refine_line(float *olines, float *data, unsigned long *dims, float *ilines, unsigned long *ldims,
                     float dilation, line_profile profile) nogil
+
+    int count_outliers(unsigned *outs, unsigned *cnts, unsigned long osize, unsigned *data, float *bgd,
+                       unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize, float alpha,
+                       unsigned threads) nogil
 
     double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, unsigned long *dims, float **lines,
                          unsigned long *ldims, unsigned long lsize, float dilation, float epsilon,

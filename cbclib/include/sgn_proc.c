@@ -318,49 +318,34 @@ int predict_grid(float **y_hat, size_t *roi, float *y, float *w, float *x, size_
     return 0;
 }
 
-int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **iidxs, size_t *ipts, unsigned *frames,
-                   unsigned *indices, size_t npts)
+int unique_idxs(unsigned **unique, unsigned **iidxs, size_t *isize, unsigned *indices, unsigned *inverse, size_t npts)
 {
     /* check parameters */
-    if (!frames || !indices) {ERROR("unique_indices: one of the arguments is NULL."); return -1;}
-    if (npts == 0) {*funiq = NULL; *fidxs = NULL; *iidxs = NULL; *fpts = 0; *ipts = 0; return 0;}
+    if (!unique || !iidxs || !indices) {ERROR("unique_idxs: one of the arguments is NULL."); return -1;}
+    if (npts == 0) {*unique = NULL; *iidxs = NULL; *isize = 0; return 0;}
 
-    (*fidxs) = MALLOC(unsigned, frames[npts - 1] - frames[0] + 2);
-    (*funiq) = MALLOC(unsigned, frames[npts - 1] - frames[0] + 1);
-
-    // Find 'frames' indices
-    unsigned i, j; (*fpts) = 0; (*fidxs)[0] = 0;
-    for (i = frames[0]; i <= frames[npts - 1]; i++)
-    {
-        (*fidxs)[(*fpts) + 1] = searchsorted(&i, frames, npts, sizeof(unsigned), SEARCH_LEFT, compare_uint);
-        if ((*fidxs)[(*fpts) + 1] > (*fidxs)[*fpts])
-        {
-            (*funiq)[*fpts] = i - 1;
-            (*fpts)++;
-        }
-    }
-    (*funiq)[(*fpts)] = frames[npts - 1];
-    (*fidxs)[++(*fpts)] = npts;
-
-    // Reallocate the buffers
-    (*fidxs) = REALLOC(*fidxs, unsigned, *fpts + 1);
-    (*funiq) = REALLOC(*funiq, unsigned, *fpts);
+    (*iidxs) = MALLOC(unsigned, indices[npts - 1] - indices[0] + 2);
+    (*unique) = MALLOC(unsigned, indices[npts - 1] - indices[0] + 1);
 
     // Find 'indices' indices
-    *ipts = 0;
-    *iidxs = MALLOC(unsigned, 1);
-    for (i = 0; i < (*fpts); i++)
+    unsigned i, j; (*isize) = 0; (*iidxs)[0] = 0;
+    for (i = indices[0]; i <= indices[npts - 1]; i++)
     {
-        (*iidxs) = REALLOC(*iidxs, unsigned, (*ipts) + indices[(*fidxs)[i + 1] - 1] + 1);
-        for (j = 0; j <= indices[(*fidxs)[i + 1] - 1]; j++)
+        (*iidxs)[(*isize) + 1] = searchsorted(&i, indices, npts, sizeof(unsigned), SEARCH_LEFT, compare_uint);
+        if ((*iidxs)[(*isize) + 1] > (*iidxs)[*isize])
         {
-            (*iidxs)[(*ipts) + j] = (*fidxs)[i] + searchsorted(&j, indices + (*fidxs)[i], (*fidxs)[i + 1] - (*fidxs)[i],
-                                                               sizeof(unsigned), SEARCH_LEFT, compare_uint);
+            (*unique)[*isize] = i - 1;
+            for (j = (*iidxs)[*isize]; j < (*iidxs)[(*isize) + 1]; j++) inverse[j] = (*isize);
+            (*isize)++;
         }
-        (*ipts) += indices[(*fidxs)[i + 1] - 1] + 1;
     }
-    (*iidxs) = REALLOC(*iidxs, unsigned, ++(*ipts));
-    (*iidxs)[(*ipts) - 1] = npts;
+    (*unique)[(*isize)] = indices[npts - 1];
+    for (j = (*iidxs)[*isize]; j < npts; j++) inverse[j] = (*isize);
+    (*iidxs)[++(*isize)] = npts;
+
+    // Reallocate the buffers
+    (*iidxs) = REALLOC(*iidxs, unsigned, *isize + 1);
+    (*unique) = REALLOC(*unique, unsigned, *isize);
 
     return 0;
 }
@@ -368,85 +353,165 @@ int unique_indices(unsigned **funiq, unsigned **fidxs, size_t *fpts, unsigned **
 /*----------------------------------------------------------------------------*/
 /*---------------------- Intensity scaling criterions ------------------------*/
 /*----------------------------------------------------------------------------*/
-
-float poisson_likelihood(float *grad, float *x, size_t xsize, float *rp, unsigned *I0, float *bgd, float *xtal_bi,
-                         unsigned *hkl_idxs, unsigned *iidxs, size_t isize, unsigned threads)
+int poisson_likelihood(double *out, double *grad, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd,
+                       float *xtal_bi, float *rp, unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize,
+                       unsigned *hkl_idxs, size_t hkl_size, unsigned *oidxs, size_t osize, unsigned threads)
 {
     /* Check parameters */
-    if (!x || !rp || !I0 || !bgd || !xtal_bi || !hkl_idxs || !iidxs)
-    {ERROR("poisson_likelihood: one of the arguments is NULL."); return 0.0f;}
+    if (!out || !grad || !x || !ij || !I0 || !bgd || !xtal_bi || !rp || !fidxs || !idxs || !hkl_idxs || !oidxs)
+    {ERROR("poisson_likelihood: one of the arguments is NULL."); return -1;}
 
-    float criterion = 0.0f;
-    if (isize == 0) return criterion;
+    if (fsize == 0 || isize == 0 || osize == 0) return 0;
 
     #pragma omp parallel num_threads(threads)
     {
-        int i, j, idx;
-        float crit, gval, y_hat;
+        int i, j;
+        double y_hat, I0_hat;
+
+        double *img = calloc(dims[0] * dims[1], sizeof(double));
+        double *obuf = calloc(osize, sizeof(double));
+        double *gbuf = calloc(hkl_size, sizeof(double));
 
         #pragma omp for
-        for (i = 0; i < (int)isize; i++)
+        for (i = 0; i < (int)fsize; i++)
         {
-            crit = gval = 0.0f;
-            idx = isize + hkl_idxs[i];
-            for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
             {
-                y_hat = expf(x[idx]) * xtal_bi[j] * rp[j] + x[i] + bgd[j];
-                if (y_hat > 0.0f)
+                img[ij[j]] += exp(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j] + x[idxs[j]];
+            }
+
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
+            {
+                I0_hat = img[ij[j]] + bgd[j];
+                if (I0_hat > 0.0f)
                 {
-                    crit -= I0[j] * logf(y_hat) - y_hat;
-                    grad[i] -= I0[j] / y_hat - 1.0f;
-                    gval -= I0[j] / y_hat * expf(x[idx]) * xtal_bi[j] * rp[j] - expf(x[idx]) * xtal_bi[j] * rp[j];
+                    y_hat = exp(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j];
+                    obuf[oidxs[idxs[j]]] -= I0[j] * log(I0_hat) - I0_hat;
+                    grad[idxs[j]] -= I0[j] / I0_hat - 1.0;
+                    gbuf[hkl_idxs[idxs[j]]] -= I0[j] / I0_hat * y_hat - y_hat;
                 }
             }
 
-            #pragma omp atomic
-            grad[idx] += gval;
-            #pragma omp atomic
-            criterion += crit;
+            for (i = 0; i < (int)osize; i++)
+            {
+                #pragma omp atomic
+                out[i] += obuf[i];
+            }
+            for (i = 0; i < (int)hkl_size; i++)
+            {
+                #pragma omp atomic
+                grad[isize + i] += gbuf[i];
+            }
+
+            memset(img, 0, dims[0] * dims[1] * sizeof(double));
+            memset(obuf, 0, osize * sizeof(double));
+            memset(gbuf, 0, hkl_size * sizeof(double));
         }
+
+        DEALLOC(img); DEALLOC(gbuf); DEALLOC(obuf);
     }
 
-    return criterion;
+    return 0;
 }
 
-float least_squares(float *grad, float *x, size_t xsize, float *rp, unsigned *I0, float *bgd, float *xtal_bi,
-                    unsigned *hkl_idxs, unsigned *iidxs, size_t isize, float (*loss_func)(float), float (*grad_func)(float),
-                    unsigned threads)
+int least_squares(double *out, double *grad, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd, float *xtal_bi,
+                  float *rp, unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize, unsigned *hkl_idxs, size_t hkl_size,
+                  unsigned *oidxs, size_t osize, float (*loss_func)(float), float (*grad_func)(float), unsigned threads)
 {
     /* Check parameters */
-    if (!x || !rp || !I0 || !bgd || !xtal_bi || !hkl_idxs || !iidxs)
-    {ERROR("least_squares: one of the arguments is NULL."); return 0.0f;}
+    if (!out || !grad || !x || !ij || !I0 || !bgd || !xtal_bi || !rp || !fidxs || !idxs || !hkl_idxs || !oidxs)
+    {ERROR("least_squares: one of the arguments is NULL."); return -1;}
 
-    float criterion = 0.0f;
-    if (isize == 0) return criterion;
+    if (fsize == 0 || isize == 0 || osize == 0) return 0;
 
     #pragma omp parallel num_threads(threads)
     {
-        int i, j, idx;
-        float crit, gval, std, y_hat;
+        int i, j;
+        double std, y_hat, I0_hat;
+
+        double *img = calloc(dims[0] * dims[1], sizeof(double));
+        double *obuf = calloc(osize, sizeof(double));
+        double *gbuf = calloc(hkl_size, sizeof(double));
 
         #pragma omp for
-        for (i = 0; i < (int)isize; i++)
+        for (i = 0; i < (int)fsize; i++)
         {
-            crit = gval = std = 0.0f;
-            idx = isize + hkl_idxs[i];
-            for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++) std += I0[j];
-            std = sqrtf(std / (iidxs[i + 1] - iidxs[i]));
-            for (j = iidxs[i]; j < (int)iidxs[i + 1]; j++)
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
             {
-                y_hat = expf(x[idx]) * xtal_bi[j] * rp[j] + x[i] + bgd[j];
-                crit += loss_func((I0[j] - y_hat) / std);
-                grad[i] -= grad_func((I0[j] - y_hat) / std) / std;
-                gval -= grad_func((I0[j] - y_hat) / std) * expf(x[idx]) * xtal_bi[j] * rp[j] / std;
+                img[ij[j]] += exp(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j] + x[idxs[j]];
             }
 
-            #pragma omp atomic
-            grad[idx] += gval;
-            #pragma omp atomic
-            criterion += crit;
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
+            {
+                I0_hat = img[ij[j]] + bgd[j];
+                if (I0_hat > 0.0f)
+                {
+                    std = sqrt(I0_hat); y_hat = exp(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j];
+                    obuf[oidxs[idxs[j]]] += loss_func((I0[j] - I0_hat) / std);
+                    grad[idxs[j]] -= grad_func((I0[j] - I0_hat) / std) / std;
+                    gbuf[hkl_idxs[idxs[j]]] -= grad_func((I0[j] - I0_hat) / std) * y_hat / std;
+                }
+            }
+
+            for (i = 0; i < (int)osize; i++)
+            {
+                #pragma omp atomic
+                out[i] += obuf[i];
+            }
+            for (i = 0; i < (int)hkl_size; i++)
+            {
+                #pragma omp atomic
+                grad[isize + i] += gbuf[i];
+            }
+
+            memset(img, 0, dims[0] * dims[1] * sizeof(double));
+            memset(obuf, 0, osize * sizeof(double));
+            memset(gbuf, 0, hkl_size * sizeof(double));
+        }
+
+        DEALLOC(img); DEALLOC(gbuf); DEALLOC(obuf);
+    }
+
+    return 0;
+}
+
+int unmerge_sgn(float *I_hat, float *x, unsigned *ij, size_t *dims, unsigned *I0, float *bgd, float *xtal_bi, float *rp,
+                unsigned *fidxs, size_t fsize, unsigned *idxs, size_t isize, unsigned *hkl_idxs, size_t hkl_size,
+                unsigned threads)
+{
+    if (!I_hat || !x || !ij || !bgd || !xtal_bi || !rp || !fidxs || !idxs || !hkl_idxs)
+    {ERROR("unmerge_sgn: one of the arguments is NULL."); return -1;}
+
+    if (fsize == 0 || isize == 0) return 0;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        int i, j;
+        float ratio;
+        
+        float *img = calloc(dims[0] * dims[1], sizeof(float));
+        float *intercept = calloc(dims[0] * dims[1], sizeof(float));
+
+        #pragma omp for
+        for (i = 0; i < (int)fsize; i++)
+        {
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
+            {
+                img[ij[j]] += expf(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j];
+                intercept[ij[j]] += x[idxs[j]];
+            }
+
+            for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
+            {
+                ratio = (expf(x[isize + hkl_idxs[idxs[j]]]) * xtal_bi[j] * rp[j]) / img[ij[j]];
+                CLIP(ratio, 0.0f, 1.0f);
+                I_hat[j] = (I0[j] - bgd[j] - intercept[ij[j]]) * ratio;
+            }
+
+            memset(img, 0, dims[0] * dims[1] * sizeof(float));
+            memset(intercept, 0, dims[0] * dims[1] * sizeof(float));
         }
     }
 
-    return criterion;
+    return 0;
 }

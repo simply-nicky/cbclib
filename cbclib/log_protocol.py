@@ -46,8 +46,8 @@ L = TypeVar('L', bound='LogContainer')
 
 @dataclass
 class LogProtocol(INIContainer):
-    """Log file protocol class. Contains log file keys to retrieve
-    and the data types of the corresponding values.
+    """Log file protocol class. Contains log file keys to retrieve and the data types of the
+    corresponding values.
 
     Args:
         datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'bool', or 'str' are
@@ -58,16 +58,16 @@ class LogProtocol(INIContainer):
     """
     __ini_fields__ = {'datatypes': 'datatypes', 'log_keys': 'log_keys', 'part_keys': 'part_keys'}
 
-    datatypes : Dict[str, str]
-    log_keys : Dict[str, List[str]]
-    part_keys : Dict[str, str]
+    datatypes   : Dict[str, str]
+    log_keys    : Dict[str, List[str]]
+    part_keys   : Dict[str, str]
 
-    known_types: ClassVar[Dict[str, Any]] = {'int': int, 'bool': bool, 'float': float, 'str': str}
-    unit_dict: ClassVar[Dict[str, float]] = {'mm': 1e-3, 'mdeg': 1.7453292519943296e-05,
-                                             'µm,um': 1e-6, 'udeg,µdeg': 1.7453292519943296e-08,
-                                             'nm': 1e-9, 'ndeg': 1.7453292519943296e-11,
-                                             'pm': 1e-12, 'pdeg': 1.7453292519943296e-14,
-                                             'percent': 1e-2}
+    known_types : ClassVar[Dict[str, Any]]   = {'int': int, 'bool': bool, 'float': float, 'str': str}
+    unit_dict   : ClassVar[Dict[str, float]] = {'mm': 1e-3, 'mdeg': 1.7453292519943296e-05,
+                                                'µm,um': 1e-6, 'udeg,µdeg': 1.7453292519943296e-08,
+                                                'nm': 1e-9, 'ndeg': 1.7453292519943296e-11,
+                                                'pm': 1e-12, 'pdeg': 1.7453292519943296e-14,
+                                                'percent': 1e-2}
 
     def __post_init__(self):
         self.log_keys = {attr: self.str_to_list(val)

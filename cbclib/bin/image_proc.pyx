@@ -574,6 +574,31 @@ def draw_line_table(np.ndarray lines not None, object shape=None, double dilatio
 
     return idx, x, y, val
 
+def outlier_rate(np.ndarray data not None, np.ndarray bgd not None, np.ndarray iidxs not None,
+                 np.ndarray hkl_idxs not None, double alpha, unsigned int num_threads=1):
+    data = check_array(data, np.NPY_UINT32)
+    bgd = check_array(bgd, np.NPY_FLOAT32)
+    iidxs = check_array(iidxs, np.NPY_UINT32)
+    hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
+
+    cdef unsigned *_data = <unsigned *>np.PyArray_DATA(data)
+    cdef float *_bgd = <float *>np.PyArray_DATA(bgd)
+    cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
+    cdef unsigned *_hkl_idxs = <unsigned *>np.PyArray_DATA(hkl_idxs)
+
+    cdef int _isize = iidxs.size - 1
+    cdef int _osize = np.PyArray_Max(hkl_idxs, 0, <np.ndarray>NULL) + 1
+    cdef np.ndarray outs = np.PyArray_ZEROS(1, [_osize,], np.NPY_UINT32, 0)
+    cdef np.ndarray cnts = np.PyArray_ZEROS(1, [_osize,], np.NPY_UINT32, 0)
+    cdef unsigned *_outs = <unsigned *>np.PyArray_DATA(outs)
+    cdef unsigned *_cnts = <unsigned *>np.PyArray_DATA(cnts)
+
+    with nogil:
+        count_outliers(_outs, _cnts, _osize, _data, _bgd, _hkl_idxs, _iidxs, _isize,
+                       alpha, num_threads)
+
+    return outs, cnts
+
 def normalise_pattern(np.ndarray inp not None, object lines not None, object dilations not None,
                       str profile='tophat', unsigned int num_threads=1):
     if inp.ndim != 3:
