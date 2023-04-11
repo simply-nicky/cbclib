@@ -8,7 +8,7 @@ from scipy.optimize import minimize
 from tqdm.auto import tqdm
 
 from .bin import (euler_matrix, draw_line_image, ce_criterion, unique_indices, kr_grid,
-                  poisson_criterion, ls_criterion, model_fit)
+                  poisson_criterion, ls_criterion, unmerge_signal)
 from .cbc_indexing import Map3D, FourierIndexer
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks, CBDModel
 from .cxi_protocol import Indices
@@ -35,7 +35,7 @@ class CBCTable():
         setup : Experimental setup.
         crop : Detector region of interest.
     """
-    columns         : ClassVar[Set[str]] = {'frames', 'x', 'y', 'p', 'I_raw', 'bgd'}
+    columns         : ClassVar[Set[str]] = {'frames', 'index', 'x', 'y', 'p', 'rp', 'I_raw', 'bgd'}
     table           : pd.DataFrame
     setup           : ScanSetup
     crop            : Optional[Crop] = None
@@ -45,8 +45,11 @@ class CBCTable():
             raise ValueError(f'Dataframe must contain the following columns: {self.columns}')
         if self.crop is None:
             self.crop = self.get_crop()
-        self.frames, self.fidxs, self.iidxs = unique_indices(frames=self.table['frames'].to_numpy(),
-                                                             indices=self.table['index'].to_numpy())
+        self.frames, self.fidxs, self.finv = unique_indices(self.table['frames'].to_numpy())
+
+    @property
+    def shape(self) -> Tuple[int, int]:
+        return (self.frames.size, self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     @classmethod
     def import_csv(cls, path: str, setup: ScanSetup) -> CBCTable:
@@ -68,7 +71,8 @@ class CBCTable():
         the file and an experimental geometry object ``setup``.
 
         Args:
-            path : Path to the CSV file.
+            path : Path to the HDF5 file.
+            key : The group identifier in the HDF5 file.
             setup : Experimental geometry.
 
         Returns:
@@ -96,24 +100,22 @@ class CBCTable():
             qx_arr : Array of reciprocal x coordinates.
             qy_arr : Array of reciprocal y coordinates.
             qz_arr : Array of reciprocal z coordinates.
+            num_threads : Number of threads used in the calculations.
 
         Returns:
             3D data container of measured normalised intensities.
         """
         q_map = np.zeros((qz_arr.size, qy_arr.size, qx_arr.size), dtype=self.dtype)
-
-        for frame, f0, f1 in zip(self.frames, self.fidxs[:-1], self.fidxs[1:]):
-            kout = samples[frame].detector_to_kout(self.table.loc[f0:f1 - 1, 'x'].to_numpy(),
-                                                   self.table.loc[f0:f1 - 1, 'y'].to_numpy(),
-                                                   self.setup, num_threads=num_threads)
-            rec_vec = kout - self.setup.kin_center
-            rec_vec = samples[frame].rotation.reciprocate()(rec_vec)
-            x_idxs = np.searchsorted(qx_arr, rec_vec[:, 0])
-            y_idxs = np.searchsorted(qy_arr, rec_vec[:, 1])
-            z_idxs = np.searchsorted(qz_arr, rec_vec[:, 2])
-            mask = (x_idxs < qx_arr.size) & (y_idxs < qy_arr.size) & (z_idxs < qz_arr.size)
-            np.add.at(q_map, (z_idxs[mask], y_idxs[mask], x_idxs[mask]),
-                      self.table.loc[f0:f1 - 1, 'p'].to_numpy()[mask])
+        kout = samples.detector_to_kout(self.table['x'].to_numpy(), self.table['y'].to_numpy(),
+                                        self.setup, self.finv, num_threads=num_threads)
+        rec_vec = kout - self.setup.kin_center
+        rec_vec = samples.rotate(rec_vec, self.finv, reciprocate=True, num_threads=num_threads)
+        x_idxs = np.searchsorted(qx_arr, rec_vec[:, 0])
+        y_idxs = np.searchsorted(qy_arr, rec_vec[:, 1])
+        z_idxs = np.searchsorted(qz_arr, rec_vec[:, 2])
+        mask = (x_idxs < qx_arr.size) & (y_idxs < qy_arr.size) & (z_idxs < qz_arr.size)
+        np.add.at(q_map, (z_idxs[mask], y_idxs[mask], x_idxs[mask]),
+                  self.table['p'].to_numpy()[mask])
         return FourierIndexer(val=q_map, x=qx_arr, y=qy_arr, z=qz_arr, num_threads=num_threads)
 
     def drop_duplicates(self, method: str='keep_best') -> pd.DataFrame:
@@ -152,6 +154,7 @@ class CBCTable():
         Args:
             basis : Basis vectors of crystal lattice unit cell.
             samples : Set of scan samples.
+            num_threads : Number of threads used in the calculations.
 
         Raises:
             AttributeError : If Miller indices ('h', 'k', 'l') are not present in the CBC table.
@@ -162,15 +165,11 @@ class CBCTable():
         if not {'h', 'k', 'l'}.issubset(self.table.columns):
             raise AttributeError('CBC table is not indexed.')
 
-        kins = []
-        for frame, f0, f1 in zip(self.frames, self.fidxs[:-1], self.fidxs[1:]):
-            hkl = self.table.loc[f0:f1 - 1, ['h', 'k', 'l']].to_numpy()
-            rec_vec = samples[frame].rotation(hkl.dot(basis.mat))
-            kout = samples[frame].detector_to_kout(self.table.loc[f0:f1 - 1, 'x'].to_numpy(),
-                                                   self.table.loc[f0:f1 - 1, 'y'].to_numpy(),
-                                                   self.setup, rec_vec, num_threads)
-            kins.append(kout - rec_vec)
-        return np.concatenate(kins)
+        rec_vec = self.table.loc[:, ['h', 'k', 'l']].to_numpy().dot(basis.mat)
+        rec_vec = samples.rotate(rec_vec, self.finv, num_threads=num_threads)
+        kout = samples.detector_to_kout(self.table['x'].to_numpy(), self.table['y'].to_numpy(),
+                                        self.setup, self.finv, rec_vec, num_threads)
+        return kout - rec_vec
 
     def get_crop(self) -> Crop:
         """Return the region of interest on the detector plane.
@@ -228,12 +227,13 @@ class CBCTable():
         dataframe = self.pattern_dataframe(frame).to_dict(orient='list')
         return {col: np.asarray(val) for col, val in dataframe.items()}
 
-    def pattern_image(self, frame: int) -> np.ndarray:
-        """Return a CBC pattern image array. The `x`, `y` coordinates are transformed by the
-        ``crop`` attribute.
+    def pattern_image(self, frame: int, key: str='rp') -> np.ndarray:
+        """Return a CBC pattern image array of the given attribute `key`. The `x`, `y` coordinates
+        are transformed by the ``crop`` attribute.
 
         Args:
             frame : Frame index.
+            key : Attribute's name.
 
         Returns:
             A pattern image array.
@@ -241,7 +241,7 @@ class CBCTable():
         df_frame = self.pattern_dataframe(frame)
         pattern = np.zeros((self.crop.roi[1] - self.crop.roi[0],
                             self.crop.roi[3] - self.crop.roi[2]), dtype=self.dtype)
-        pattern[df_frame['y'], df_frame['x']] = df_frame['p']
+        pattern[df_frame['y'], df_frame['x']] = df_frame[key]
         return pattern
 
     def refine_samples(self, bounds: np.ndarray, basis: Basis, hkl: np.ndarray,
@@ -270,10 +270,10 @@ class CBCTable():
             cbclib.SampleRefiner : CBC sample refiner class.
         """
         samples = ScanSamples({frame: samples[frame] for frame in self.frames})
-        rmats, smp_ds = samples.rotations(), self.setup.smp_dist * np.ones(len(samples))
-        return SampleRefiner(bounds=bounds, rmats=rmats, smp_ds=smp_ds, basis=basis, hkl=hkl,
-                             frames=self.frames, fidxs=self.fidxs, width=width, parent=ref(self),
-                             alpha=alpha)
+        smp_ds = self.setup.smp_dist * np.ones(len(samples))
+        return SampleRefiner(bounds=bounds, rmats=samples.rmats, smp_ds=smp_ds, basis=basis,
+                             hkl=hkl, frames=self.frames, fidxs=self.fidxs, width=width,
+                             parent=ref(self), alpha=alpha)
 
     def refine_setup(self, bounds: np.ndarray, basis: Basis, hkl: np.ndarray, tilts: np.ndarray,
                      width: float, alpha: float=0.0) -> SetupRefiner:
@@ -328,16 +328,14 @@ class CBCTable():
 
         kins = self.generate_kins(basis, samples, num_threads)
         kin_min, kin_max = kins.min(axis=0), kins.max(axis=0)
-        xtal = Map3D(val=np.ones((self.frames.size, xtal_shape[1], xtal_shape[0])),
+
+        xtal = Map3D(val=np.ones((self.shape[0], xtal_shape[1], xtal_shape[0])),
                      x=np.linspace(kin_min[0], kin_max[0], xtal_shape[0], endpoint=True),
                      y=np.linspace(kin_min[1], kin_max[1], xtal_shape[1], endpoint=True),
                      z=self.frames, num_threads=num_threads)
         xmap = np.concatenate((kins[:, :2], self.table['frames'].to_numpy()[:, None]), axis=1)
-        return IntensityScaler(parent=ref(self), frames=self.frames, xtal=xtal, xmap=xmap,
-                               bgd=self.table['bgd'].to_numpy(dtype=np.float32), fidxs=self.fidxs,
-                               prof=self.table['rp'].to_numpy(dtype=np.float32), iidxs=self.iidxs,
-                               I_raw=self.table['I_raw'].to_numpy(dtype=np.uint32),
-                               num_threads=num_threads)
+        return IntensityScaler(parent=ref(self), frames=self.frames, fidxs=self.fidxs, xtal=xtal,
+                               xmap=xmap, num_threads=num_threads)
 
     def update_crop(self, crop: Optional[Crop]=None) -> CBCTable:
         """Return a new CBC table with the updated region of interest.
@@ -363,12 +361,8 @@ class Refiner():
     epsilon   : ClassVar[float] = 1e-12
 
     @property
-    def size(self) -> int:
-        return self.frames.size
-
-    @property
     def shape(self) -> Tuple[int, int]:
-        return (self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
+        return (self.frames.size, self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     def __getstate__(self) -> Dict[str, Any]:
         state = {key: val for key, val in self.__dict__.items() if key != 'parent'}
@@ -379,7 +373,7 @@ class Refiner():
         self.setup, self.crop = self.parent().setup, self.parent().crop
         x, y = self.crop.forward_points(self.parent().table['x'].to_numpy(dtype=np.uint32),
                                         self.parent().table['y'].to_numpy(dtype=np.uint32))
-        self.ij = x + self.shape[1] * y
+        self.ij = x + self.shape[2] * y
         self.p = self.parent().table['p'].to_numpy(dtype=np.float32)
         self._idxs = np.asarray(bounds[1] - bounds[0], dtype=bool)
         self._bounds = bounds[:, self._idxs]
@@ -459,9 +453,8 @@ class Refiner():
         Returns:
             A predicted CBD pattern mask.
         """
-        lines = [streaks.to_numpy() for streaks in self.generate_streaks(x).values()]
-        return draw_line_image((self.size, self.shape[0], self.shape[1]), lines=lines,
-                               profile=self.profile)
+        lines = [streaks.to_lines() for streaks in self.generate_streaks(x).values()]
+        return draw_line_image(self.shape, lines=lines, profile=self.profile)
 
     def fitness(self, x: np.ndarray, num_threads: int=1) -> List[float]:
         """Calculate the marginal log-likelihood, that the experimentally measured pattern
@@ -473,8 +466,8 @@ class Refiner():
         Returns:
             Marginal log-likelihood.
         """
-        lines = [streaks.to_numpy() for streaks in self.generate_streaks(x).values()]
-        criterion = ce_criterion(ij=self.ij, p=self.p, fidxs=self.fidxs, shape=self.shape,
+        lines = [streaks.to_lines() for streaks in self.generate_streaks(x).values()]
+        criterion = ce_criterion(ij=self.ij, p=self.p, fidxs=self.fidxs, shape=self.shape[1:],
                                  lines=lines, epsilon=self.epsilon, profile=self.profile,
                                  num_threads=num_threads)
         if self.alpha:
@@ -495,8 +488,6 @@ class Refiner():
 
         Args:
             x : Refinement solution.
-            q_abs : Sphere radius. Reciprocal vectors are normalised and lie in [0.0 - 1.0]
-                interval.
         """
         idxs = np.concatenate([np.arange(self.hkl.shape[0])[model.filter_hkl(self.hkl)]
                                for model in self.generate_models(x).values()])
@@ -701,7 +692,7 @@ class SetupRefiner(Refiner):
         Returns:
             A new sample object.
         """
-        thetas = np.zeros(self.size)
+        thetas = np.zeros(self.shape[0])
         tilts = self.x_ext(x)[self._slices['tilt']]
         if tilts.size:
             thetas[-tilts.size:] += self.tilts[-tilts.size:] + tilts
@@ -733,9 +724,9 @@ class IntensityScaler(DataContainer):
         fidxs : Array of CBC table first row indices pertaining to different CBC patterns.
         frames : Array of unique frame indices stored in the table.
         hkl : Array of unique Miller indices stored inside the CBC table.
-        hkl_idxs : Array of output hkl list indices.
+        hkl_idxs : Array of Bragg reflection indices.
         I_raw : Experimentally measured intensities.
-        iidxs : Array of CBC table first row indices pertaining to different CBC streaks.
+        idxs : Array of streak indices.
         num_threads : Number of threads used in the calculations.
         parent : Reference to the parent CBC table.
         prof : Standard reflection profiles.
@@ -746,29 +737,51 @@ class IntensityScaler(DataContainer):
             coordinates.
     """
     parent      : ReferenceType[CBCTable]
-    bgd         : np.ndarray
-    fidxs       : np.ndarray
     frames      : np.ndarray
-    I_raw       : np.ndarray
-    iidxs       : np.ndarray
-    prof        : np.ndarray
+    fidxs       : np.ndarray
     xmap        : np.ndarray
     xtal        : Map3D
     num_threads : int
 
+    bgd         : Optional[np.ndarray] = None
+    I_raw       : Optional[np.ndarray] = None
+    idxs        : Optional[np.ndarray] = None
+    iidxs       : Optional[np.ndarray] = None
+    ij          : Optional[np.ndarray] = None
     hkl         : Optional[np.ndarray] = None
     hkl_idxs    : Optional[np.ndarray] = None
+    prof        : Optional[np.ndarray] = None
     xtal_bi     : Optional[np.ndarray] = None
 
     def __post_init__(self):
-        if self.xtal_bi is None:
-            self.xtal_bi = self.xtal.interpolate(self.xmap)
+        if self.bgd is None:
+            self.bgd = self.parent().table['bgd'].to_numpy(dtype=np.float32)
+        if self.I_raw is None:
+            self.I_raw = self.parent().table['I_raw'].to_numpy(dtype=np.uint32)
+        if self.idxs is None or self.iidxs is None:
+            self.iidxs, self.idxs = unique_indices(self.parent().table['index'].to_numpy())[1:]
+        if self.ij is None:
+            x, y = self.parent().crop.forward_points(self.parent().table['x'].to_numpy(),
+                                                     self.parent().table['y'].to_numpy())
+            self.ij = np.asarray(x + self.parent().shape[2] * y, dtype=np.uint32)
         if self.hkl is None or self.hkl_idxs is None:
             self.hkl = self.parent().table.loc[self.iidxs[:-1], ['h', 'k', 'l']].to_numpy()
-            self.hkl_idxs = np.arange(self.hkl.shape[0])
+            self.hkl_idxs = np.arange(self.hkl.shape[0], dtype=np.uint32)
+        if self.prof is None:
+            self.prof = self.parent().table['rp'].to_numpy(dtype=np.float32)
+        if self.xtal_bi is None:
+            self.xtal_bi = self.xtal.interpolate(self.xmap)
+
+    def init_estimate(self) -> np.ndarray:
+        """Return initial estimate of crystal structure factors and intercept values.
+
+        Returns:
+            Array of initial crystal structure factors and intercepts.
+        """
+        return np.zeros(self.idxs[-1] + self.hkl.shape[0] + 1, dtype=np.float32)
 
     def fitness(self, x: np.ndarray, fit_intercept: bool=True, kind: str='poisson',
-                loss: str='l2', dtype: np.dtype=np.float64) -> Tuple[float, np.ndarray]:
+                loss: str='l2') -> Tuple[float, np.ndarray]:
         r"""Return the fitness criterion and the jacobian matrix. The structure factors
         and projection maps are used to model the intensity profiles of Bragg reflections.
         Either negative log likelihood or least squares error is calculated to estimate
@@ -787,30 +800,30 @@ class IntensityScaler(DataContainer):
                 * `Huber` : Huber loss function.
 
         Notes:
-            The intensity profile :math:`I_{hkl}(\mathbf{x}) of a particular Bragg reflection
-            captured on the detector is given by:
+            The modelled diffraction pattern :math:`\hat{I}_n(\mathbf{x}_i)` is given by:
 
             .. math::
-                I_{hkl}(\mathbf{x}) = |q_{hkl}|^2 \chi(\mathbf{u}(\mathbf{x})) f^2_{hkl}(\mathbf{x})
+               \hat{I}_n(\mathbf{x}_i) = I_{bgd}(\mathbf{x}_i) + \sum_{hkl} |q_{hkl}|^2
+               \chi_n(\mathbf{u}(\mathbf{x}_i)) f^2_{hkl}(\mathbf{x}_i),
 
             where :math:`q_{hkl}` are the structure factors and :math:`\chi(\mathbf{u}(\mathbf{x}))`
             are the projection maps of the sample, and :math:`f_{hkl}(\mathbf{x})` are the standard
             reflection profiles.
 
-            The Poisson negative log likelihood crietion is given by:
+            The Poisson negative log-likelihood criterion is given by:
 
             .. math::
-                \epsilon^{NLL} = \sum_{ni} \log \mathrm{P}(I_n(\mathbf{x}_i), I_{hkl}(\mathbf{x}_i)
-                + I_{bgd}(\mathbf{x}_i)),
+                \varepsilon^{NLL} = \sum_{ni} \varepsilon_n^{NLL}(\mathbf{x}_i) = 
+                \sum_{ni} \log \mathrm{P}(I_n(\mathbf{x}_i), \hat{I}_n(\mathbf{x}_i)),
 
-            where the likelihood :math:`\mathrm{P}` follows the Poisson distribution :math:`\log
-            \mathrm{P}(I, \lambda) = I \log \lambda - I.
+            where the likelihood :math:`\mathrm{P}` follows the Poisson distribution
+            :math:`\log \mathrm{P}(I, \lambda) = I \log \lambda - I`.
 
-            The MSE criterion is given by:
+            The least-squares criterion is given by:
 
             .. math::
-                \epsilon^{MSE} = \sum_{ni} f\left( \frac{I_n(\mathbf{x}_i) - I_{hkl}(\mathbf{x}_i) -
-                I_{bgd}}{\sigma_I^2} \right),
+                \varepsilon^{LS} = \sum_{ni} \varepsilon_n^{LS}(\mathbf{x}_i) =
+                \sum_{ni} f\left( \frac{I_n(\mathbf{x}_i) - \hat{I}_n(\mathbf{x}_i)}{\sigma_I} \right),
 
             where :math:`f(x)` is either l2, l1, or Huber loss function, and :math:`\sigma_I` is the
             standard deviation of measured photon counts for a given diffraction streak.
@@ -822,23 +835,67 @@ class IntensityScaler(DataContainer):
             The criterion and the jacobian matrix.
         """
         if not fit_intercept:
-            x[:self.iidxs.size - 1] = 0.0
+            x[:self.idxs[-1] + 1] = 0.0
 
         if kind == 'poisson':
-            crit, jac = poisson_criterion(x, prof=self.prof, I0=self.I_raw, bgd=self.bgd,
-                                          xtal_bi=self.xtal_bi, hkl_idxs=self.hkl_idxs,
-                                          iidxs=self.iidxs, num_threads=self.num_threads)
+            crit, jac = poisson_criterion(x, ij=self.ij, shape=self.parent().shape[1:], I0=self.I_raw,
+                                          bgd=self.bgd, xtal_bi=self.xtal_bi, prof=self.prof,
+                                          fidxs=self.fidxs, idxs=self.idxs, hkl_idxs=self.hkl_idxs,
+                                          num_threads=self.num_threads)
         elif kind == 'least_squares':
-            crit, jac = ls_criterion(x, prof=self.prof, I0=self.I_raw, bgd=self.bgd, loss=loss,
-                                     xtal_bi=self.xtal_bi, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs,
+            crit, jac = ls_criterion(x, ij=self.ij, shape=self.parent().shape[1:], I0=self.I_raw,
+                                     bgd=self.bgd, xtal_bi=self.xtal_bi, prof=self.prof, loss=loss,
+                                     fidxs=self.fidxs, idxs=self.idxs, hkl_idxs=self.hkl_idxs,
                                      num_threads=self.num_threads)
         else:
             raise ValueError(f"'kind' keyword is invalid: {kind}")
 
         if not fit_intercept:
-            jac[:self.iidxs.size - 1] = 0.0
+            jac[:self.idxs[-1] + 1] = 0.0
 
-        return crit, np.asarray(jac, dtype=dtype)
+        return crit, jac
+
+    def gain(self, x: np.ndarray, kind: str='poisson', loss: str='l2') -> np.ndarray:
+        """Return the fitness gain for every diffraction order.
+
+        Args:
+            x : Current estimate of crystal structure factors and intercept values.
+            kind : Choose between the negative log likelihood Poisson criterion ('poisson')
+                and the least squares criterion ('least_squares')
+            loss : Loss function to use in the least squares criterion. The following
+                keyword arguments are allowed:
+
+                * `l1`: L1 loss (absolute) function.
+                * `l2` : L2 loss (squared) function.
+                * `Huber` : Huber loss function.
+
+        Returns:
+            Array of fitness gain values for each diffraction order.
+        """
+        x0 = self.init_estimate()
+
+        if kind == 'poisson':
+            crit0 = poisson_criterion(x0, shape=self.parent().shape[1:], I0=self.I_raw, ij=self.ij,
+                                      bgd=self.bgd, xtal_bi=self.xtal_bi, prof=self.prof,
+                                      fidxs=self.fidxs, idxs=self.idxs, hkl_idxs=self.hkl_idxs,
+                                      oidxs=self.hkl_idxs, num_threads=self.num_threads)[0]
+            crit = poisson_criterion(x, shape=self.parent().shape[1:], I0=self.I_raw, ij=self.ij,
+                                     bgd=self.bgd, xtal_bi=self.xtal_bi, prof=self.prof,
+                                     fidxs=self.fidxs, idxs=self.idxs, hkl_idxs=self.hkl_idxs,
+                                     oidxs=self.hkl_idxs, num_threads=self.num_threads)[0]
+        elif kind == 'least_squares':
+            crit0 = ls_criterion(x0, shape=self.parent().shape[1:], prof=self.prof, I0=self.I_raw,
+                                 ij=self.ij, bgd=self.bgd, xtal_bi=self.xtal_bi, idxs=self.idxs,
+                                 fidxs=self.fidxs, hkl_idxs=self.hkl_idxs, oidxs=self.hkl_idxs,
+                                 loss=loss, num_threads=self.num_threads)[0]
+            crit = ls_criterion(x, shape=self.parent().shape[1:], prof=self.prof, I0=self.I_raw,
+                                ij=self.ij, bgd=self.bgd, xtal_bi=self.xtal_bi, idxs=self.idxs,
+                                fidxs=self.fidxs, hkl_idxs=self.hkl_idxs, oidxs=self.hkl_idxs,
+                                loss=loss, num_threads=self.num_threads)[0]
+        else:
+            raise ValueError(f"'kind' keyword is invalid: {kind}")
+
+        return crit0 - crit
 
     def merge_hkl(self, symmetry: Optional[str]=None) -> IntensityScaler:
         """Merge symmetrical reflection during the iterative update. Given the supplied symmetry,
@@ -868,7 +925,7 @@ class IntensityScaler(DataContainer):
             raise ValueError('Invalid symmetry keyword')
 
         hkl, hkl_idxs = np.unique(hkl_sym, return_inverse=True, axis=0)
-        return self.replace(hkl=hkl, hkl_idxs=hkl_idxs)
+        return self.replace(hkl=hkl, hkl_idxs=np.asarray(hkl_idxs, dtype=np.uint32))
 
     def merge_sfac(self, x: np.ndarray, symmetry: Optional[str]=None) -> Dict[str, np.ndarray]:
         """Return a merged list of structure factors.
@@ -893,14 +950,15 @@ class IntensityScaler(DataContainer):
 
         sfac = np.zeros(obj.hkl_idxs.max() + 1, dtype=float)
         norm = np.zeros(obj.hkl_idxs.max() + 1, dtype=int)
-        cnts = np.unique(obj.hkl_idxs, return_counts=True)[1]
+        cnts = np.zeros(obj.hkl_idxs.max() + 1, dtype=int)
         np.add.at(norm, obj.hkl_idxs, self.iidxs[1:] - self.iidxs[:-1])
-        np.add.at(sfac, obj.hkl_idxs, self.model(x)[1][self.iidxs[:-1]])
-        sfac = sfac / cnts
-        sfac_err = np.sqrt(sfac / norm)
+        np.add.at(sfac, obj.hkl_idxs, np.exp(x[self.idxs[-1] + self.hkl_idxs + 1]))
+        np.add.at(sfac, obj.hkl_idxs, np.ones(self.iidxs.size - 1, dtype=int))
+        sfac = np.where(cnts, sfac / cnts, 0.0)
+        sfac_err = np.where(norm, np.sqrt(sfac / norm), 0.0)
 
-        sfac /= sfac_err.mean()
-        sfac_err /= sfac_err.mean()
+        sfac /= np.mean(sfac_err)
+        sfac_err /= np.mean(sfac_err)
         return {'hkl': obj.hkl, 'sfac': sfac, 'serr': sfac_err, 'cnts': cnts}
 
     def unmerge_hkl(self) -> IntensityScaler:
@@ -921,7 +979,8 @@ class IntensityScaler(DataContainer):
         Returns:
             An array of unmerged structure factors and intercepts.
         """
-        return model_fit(x, hkl_idxs=self.hkl_idxs, iidxs=self.iidxs)
+        sfac = np.exp(x[self.idxs[-1] + self.hkl_idxs[self.idxs] + 1])
+        return x[self.idxs], sfac
 
     def update_xtal(self, x: np.ndarray, bandwidth: float) -> Tuple[IntensityScaler, np.ndarray]:
         """Generate a new crystal map using the kernel regression.
@@ -933,13 +992,16 @@ class IntensityScaler(DataContainer):
         Returns:
             New :class:`IntensityScaler` container with the updated crystal efficiency map.
         """
-        intercept, sfac = self.model(x)
+        sfac = np.sqrt(np.exp(x[self.idxs[-1] + self.hkl_idxs[self.idxs] + 1]), dtype=np.float32)
+        I_hat = unmerge_signal(x, ij=self.ij, shape=self.parent().shape[1:], I0=self.I_raw,
+                               bgd=self.bgd, xtal_bi=self.xtal_bi, prof=self.prof,
+                               fidxs=self.fidxs, idxs=self.idxs, hkl_idxs=self.hkl_idxs,
+                               num_threads=self.num_threads)
         pupils = np.zeros(self.xtal.shape, dtype=np.float32)
         for index, (f0, f1) in enumerate(zip(self.fidxs, self.fidxs[1:])):
-            pupil, roi = kr_grid(y=self.I_raw[f0:f1] - intercept[f0:f1] - self.bgd[f0:f1],
-                                 grid=(self.xtal.x, self.xtal.y), x=self.xmap[f0:f1, :2],
-                                 w=self.prof[f0:f1] * sfac[f0:f1], sigma=bandwidth,
-                                 num_threads=self.num_threads)
+            pupil, roi = kr_grid(y=I_hat[f0:f1] / sfac[f0:f1],  grid=(self.xtal.x, self.xtal.y),
+                                 x=self.xmap[f0:f1, :2], w=self.prof[f0:f1] * sfac[f0:f1],
+                                 sigma=bandwidth, num_threads=self.num_threads)
             pupils[index, roi[0]:roi[1], roi[2]:roi[3]] = pupil
 
         norm = np.mean(pupils)
@@ -955,8 +1017,8 @@ class IntensityScaler(DataContainer):
         self.parent().table['sfac'] = self.model(x)[1]
         self.parent().table['xtal'] = self.xtal_bi
 
-    def train(self, bandwidth: float, n_iter: int=10, f_tol: float=1e-3, fit_intercept: bool=True,
-              kind: str='poisson', loss: str='l2', max_iter: int=5, x0: Optional[np.ndarray]=None,
+    def train(self, bandwidth: float, n_iter: int=10, f_tol: float=0.0, fit_intercept: bool=True,
+              kind: str='poisson', loss: str='l2', max_iter: int=10, x0: Optional[np.ndarray]=None,
               verbose: bool=True) -> Tuple[IntensityScaler, np.ndarray]:
         """Perform an iterative update of sample projection maps (xtal) and crystal structure
         factors (sfac) until the error between the predicted intensity Bragg profiles and
@@ -986,10 +1048,7 @@ class IntensityScaler(DataContainer):
             An updated intensity scaler object and a new estimate of crystal structure factors
             and intercepts.
         """
-        if x0 is None:
-            x = np.zeros(self.iidxs.size + self.hkl_idxs.max(), dtype=self.prof.dtype)
-        else:
-            x = x0
+        x = self.init_estimate() if x0 is None else x0
 
         itor = tqdm(range(1, n_iter + 1), disable=not verbose,
                     bar_format='{desc} {percentage:3.0f}% {bar} '\
@@ -998,7 +1057,7 @@ class IntensityScaler(DataContainer):
         obj = self.replace()
         errors = [obj.fitness(x, fit_intercept=fit_intercept, kind=kind, loss=loss)[0]]
         if verbose:
-            itor.set_description(f"Error = {errors[-1]:.6f}")
+            itor.set_description(f"Error = {float(errors[-1]):.6f}")
 
         for _ in itor:
             res = minimize(obj.fitness, x, args=(fit_intercept, kind, loss), jac=True,
@@ -1008,7 +1067,7 @@ class IntensityScaler(DataContainer):
             errors.append(new_obj.fitness(x, fit_intercept=fit_intercept, kind=kind, loss=loss)[0])
 
             if verbose:
-                itor.set_description(f"Error = {errors[-1]:.6f}")
+                itor.set_description(f"Error = {float(errors[-1]):.6f}")
 
             if (errors[-2] - errors[-1]) / max(abs(errors[-2]), abs(errors[-1])) > f_tol:
                 obj = new_obj

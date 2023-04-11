@@ -19,9 +19,8 @@ cdef extern from "sgn_proc.h":
                      unsigned long ndim, float **grid, unsigned long *gdims, kernel krn, float sigma,
                      unsigned threads) nogil
 
-    int unique_indices_c "unique_indices" (unsigned **funiq, unsigned **fidxs, unsigned long *fpts,
-                      unsigned **iidxs, unsigned long *ipts, unsigned *frames, unsigned *indices,
-                      unsigned long npts) nogil
+    int unique_idxs(unsigned **unique, unsigned **iidxs, unsigned long *isize, unsigned *indices,
+                    unsigned *inverse, unsigned long npts) nogil
 
     float l2_loss(float x) nogil
     float l2_grad(float x) nogil
@@ -30,10 +29,16 @@ cdef extern from "sgn_proc.h":
     float huber_loss(float x) nogil
     float huber_grad(float x) nogil
 
-    float poisson_likelihood(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
-                             float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
-                             unsigned threads) nogil
+    int poisson_likelihood(double *out, double *grad, float *x, unsigned *ij, unsigned long *dims, unsigned *I0,
+                           float *bgd, float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize,
+                           unsigned *idxs, unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size,
+                           unsigned *odixs, unsigned long osize, unsigned threads) nogil
 
-    float least_squares(float *grad, float *x, unsigned long xsize, float *rp, unsigned *I0, float *bgd,
-                        float *xtal_bi, unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize,
-                        loss_func func, loss_func grad, unsigned threads) nogil
+    int least_squares(double *out, double *grad, float *x, unsigned *ij, unsigned long *dims, unsigned *I0,
+                      float *bgd, float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize,
+                      unsigned *idxs, unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size,
+                      unsigned *oidxs, unsigned long osize, loss_func func, loss_func grad, unsigned threads) nogil
+
+    int unmerge_sgn(float *I_hat, float *x, unsigned *ij, unsigned long *dims, unsigned *I0, float *bgd,
+                    float *xtal_bi, float *rp, unsigned *fidxs, unsigned long fsize, unsigned *idxs,
+                    unsigned long isize, unsigned *hkl_idxs, unsigned long hkl_size, unsigned threads) nogil

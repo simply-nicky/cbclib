@@ -86,6 +86,10 @@ cdef extern from "img_proc.h":
                         unsigned long *dims, float *lines, unsigned long *ldims, float dilation,
                         line_profile profile) nogil
 
+    int count_outliers(unsigned *outs, unsigned *cnts, unsigned long osize, unsigned *data, float *bgd,
+                       unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize, float alpha,
+                       unsigned threads) nogil
+
     int normalise_line(float *out, float *data, unsigned long *dims, float *lines, unsigned long *ldims,
                        float *dilations, line_profile profile) nogil
 

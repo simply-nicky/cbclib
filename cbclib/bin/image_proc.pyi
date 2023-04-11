@@ -307,7 +307,7 @@ def draw_line_mask(shape: Tuple[int, ...], lines: Union[np.ndarray, Sequence[np.
         lines : An array of the detected lines. Must have a shape of (`N`, 7), where `N` is
             the number of lines. Each line is comprised of 7 parameters as follows:
 
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's ends.
+            * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
             * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
             * `-log10(NFA)` : Number of false alarms.
@@ -349,7 +349,7 @@ def draw_line_image(shape: Tuple[int, ...], lines: Union[np.ndarray, Sequence[np
             (`N`, 7), where `N` is the number of lines. Each line is comprised of 7 parameters
             as follows:
 
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's ends.
+            * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
             * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
             * `-log10(NFA)` : Number of false alarms.
@@ -389,7 +389,7 @@ def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, di
             of (`N`, 7), where `N` is the number of lines. Each line is comprised
             of 7 parameters as follows:
 
-            * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's ends.
+            * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
             * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
             * `-log10(NFA)` : Number of false alarms.
@@ -413,6 +413,40 @@ def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, di
 
     See Also:
         :class:`cbclib.bin.LSD` : Line Segment Detector.
+    """
+    ...
+
+def outlier_rate(data: np.ndarray, bgd: np.ndarray, iidxs: np.ndarray, hkl_idxs: np.ndarray,
+                 alpha: float, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
+    r"""Count the outliers for a set of diffraction orders, which photon counts are above the
+    ``alpha`` Poisson distribution quantile with expected values equal to the background
+    intensities ``bgd``.
+
+    Args:
+        data : Photon counts.
+        bgd : Background intensities.
+        iidxs : Streak indices of the generated pattern.
+        hkl_idxs : Diffraction order indices.
+        alpha : Quantile level, which must be between 0 and 1 inclusive.
+        num_threads : Number of threads used in the calculations.
+
+    Notes:
+        The confidence interval for the mean of a Poisson distribution can be expressed using
+        the relationship between the cumulative distribution functions of the Poisson and
+        chi-squared distributions. The chi-squared distribution is itself closely related to
+        the gamma distribution, and this leads to an alternative expression. Given an observation
+        ``k`` from a Poisson distribution with mean :math:`\mu`, a confidence interval for
+        :math:`\mu` with confidence level :math:`1 - \alpha` is:
+
+        .. math::
+            \frac{1}{2} \chi^2(\alpha / 2, 2 k) \leq \mu \leq \frac{1}{2}
+            \chi^2(1 - \alpha / 2, 2 k + 2),
+
+        where :math:`\chi^2(p, n)` is the quantile function of the chi-squared distribuion with n
+        degrees.
+
+    Returns:
+        An array of outlier and total counts.
     """
     ...
 

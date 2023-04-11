@@ -85,3 +85,4 @@ A set of functions used in the CBC intensity scaling and the estimation of a cry
     funcs/ls_criterion
     funcs/kr_predict
     funcs/kr_grid
+    funcs/unmerge_signal

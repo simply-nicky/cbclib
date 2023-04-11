@@ -1,21 +1,20 @@
 from typing import Optional, Tuple
 import numpy as np
 
-def unique_indices(frames: np.ndarray, indices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def unique_indices(idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Find unique ``frames``, the indices of the input array that give the unique ``frames``, and
-    indices that give the unique ``indices``.
+    indices that give the unique ``idxs``.
 
     Args:
         frames : An array of frames.
-        indices : An array of indices.
+        idxs : An array of indices.
 
     Returns:
-        Return a tuple of three items (`funiq`, `fidxs`, `iidxs`). The elements of the tuple are as
+        Return a tuple of three items (`uniq`, `iidxs`). The elements of the tuple are as
         follows:
 
-        * `funiq` : Unique ``frames`` values.
-        * `fidxs` : Indices of the input array that give the unique ``frames``.
-        * `iidxs` : Indices of the input array that give the unique ``indices``.
+        * `uniq` : Unique ``frames`` values.
+        * `iidxs` : Indices of the input array that give the unique ``idxs``.
     """
     ...
 
@@ -84,21 +83,26 @@ def binterpolate(data: np.ndarray, coords: np.ndarray, num_threads: int=1) -> np
     """
     ...
 
-def poisson_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.ndarray,
-                      xtal_bi: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray,
-                      num_threads: int=1) -> Tuple[float, np.ndarray]:
+def poisson_criterion(x: np.ndarray, ij: np.ndarray, shape: Tuple[int, int], I0: np.ndarray, bgd: np.ndarray,
+                      xtal_bi: np.ndarray, prof: np.ndarray, fidxs: np.ndarray, idxs: np.ndarray,
+                      hkl_idxs: np.ndarray, oidxs: Optional[np.ndarray]=None,
+                      num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     r"""Calculate the Poisson negative log likelihood that the measured intensities ``I0`` are
     explained by the current estimate of crystal structure factors ``x`` and sample projection
     maps ``xtal_bi``.
 
     Args:
         x : Current estimate of crystal structure factors and intercept values.
-        prof : Standard profiles.
+        ij : Detector coordinates.
+        shape : Shape of the detector grid.
         I0 : Measured diffracted signal.
         bgd : Background level.
         xtal_bi : Sample's projection maps.
+        prof : Standard profiles.
+        fidxs : Frame indices.
+        idxs : Streak indices.
         hkl_idxs : Set of indices that numerate different Bragg reflections.
-        iidxs : Array of first indices pertaining to different diffraction streaks.
+        oidxs : Output criterion indices.
         num_threads : Number of threads used in the calculations.
 
     Notes:
@@ -122,23 +126,29 @@ def poisson_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.n
         \mathrm{P}(I, \lambda) = I \log \lambda - I`.
 
     Returns:
-        Negative log likelihood.
+        Negative log likelihood and gradient arrays.
     """
+    ...
 
-def ls_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.ndarray,
-                 xtal_bi: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray,
-                 loss: str='l2', num_threads: int=1) -> Tuple[float, np.ndarray]:
+def ls_criterion(x: np.ndarray, ij: np.ndarray, shape: Tuple[int, int], I0: np.ndarray, bgd: np.ndarray,
+                 xtal_bi: np.ndarray, prof: np.ndarray, fidxs: np.ndarray, idxs: np.ndarray,
+                 hkl_idxs: np.ndarray, oidxs: Optional[np.ndarray]=None, loss: str='l2',
+                 num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
     r"""Calculate the least-squares error between the measured intensities ``I0`` and the
     modelled intenisty profiles of Bragg reflections.
 
     Args:
         x : Current estimate of crystal structure factors and intercept values.
-        prof : Standard profiles.
+        ij : Detector coordinates.
+        shape : Shape of the detector grid.
         I0 : Measured diffracted signal.
         bgd : Background level.
         xtal_bi : Sample's projection maps.
+        prof : Standard profiles.
+        fidxs : Frame indices.
+        idxs : Streak indices.
         hkl_idxs : Set of indices that numerate different Bragg reflections.
-        iidxs : Array of first indices pertaining to different diffraction streaks.
+        oidxs : Output criterion indices.
         loss : Loss function used to calculate the MSE. The following keyword arguments are
             allowed:
 
@@ -169,18 +179,27 @@ def ls_criterion(x: np.ndarray, prof: np.ndarray, I0: np.ndarray, bgd: np.ndarra
         standard deviation of measured photon counts for a given diffraction streak.
 
     Returns:
-        The least squares criterion.
+        The least squares criterion and gradient arrays.
     """
+    ...
 
-def model_fit(x: np.ndarray, hkl_idxs: np.ndarray, iidxs: np.ndarray) -> Tuple[np.ndarray,
-                                                                               np.ndarray]:
-    """Unmerge the structure factors and intercepts.
+def unmerge_signal(x: np.ndarray, ij: np.ndarray, shape: Tuple[int, int], I0: np.ndarray,
+                   bgd: np.ndarray, xtal_bi: np.ndarray, prof: np.ndarray, fidxs: np.ndarray,
+                   idxs: np.ndarray, hkl_idxs: np.ndarray, num_threads: int=1) -> np.ndarray:
+    """Unmerge photon counts ``I0`` into diffraction orders ``hkl_idxs`` based on the current
+    estimate of crystal structure factors and intercept values ``x``.
 
     Args:
         x : Current estimate of crystal structure factors and intercept values.
+        prof : Standard profiles.
+        I0 : Measured diffracted signal.
+        bgd : Background level.
+        xtal_bi : Sample's projection maps.
         hkl_idxs : Set of indices that numerate different Bragg reflections.
         iidxs : Array of first indices pertaining to different diffraction streaks.
+        num_threads : Number of threads used in the calculations.
 
     Returns:
-        List of unmerged structure factors and intercepts.
+        An array of unmerged and background subtracted photon counts.
     """
+    ...

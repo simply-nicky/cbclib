@@ -21,7 +21,8 @@ from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks, CBDModel
 from .cxi_protocol import CXIProtocol, CXIStore, Indices
 from .data_container import DataContainer, Transform, ReferenceType
 from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  normalise_pattern, refine_pattern, draw_line_mask)
+                  normalise_pattern, refine_pattern, draw_line_mask, unique_indices,
+                  outlier_rate)
 
 C = TypeVar('C', bound='CrystData')
 
@@ -620,7 +621,7 @@ class CrystDataPart(CrystData):
             mask = (offsets >= np.percentile(offsets, pmin)) & \
                    (offsets <= np.percentile(offsets, pmax))
         else:
-            ValueError('invalid method argument')
+            raise ValueError(f'Invalid method argument: {method:s}')
 
         if update == 'reset':
             return self.replace(mask=mask)
@@ -640,7 +641,7 @@ class CrystDataPart(CrystData):
             data = data.reshape((-1, num_medians) + self.shape[-2:])
             whitefield = median(data, axis=0, num_threads=self.num_threads).mean(axis=0)
         else:
-            raise ValueError('Invalid method argument')
+            raise ValueError(f'Invalid method argument: {method:s}')
 
         return CrystDataFull(**dict(self, whitefield=whitefield))
 
@@ -710,9 +711,8 @@ class CrystDataFull(CrystDataPart):
         if not self.good_frames.size:
             raise ValueError('No good frames in the stack')
 
-        return LSDetector(parent=ref(self), data=self.cor_data[self.good_frames],
-                          frames=self.frames[self.good_frames],
-                          num_threads=self.num_threads)
+        return LSDetector(data=self.cor_data[self.good_frames], parent=ref(self),
+                          frames=self.frames[self.good_frames], num_threads=self.num_threads)
 
     def model_detector(self, basis: Basis, samples: ScanSamples, setup: ScanSetup) -> ModelDetector:
         if not self.good_frames.size:
@@ -722,7 +722,7 @@ class CrystDataFull(CrystDataPart):
                                 transform=self.transform, shape=self.shape[-2:])
                   for idx, frame in enumerate(frames)}
 
-        return ModelDetector(parent=ref(self), data=self.cor_data[self.good_frames],
+        return ModelDetector(data=self.cor_data[self.good_frames], parent=ref(self),
                              frames=frames, models=models, num_threads=self.num_threads)
 
     def update_background(self) -> CrystDataFull:
@@ -879,8 +879,8 @@ class Detector(DataContainer):
 
 class DetectorFull(Detector):
     def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
-        streaks = [streaks.to_numpy() for streaks in self.streaks.values()]
-        return draw_line_mask(self.shape, lines=streaks, max_val=max_val, dilation=dilation,
+        lines = [streaks.to_lines() for streaks in self.streaks.values()]
+        return draw_line_mask(self.shape, lines=lines, max_val=max_val, dilation=dilation,
                               profile=profile, num_threads=self.num_threads)
 
     def export_streaks(self):
@@ -891,42 +891,50 @@ class DetectorFull(Detector):
         streak_mask[self.parent().good_frames] = self.draw()
         self.parent().streak_mask = streak_mask
 
-    def export_table(self, dilation: float=0.0, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
+    def export_table(self, dilation: float=0.0, concatenate: bool=True) -> Union[pd.DataFrame,
+                                                                                 List[pd.DataFrame]]:
         if self.parent() is None:
             raise ValueError('Invalid parent: the parent data container was deleted')
-        if self.patterns is None:
-            raise ValueError('No patterns in the container')
 
-        dataframes, frames = [], []
+        n_streaks = 0
+        dataframes = {}
         for idx, streaks in self.streaks.items():
-            df = streaks.pattern_dataframe(shape=self.shape[1:], dilation=dilation, profile=self.profile)
-            df['frames'] = self.frames[idx] * np.ones(df.shape[0], dtype=df['index'].dtype)
+            df = streaks.pattern_dataframe(shape=self.shape[1:], dilation=dilation,
+                                           profile=self.profile)
+
+            df['index'] += n_streaks
+            df['frames'] = self.frames[idx]
+            n_streaks += len(streaks)
 
             index = self.parent().good_frames[idx]
             df = df[self.parent().mask[index, df['y'], df['x']]]
-            df['p'] = self.patterns[idx, df['y'], df['x']]
+
+            if self.patterns is not None:
+                df['p'] = self.patterns[idx, df['y'], df['x']]
             df['I_raw'] = self.parent().data[index, df['y'], df['x']]
             df['bgd'] = self.parent().background[index, df['y'], df['x']]
             df['x'], df['y'] = self.parent().backward_points(df['x'], df['y'])
 
-            frames.append(self.frames[idx])
-            dataframes.append(df)
+            dataframes[self.frames[idx]] = df
 
-        dataframes = [df for _, df in sorted(zip(frames, dataframes))]
+        dataframes = [df for _, df in sorted(dataframes.items())]
 
         if concatenate:
             return pd.concat(dataframes, ignore_index=True)
         return dataframes
 
     def refine_streaks(self: D, dilation: float=0.0) -> D:
-        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
-        streaks = refine_pattern(inp=self.data, lines=streaks, dilation=dilation,
-                                 num_threads=self.num_threads)
-        return self.replace(streaks={idx: Streaks(*(lines.T)) for idx, lines in streaks.items()})
+        lines = {idx: stks.to_lines() for idx, stks in self.streaks.items()}
+        lines = refine_pattern(inp=self.data, lines=lines, dilation=dilation,
+                               num_threads=self.num_threads)
+        streaks = {idx: self.streaks[idx].replace(x0=lns[:, 0], y0=lns[:, 1], x1=lns[:, 2],
+                                                  y1=lns[:, 3], width=lns[:, 4])
+                   for idx, lns in lines.items()}
+        return self.replace(streaks=streaks)
 
     def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
-        streaks = {key: val.to_numpy() for key, val in self.streaks.items()}
-        patterns = normalise_pattern(inp=self.data, lines=streaks, dilations=dilations,
+        lines = {idx: stks.to_lines() for idx, stks in self.streaks.items()}
+        patterns = normalise_pattern(inp=self.data, lines=lines, dilations=dilations,
                                      profile=self.profile, num_threads=self.num_threads)
         return self.replace(patterns=patterns)
 
@@ -1090,7 +1098,7 @@ class ModelDetector(Detector):
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         models : A dictionary of CBD models.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
-        patterns : Normalized diffraction patterns.=
+        patterns : Normalized diffraction patterns.
     """
     data            : np.ndarray
     frames          : np.ndarray
@@ -1101,29 +1109,47 @@ class ModelDetector(Detector):
 
     patterns        : Optional[np.ndarray] = None
 
-    def detect(self, hkl: np.ndarray, width: float=4.0, threshold: float=1.0) -> ModelDetectorFull:
-        """Perform the streak detection based on prediction. Generate a predicted pattern and
-        filter out all the streaks, which signal-to-noise ratio is below the ``threshold``.
+    def count_outliers(self, hkl: np.ndarray, width: float=4.0, alpha: float=0.05) -> pd.DataFrame:
+        r"""Count the number of photon counts for a set of diffraction orders ``hkl``, that lie
+        above the :math:`\alpha` quantile for the Poisson distribution with the mean equal to the
+        background signal.
 
         Args:
-            hkl : A set of reciprocal lattice points used in the detection.
-            width : Difrraction streak width in pixels of a predicted pattern.
-            threshold : SNR threshold.
+            hkl : Miller indices.
+            width : Diffraction streak width in pixels.
+            alpha : Quantile level, which must be between 0 and 1 inclusive.
 
         Returns:
-            New :class:`cbclib.ModelDetector` streak detector with updated ``streaks``.
+            A dataframe with the columns corresponding to the outlier and total counts.
         """
         if self.parent() is None:
             raise ValueError('Invalid parent: the parent data container was deleted')
 
-        streaks = {}
-        for idx, model in self.models.items():
-            index = self.parent().good_frames[idx]
-            stks = model.filter_streaks(hkl=hkl[model.filter_hkl(hkl)], threshold=threshold,
-                                        signal=self.parent().cor_data[index], profile=self.profile,
-                                        background=self.parent().background[index],  width=width,
-                                        num_threads=self.num_threads)
-            streaks[idx] = stks
+        patterns = self.detect(hkl, width, hkl_index=True).export_table()
+        patterns = patterns.drop_duplicates(['frames', 'x', 'y'], keep=False)
+        iidxs = unique_indices(patterns['index'].to_numpy())[1]
+        outs, cnts = outlier_rate(data=patterns['I_raw'].to_numpy(), iidxs=iidxs,
+                                  bgd=patterns['bgd'].to_numpy(), alpha=alpha,
+                                  hkl_idxs=patterns['hkl_id'].to_numpy(),
+                                  num_threads=self.num_threads)
+        idxs = np.where(cnts > 0)[0]
+        return pd.DataFrame({'outliers': outs[idxs], 'counts': cnts[idxs]}, index=idxs)
+
+    def detect(self, hkl: np.ndarray, width: float=4.0, hkl_index: bool=False) -> ModelDetectorFull:
+        """Perform the streak detection based on prediction. Generate a predicted pattern and
+        filter out all the streaks, which pertain to the set of reciprocal lattice points ``hkl``.
+
+        Args:
+            hkl : A set of reciprocal lattice points used in the detection.
+            width : Diffraction streak width in pixels of a predicted pattern.
+            hkl_index : Save lattice point indices in generated streaks (:class:`cbclib.Streak`)
+                if True.
+
+        Returns:
+            New :class:`cbclib.ModelDetector` streak detector with updated ``streaks``.
+        """
+        streaks = {idx: model.generate_streaks(hkl, width, hkl_index=hkl_index)
+                   for idx, model in self.models.items()}
         return ModelDetectorFull(**dict(self, streaks=streaks))
 
 @dataclass

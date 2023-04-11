@@ -1,8 +1,9 @@
 from __future__ import annotations
-from multiprocessing import cpu_count
 from typing import Any, Dict, Optional, Sequence, Tuple, TypeVar, Union
 from dataclasses import dataclass, field, fields
 import numpy as np
+import h5py
+import os
 from scipy.ndimage import label, center_of_mass, mean
 
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
@@ -14,11 +15,21 @@ M = TypeVar('M', bound='Map3D')
 
 @dataclass
 class Map3D():
+    """A container for 3D spatial data. Stores data array defined on a 3D regular grid.
+    Provides methods to perform the 3D fast Fourier transform and bilinear interpolation.
+
+    Args:
+        val : 3D data array.
+        x : x coordinates.
+        y : y coordinates.
+        z : z coordinates.
+        num_threads : Number of threads used in the calculations.
+    """
     val         : np.ndarray
     x           : np.ndarray
     y           : np.ndarray
     z           : np.ndarray
-    num_threads : int = cpu_count()
+    num_threads : int = field(default=1)
 
     def __post_init__(self):
         if (self.x.size != self.val.shape[2] or self.y.size != self.val.shape[1] or
@@ -32,6 +43,22 @@ class Map3D():
     @property
     def grid(self) -> np.ndarray:
         return np.stack(np.meshgrid(self.z, self.y, self.x, indexing='ij')[::-1], axis=-1)
+
+    @classmethod
+    def import_hdf(cls, path: str, key: str) -> Map3D:
+        """Initialize a 3D data container with data saved in a HDF5 file ``path`` at a ``key`` key
+        inside the file.
+
+        Args:
+            path : Path to the HDF5 file.
+            key :  The group identifier in the HDF5 file.
+
+        Returns:
+            A new 3D data container.
+        """
+        dset = h5py.File(path, 'r')[key]
+        data = {field.name: dset[field.name][()] for field in fields(cls) if field.name in dset}
+        return cls(**data)
 
     def __getitem__(self: M, indices: Tuple[Indices, Indices, Indices]) -> M:
         idxs = []
@@ -126,7 +153,7 @@ class Map3D():
             sigma : width of the gaussian blur.
 
         Returns:
-            A new 3D data object with blurred out data.
+            A new 3D data container with blurred out data.
         """
         val = gaussian_filter(self.val, sigma, num_threads=self.num_threads)
         return self.replace(val=val)
@@ -150,7 +177,7 @@ class Map3D():
         return crd0 + (index - idx0) * (crd1 - crd0)
 
     def interpolate(self, coordinates: np.ndarray) -> np.ndarray:
-        """Interpolate the 3D grid at a given array of coordiantes ``coordinates``.
+        """Interpolate the 3D grid at a given array of coordinates ``coordinates``.
 
         Args:
             coordinates : An array of coordinates.
@@ -191,6 +218,14 @@ class Map3D():
             A dictionary of :class:`Map3D` object's attributes.
         """
         return {field.name: getattr(self, field.name) for field in fields(self)}
+
+    def to_hdf(self, path: str, key: str):
+        with h5py.File(path, 'a') as file:
+            for fld in fields(self):
+                name = os.path.join(key, fld.name)
+                if name in file:
+                    del file[name]
+                file.create_dataset(name=name, data=getattr(self, fld.name))
 
 @dataclass
 class FourierIndexer(Map3D):

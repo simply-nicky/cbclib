@@ -20,32 +20,30 @@ build_loss()
 # *ALWAYS* do that, or you will have segfaults
 np.import_array()
 
-def unique_indices(np.ndarray frames not None, np.ndarray indices not None):
-    frames = check_array(frames, np.NPY_UINT32)
-    indices = check_array(indices, np.NPY_UINT32)
+def unique_indices(np.ndarray idxs not None):
+    idxs = check_array(idxs, np.NPY_UINT32)
 
     cdef int fail = 0
-    cdef unsigned long npts = frames.size
-    cdef unsigned long fpts, ipts
-    cdef unsigned *_funiq
-    cdef unsigned *_fidxs
+    cdef unsigned long npts = idxs.size
+    cdef unsigned long ipts
+    cdef unsigned *_uniq
     cdef unsigned *_iidxs
-    cdef unsigned *_frames = <unsigned *>np.PyArray_DATA(frames)
-    cdef unsigned *_indices = <unsigned *>np.PyArray_DATA(indices)
+    cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
+    
+    cdef np.ndarray inv = np.PyArray_SimpleNew(1, idxs.shape, np.NPY_UINT32)
+    cdef unsigned *_inv = <unsigned *>np.PyArray_DATA(inv)
 
     with nogil:
-        fail = unique_indices_c(&_funiq, &_fidxs, &fpts, &_iidxs, &ipts, _frames, _indices, npts)
+        fail = unique_idxs(&_uniq, &_iidxs, &ipts, _idxs, _inv, npts)
 
     if fail:
         raise RuntimeError('C backend exited with error.')
 
-    cdef np.npy_intp *shape = [fpts,]
-    cdef np.ndarray funiq = ArrayWrapper.from_ptr(<void *>_funiq).to_ndarray(1, shape, np.NPY_UINT32)
-    shape[0] = fpts + 1
-    cdef np.ndarray fidxs = ArrayWrapper.from_ptr(<void *>_fidxs).to_ndarray(1, shape, np.NPY_UINT32)
-    shape[0] = ipts
+    cdef np.npy_intp *shape = [ipts,]
+    cdef np.ndarray uniq = ArrayWrapper.from_ptr(<void *>_uniq).to_ndarray(1, shape, np.NPY_UINT32)
+    shape[0] = ipts + 1
     cdef np.ndarray iidxs = ArrayWrapper.from_ptr(<void *>_iidxs).to_ndarray(1, shape, np.NPY_UINT32)
-    return funiq, fidxs, iidxs
+    return uniq, iidxs, inv
 
 def kr_predict(np.ndarray y not None, np.ndarray x not None, np.ndarray x_hat, float sigma,
                np.ndarray w=None, unsigned int num_threads=1):
@@ -188,99 +186,167 @@ def binterpolate(np.ndarray data not None, tuple grid not None, np.ndarray coord
 
     return out
 
-def poisson_criterion(np.ndarray x not None, np.ndarray prof not None, np.ndarray I0 not None, np.ndarray bgd not None,
-                      np.ndarray xtal_bi not None, np.ndarray hkl_idxs not None, np.ndarray iidxs not None,
-                      unsigned num_threads=1):
-    if I0.size != prof.size or I0.size != bgd.size or I0.size != xtal_bi.size or I0.size != iidxs[iidxs.size - 1]:
+def poisson_criterion(np.ndarray x not None, object shape not None, np.ndarray ij not None, np.ndarray I0 not None,
+                      np.ndarray bgd not None, np.ndarray xtal_bi not None, np.ndarray prof not None, np.ndarray fidxs not None,
+                      np.ndarray idxs not None, np.ndarray hkl_idxs not None, np.ndarray oidxs=None, unsigned num_threads=1):
+    if I0.size != bgd.size or I0.size != xtal_bi.size or I0.size != prof.size or \
+       I0.size != idxs.size or I0.size != fidxs[fidxs.size - 1]:
         raise ValueError('Input arrays have incompatible sizes')
 
+    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef unsigned long *_dims = [_shape[0], _shape[1]]
+
     x = check_array(x, np.NPY_FLOAT32)
-    prof = check_array(prof, np.NPY_FLOAT32)
+    ij = check_array(ij, np.NPY_UINT32)
     I0 = check_array(I0, np.NPY_UINT32)
     bgd = check_array(bgd, np.NPY_FLOAT32)
     xtal_bi = check_array(xtal_bi, np.NPY_FLOAT32)
+    prof = check_array(prof, np.NPY_FLOAT32)
+    fidxs = check_array(fidxs, np.NPY_UINT32)
+    idxs = check_array(idxs, np.NPY_UINT32)
     hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
-    iidxs = check_array(iidxs, np.NPY_UINT32)
 
-    cdef unsigned long _isize = iidxs.size - 1
-    cdef unsigned long _xsize = x.size
-    cdef np.ndarray grad = np.PyArray_ZEROS(x.ndim, x.shape, np.NPY_FLOAT32, 0)
-    cdef float *_grad = <float *>np.PyArray_DATA(grad)
+    cdef unsigned long _isize = idxs[idxs.size - 1] + 1
+    if x.size < _isize or hkl_idxs.size != _isize:
+        raise ValueError("idxs is incompatible with x and hkl_idxs")
+    cdef unsigned long _hkl_size = x.size - _isize
+
+    cdef unsigned long _osize
+    if oidxs is None:
+        oidxs = np.PyArray_ZEROS(1, [_isize,], np.NPY_UINT32, 0)
+        _osize = 1
+    else:
+        _osize = np.PyArray_Max(oidxs, 0, <np.ndarray>NULL) + 1
+
+    cdef np.ndarray out = np.PyArray_ZEROS(1, [_osize,], np.NPY_FLOAT64, 0)
+    cdef np.ndarray grad = np.PyArray_ZEROS(x.ndim, x.shape, np.NPY_FLOAT64, 0)
+    cdef double *_out = <double *>np.PyArray_DATA(out)
+    cdef double *_grad = <double *>np.PyArray_DATA(grad)
     cdef float *_x = <float *>np.PyArray_DATA(x)
-    cdef float *_prof = <float *>np.PyArray_DATA(prof)
+    cdef unsigned *_ij = <unsigned *>np.PyArray_DATA(ij)
     cdef unsigned *_I0 = <unsigned *>np.PyArray_DATA(I0)
     cdef float *_bgd = <float *>np.PyArray_DATA(bgd)
     cdef float *_xtal_bi = <float *>np.PyArray_DATA(xtal_bi)
+    cdef float *_prof = <float *>np.PyArray_DATA(prof)
+    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs)
+    cdef unsigned long _fsize = fidxs.size - 1
+    cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
     cdef unsigned *_hkl_idxs = <unsigned *>np.PyArray_DATA(hkl_idxs)
-    cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
-    cdef float criterion
+    cdef unsigned *_oidxs = <unsigned *>np.PyArray_DATA(oidxs)
+    cdef int fail
 
     with nogil:
-        criterion = poisson_likelihood(_grad, _x, _xsize, _prof, _I0, _bgd, _xtal_bi, _hkl_idxs, _iidxs, _isize,
-                                       num_threads)
+        fail = poisson_likelihood(_out, _grad, _x, _ij, _dims, _I0, _bgd, _xtal_bi, _prof, _fidxs, _fsize, _idxs,
+                                  _isize, _hkl_idxs, _hkl_size, _oidxs, _osize, num_threads)
 
-    return criterion, grad
+    if fail:
+        raise RuntimeError('C backend exited with error.')
 
-def ls_criterion(np.ndarray x not None, np.ndarray prof not None, np.ndarray I0 not None, np.ndarray bgd not None,
-                 np.ndarray xtal_bi not None, np.ndarray hkl_idxs not None, np.ndarray iidxs not None, str loss='l2',
-                 unsigned num_threads=1):
-    if I0.size != prof.size or I0.size != bgd.size or I0.size != xtal_bi.size or I0.size != iidxs[iidxs.size - 1]:
+    return out, grad
+
+def ls_criterion(np.ndarray x not None, object shape not None, np.ndarray ij not None, np.ndarray I0 not None, np.ndarray bgd not None,
+                 np.ndarray xtal_bi not None, np.ndarray prof not None, np.ndarray fidxs not None, np.ndarray idxs not None,
+                 np.ndarray hkl_idxs not None, np.ndarray oidxs=None, str loss='l2', unsigned num_threads=1):
+    if I0.size != bgd.size or I0.size != xtal_bi.size or I0.size != prof.size or \
+       I0.size != idxs.size or I0.size != fidxs[fidxs.size - 1]:
         raise ValueError('Input arrays have incompatible sizes')
     if loss not in loss_scheme:
         raise ValueError(f"Invalid loss keyword: '{loss}'")
 
+    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef unsigned long *_dims = [_shape[0], _shape[1]]
+
     x = check_array(x, np.NPY_FLOAT32)
-    prof = check_array(prof, np.NPY_FLOAT32)
+    ij = check_array(ij, np.NPY_UINT32)
     I0 = check_array(I0, np.NPY_UINT32)
     bgd = check_array(bgd, np.NPY_FLOAT32)
     xtal_bi = check_array(xtal_bi, np.NPY_FLOAT32)
+    prof = check_array(prof, np.NPY_FLOAT32)
+    fidxs = check_array(fidxs, np.NPY_UINT32)
+    idxs = check_array(idxs, np.NPY_UINT32)
     hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
-    iidxs = check_array(iidxs, np.NPY_UINT32)
 
-    cdef unsigned long _isize = iidxs.size - 1
-    cdef unsigned long _xsize = x.size
-    cdef np.ndarray grad = np.PyArray_ZEROS(x.ndim, x.shape, np.NPY_FLOAT32, 0)
-    cdef float *_grad = <float *>np.PyArray_DATA(grad)
+    cdef unsigned long _isize = idxs[idxs.size - 1] + 1
+    if x.size < _isize or hkl_idxs.size != _isize:
+        raise ValueError("idxs is incompatible with x and hkl_idxs")
+    cdef unsigned long _hkl_size = x.size - _isize
+
+    cdef unsigned long _osize
+    if oidxs is None:
+        oidxs = np.PyArray_ZEROS(1, [_isize,], np.NPY_UINT32, 0)
+        _osize = 1
+    else:
+        _osize = np.PyArray_Max(oidxs, 0, <np.ndarray>NULL) + 1
+
+    cdef np.ndarray out = np.PyArray_ZEROS(1, [_osize,], np.NPY_FLOAT64, 0)
+    cdef np.ndarray grad = np.PyArray_ZEROS(x.ndim, x.shape, np.NPY_FLOAT64, 0)
+    cdef double *_out = <double *>np.PyArray_DATA(out)
+    cdef double *_grad = <double *>np.PyArray_DATA(grad)
     cdef float *_x = <float *>np.PyArray_DATA(x)
-    cdef float *_prof = <float *>np.PyArray_DATA(prof)
+    cdef unsigned *_ij = <unsigned *>np.PyArray_DATA(ij)
     cdef unsigned *_I0 = <unsigned *>np.PyArray_DATA(I0)
     cdef float *_bgd = <float *>np.PyArray_DATA(bgd)
     cdef float *_xtal_bi = <float *>np.PyArray_DATA(xtal_bi)
+    cdef float *_prof = <float *>np.PyArray_DATA(prof)
+    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs)
+    cdef unsigned long _fsize = fidxs.size - 1
+    cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
     cdef unsigned *_hkl_idxs = <unsigned *>np.PyArray_DATA(hkl_idxs)
-    cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
+    cdef unsigned *_oidxs = <unsigned *>np.PyArray_DATA(oidxs)
     cdef loss_func _lfunc = lfuncs[loss_scheme[loss]]
     cdef loss_func _gfunc = gfuncs[loss_scheme[loss]]
-    cdef float criterion
+    cdef int fail
 
     with nogil:
-        criterion = least_squares(_grad, _x, _xsize, _prof, _I0, _bgd, _xtal_bi, _hkl_idxs, _iidxs, _isize,
-                                  _lfunc, _gfunc, num_threads)
+        fail = least_squares(_out, _grad, _x, _ij, _dims, _I0, _bgd, _xtal_bi, _prof, _fidxs, _fsize, _idxs,
+                             _isize, _hkl_idxs, _hkl_size, _oidxs, _osize, _lfunc, _gfunc, num_threads)
 
-    return criterion, grad
+    return out, grad
 
-def model_fit(np.ndarray x not None, np.ndarray hkl_idxs not None, np.ndarray iidxs not None):
+def unmerge_signal(np.ndarray x not None, object shape not None, np.ndarray ij not None, np.ndarray I0 not None,
+                   np.ndarray bgd not None, np.ndarray xtal_bi not None, np.ndarray prof not None, np.ndarray fidxs not None,
+                   np.ndarray idxs not None, np.ndarray hkl_idxs not None, unsigned num_threads=1):
+    if I0.size != bgd.size or I0.size != xtal_bi.size or I0.size != prof.size or \
+       I0.size != idxs.size or I0.size != fidxs[fidxs.size - 1]:
+        raise ValueError('Input arrays have incompatible sizes')
+
+    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef unsigned long *_dims = [_shape[0], _shape[1]]
+
     x = check_array(x, np.NPY_FLOAT32)
+    ij = check_array(ij, np.NPY_UINT32)
+    I0 = check_array(I0, np.NPY_UINT32)
+    bgd = check_array(bgd, np.NPY_FLOAT32)
+    xtal_bi = check_array(xtal_bi, np.NPY_FLOAT32)
+    prof = check_array(prof, np.NPY_FLOAT32)
+    fidxs = check_array(fidxs, np.NPY_UINT32)
+    idxs = check_array(idxs, np.NPY_UINT32)
     hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
-    iidxs = check_array(iidxs, np.NPY_UINT32)
 
-    cdef int isize = iidxs.size - 1
-    cdef int xsize = x.size
+    cdef unsigned long _isize = idxs[idxs.size - 1] + 1
+    if x.size < _isize or hkl_idxs.size != _isize:
+        raise ValueError("idxs is incompatible with x and hkl_idxs")
+    cdef unsigned long _hkl_size = x.size - _isize
 
-    cdef np.ndarray sfac = np.PyArray_SimpleNew(1, [iidxs[isize],], np.NPY_FLOAT32)
-    cdef np.ndarray intercept = np.PyArray_SimpleNew(1, [iidxs[isize],], np.NPY_FLOAT32)
-
-    cdef int i, j
-    cdef float sf
-    cdef np.float32_t[::1] _sfac = sfac
-    cdef np.float32_t[::1] _intercept = intercept
-    cdef np.float32_t[::1] _x = x
-    cdef np.uint32_t[::1] _hkl_idxs = hkl_idxs
-    cdef np.uint32_t[::1] _iidxs = iidxs
+    cdef np.ndarray I_hat = np.PyArray_ZEROS(I0.ndim, I0.shape, np.NPY_FLOAT32, 0)
+    cdef float *_I_hat = <float *>np.PyArray_DATA(I_hat)
+    cdef float *_x = <float *>np.PyArray_DATA(x)
+    cdef unsigned *_ij = <unsigned *>np.PyArray_DATA(ij)
+    cdef unsigned *_I0 = <unsigned *>np.PyArray_DATA(I0)
+    cdef float *_bgd = <float *>np.PyArray_DATA(bgd)
+    cdef float *_xtal_bi = <float *>np.PyArray_DATA(xtal_bi)
+    cdef float *_prof = <float *>np.PyArray_DATA(prof)
+    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs)
+    cdef unsigned long _fsize = fidxs.size - 1
+    cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
+    cdef unsigned *_hkl_idxs = <unsigned *>np.PyArray_DATA(hkl_idxs)
+    cdef int fail = 0
 
     with nogil:
-        for i in range(isize):
-            sf = exp(_x[isize + _hkl_idxs[i]])
-            for j in range(<int>_iidxs[i], <int>_iidxs[i + 1]):
-                _intercept[j] = _x[i]; _sfac[j] = sf
+        fail = unmerge_sgn(_I_hat, _x, _ij, _dims, _I0, _bgd, _xtal_bi, _prof, _fidxs, _fsize, _idxs,
+                           _isize, _hkl_idxs, _hkl_size, num_threads)
 
-    return intercept, sfac
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+
+    return I_hat

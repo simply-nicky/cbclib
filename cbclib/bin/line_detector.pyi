@@ -76,7 +76,7 @@ class LSD:
             * `lines` : An array of the detected lines. Each line is comprised of 7 parameters
               as follows:
 
-              * `[x1, y1]`, `[x2, y2]` : The coordinates of the line's ends.
+              * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
               * `width` : Line's width.
               * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
               * `-log10(NFA)` : Number of false alarms.
