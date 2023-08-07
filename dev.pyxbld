@@ -6,10 +6,10 @@ def make_ext(modname, pyxfilename):
     import sys
     import Cython.Compiler.Options
     Cython.Compiler.Options.annotate = True
-    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/array.c", "cbclib/include/cephes.c",
-                                          "cbclib/include/geometry.c", "cbclib/include/img_proc.c",
-                                          "cbclib/include/kd_tree.c", "cbclib/include/lsd.c",
-                                          "cbclib/include/median.c", "cbclib/include/sgn_proc.c"],
+    return Extension(name='dev', sources=["dev.pyx", "cbclib/include/array.c", "cbclib/include/geometry.c",
+                                          "cbclib/include/img_proc.c", "cbclib/include/kd_tree.c",
+                                          "cbclib/include/lsd.c", "cbclib/include/median.c",
+                                          "cbclib/include/sgn_proc.c"],
                      language="c",
                      extra_compile_args=['-fopenmp', '-std=c99'],
                      libraries=['fftw3', 'fftw3_omp', 'gomp'],

@@ -1,5 +1,5 @@
 import numpy as np
-from .image_proc cimport check_array, normalize_sequence
+from .image_proc cimport check_array, normalise_sequence
 from .line_detector cimport ArrayWrapper
 
 cdef loss_func lfuncs[3]
@@ -193,7 +193,7 @@ def poisson_criterion(np.ndarray x not None, object shape not None, np.ndarray i
        I0.size != idxs.size or I0.size != fidxs[fidxs.size - 1]:
         raise ValueError('Input arrays have incompatible sizes')
 
-    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef np.ndarray _shape = normalise_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
     x = check_array(x, np.NPY_FLOAT32)
@@ -253,7 +253,7 @@ def ls_criterion(np.ndarray x not None, object shape not None, np.ndarray ij not
     if loss not in loss_scheme:
         raise ValueError(f"Invalid loss keyword: '{loss}'")
 
-    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef np.ndarray _shape = normalise_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
     x = check_array(x, np.NPY_FLOAT32)
@@ -310,7 +310,7 @@ def unmerge_signal(np.ndarray x not None, object shape not None, np.ndarray ij n
        I0.size != idxs.size or I0.size != fidxs[fidxs.size - 1]:
         raise ValueError('Input arrays have incompatible sizes')
 
-    cdef np.ndarray _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+    cdef np.ndarray _shape = normalise_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
     x = check_array(x, np.NPY_FLOAT32)

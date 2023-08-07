@@ -19,17 +19,17 @@ cdef extern from "array.h":
                                int side, int (*compar)(void*, void*)) nogil
 
 cdef extern from "geometry.h":
-    int compute_euler_angles(double *angles, double *rot_mats, unsigned long n_mats) nogil
-    int compute_euler_matrix(double *rot_mats, double *angles, unsigned long n_mats) nogil
-    int compute_tilt_angles(double *angles, double *rot_mats, unsigned long n_mats) nogil
-    int compute_tilt_matrix(double *rot_mats, double *angles, unsigned long n_mats) nogil
-    int compute_rotations(double *rot_mats, double *as, double *bs, unsigned long n_mats) nogil
+    int compute_euler_angles(float *angles, float *rot_mats, unsigned long n_mats) nogil
+    int compute_euler_matrix(float *rot_mats, float *angles, unsigned long n_mats) nogil
+    int compute_tilt_angles(float *angles, float *rot_mats, unsigned long n_mats) nogil
+    int compute_tilt_matrix(float *rot_mats, float *angles, unsigned long n_mats) nogil
+    int compute_rotations(float *rot_mats, float *as, float *bs, unsigned long n_mats) nogil
 
-    int det2k(double *karr, double *x, double *y, unsigned *idxs, unsigned long ksize, double *src,
+    int det2k(float *karr, float *x, float *y, unsigned *idxs, unsigned long ksize, float *src,
               unsigned threads) nogil
-    int k2det(double *x, double *y, double *karr, unsigned *idxs, unsigned long ksize, double *src,
+    int k2det(float *x, float *y, float *karr, unsigned *idxs, unsigned long ksize, float *src,
               unsigned threads) nogil
-    int k2smp(double *pts, double *karr, unsigned *idxs, unsigned long ksize, double *z, double *src,
+    int k2smp(float *pts, float *karr, unsigned *idxs, unsigned long ksize, float *z, float *src,
               unsigned threads) nogil
-    int rotate_vec(double *out, double *vecs, unsigned *idxs, unsigned long vsize, double *rmats,
+    int rotate_vec(float *out, float *vecs, unsigned *idxs, unsigned long vsize, float *rmats,
                    unsigned threads) nogil

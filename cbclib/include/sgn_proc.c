@@ -392,20 +392,18 @@ int poisson_likelihood(double *out, double *grad, float *x, unsigned *ij, size_t
                 }
             }
 
-            for (i = 0; i < (int)osize; i++)
-            {
-                #pragma omp atomic
-                out[i] += obuf[i];
-            }
-            for (i = 0; i < (int)hkl_size; i++)
-            {
-                #pragma omp atomic
-                grad[isize + i] += gbuf[i];
-            }
-
             memset(img, 0, dims[0] * dims[1] * sizeof(double));
-            memset(obuf, 0, osize * sizeof(double));
-            memset(gbuf, 0, hkl_size * sizeof(double));
+        }
+
+        for (i = 0; i < (int)osize; i++)
+        {
+            #pragma omp atomic
+            out[i] += obuf[i];
+        }
+        for (i = 0; i < (int)hkl_size; i++)
+        {
+            #pragma omp atomic
+            grad[isize + i] += gbuf[i];
         }
 
         DEALLOC(img); DEALLOC(gbuf); DEALLOC(obuf);
@@ -453,20 +451,18 @@ int least_squares(double *out, double *grad, float *x, unsigned *ij, size_t *dim
                 }
             }
 
-            for (i = 0; i < (int)osize; i++)
-            {
-                #pragma omp atomic
-                out[i] += obuf[i];
-            }
-            for (i = 0; i < (int)hkl_size; i++)
-            {
-                #pragma omp atomic
-                grad[isize + i] += gbuf[i];
-            }
-
             memset(img, 0, dims[0] * dims[1] * sizeof(double));
-            memset(obuf, 0, osize * sizeof(double));
-            memset(gbuf, 0, hkl_size * sizeof(double));
+        }
+
+        for (i = 0; i < (int)osize; i++)
+        {
+            #pragma omp atomic
+            out[i] += obuf[i];
+        }
+        for (i = 0; i < (int)hkl_size; i++)
+        {
+            #pragma omp atomic
+            grad[isize + i] += gbuf[i];
         }
 
         DEALLOC(img); DEALLOC(gbuf); DEALLOC(obuf);

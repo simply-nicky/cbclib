@@ -174,7 +174,8 @@ def gaussian_gradient_magnitude(inp: np.ndarray, sigma: Union[float, List[float]
     """
     ...
 
-def median(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: int=0, num_threads: int=1) -> np.ndarray:
+def median(inp: np.ndarray, mask: Optional[np.ndarray]=None,
+           axis: Union[int, List[int], Tuple[int]]=0, num_threads: int=1) -> np.ndarray:
     """Calculate a median along the `axis`.
 
     Args:
@@ -182,7 +183,7 @@ def median(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: int=0, num_th
             np.uint32, np.uint64.
         mask : Output mask. Median is calculated only where `mask` is True, output array set to 0
             otherwise. Median is calculated over the whole input array by default.
-        axis : Array axis along which median values are calculated.
+        axis : Array axes along which median values are calculated.
         num_threads : Number of threads used in the calculations.
 
     Raises:
@@ -293,6 +294,78 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
 
     Returns:
         Filtered array. Has the same shape as `inp`.
+    """
+    ...
+
+def robust_mean(inp: np.ndarray, axis: Union[int, List[int], Tuple[int]]=0, r0: float=0.0,
+                r1: float=0.5, n_iter: int=12, lm: float=9.0, num_threads: int=1) -> np.ndarray:
+    """Calculate a mean along the `axis` by robustly fitting a Gaussian to input vector [RFG]_.
+    The algorithm performs `n_iter` times the fast least kth order statistics (FLkOS [FLKOS]_)
+    algorithm to fit a gaussian to data.
+    
+    Args:
+        inp : Input array. Must be one of the following types: np.float64, np.float32, np.int32,
+            np.uint32, np.uint64.
+        axis : Array axes along which median values are calculated.
+        r0 : A lower bound guess of ratio of inliers. We'd like to make a sample out of worst
+            inliers from data points that are between `r0` and `r1` of sorted residuals.
+        r1 : An upper bound guess of ratio of inliers. Choose the `r0` to be as high as you are
+            sure the ratio of data is inlier.
+        n_iter : Number of iterations of fitting a gaussian with the FLkOS algorithm.
+        lm : How far (normalized by STD of the Gaussian) from the mean of the Gaussian, data is
+            considered inlier.
+        num_threads : Number of threads used in the calculations.
+
+    Raises:
+        ValueError : If `mask` and `inp` have different shapes.
+        TypeError : If `inp` has incompatible type.
+        RuntimeError : If C backend exited with error.
+
+    References:
+        .. [RFG] A. Sadri et al., "Automatic bad-pixel mask maker for X-ray pixel detectors with
+                application to serial crystallography", J. Appl. Cryst. 55, 1549-1561 (2022).
+
+        .. [FLKOS] A. Bab-Hadiashar and R. Hoseinnezhad, "Bridging Parameter and Data Spaces for
+                  Fast Robust Estimation in Computer Vision," Digital Image Computing: Techniques
+                  and Applications, pp. 1-8 (2008).
+
+    Returns:
+        Array of robust mean.
+    """
+    ...
+
+def robust_lsq(W: np.ndarray, y: np.ndarray, axis: Union[int, List[int], Tuple[int]]=-1,
+               r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
+               num_threads: int=1) -> np.ndarray:
+    """Robustly solve a linear least-squares problem with the fast least kth order statistics
+    (FLkOS [FLKOS]_) algorithm.
+
+    Given a `(N[0], .., N[ndim])` target vector `y` and a design matrix `W` of the shape
+    `(M, N[axis[0]], .., N[axis[-1]])`, `robust_lsq` solves the following problems:
+
+    ..code::
+
+        for i in range(0, prod(N[~axis])):
+            minimize ||W x - y[i]||**2
+
+    Args:
+        W : Design matrix of the shape `(M, N[axis[0]], .., N[axis[-1]])`.
+        y : Target vector of the shape `(N[0], .., N[ndim])`.
+        axis : Array axes along which the design matrix is fitted to the target.
+        r0 : A lower bound guess of ratio of inliers. We'd like to make a sample out of worst
+            inliers from data points that are between `r0` and `r1` of sorted residuals.
+        r1 : An upper bound guess of ratio of inliers. Choose the `r0` to be as high as you are
+            sure the ratio of data is inlier.
+        n_iter : Number of iterations of fitting a gaussian with the FLkOS algorithm.
+        lm : How far (normalized by STD of the Gaussian) from the mean of the Gaussian, data is
+            considered inlier.
+        num_threads : A number of threads used in the computations.
+
+    Raises:
+        If `W` has an incompatible shape.
+
+    Returns:
+        The least-squares solution `x` of the shape `N[~axis]`.
     """
     ...
 
@@ -416,40 +489,6 @@ def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, di
     """
     ...
 
-def outlier_rate(data: np.ndarray, bgd: np.ndarray, iidxs: np.ndarray, hkl_idxs: np.ndarray,
-                 alpha: float, num_threads: int=1) -> Tuple[np.ndarray, np.ndarray]:
-    r"""Count the outliers for a set of diffraction orders, which photon counts are above the
-    ``alpha`` Poisson distribution quantile with expected values equal to the background
-    intensities ``bgd``.
-
-    Args:
-        data : Photon counts.
-        bgd : Background intensities.
-        iidxs : Streak indices of the generated pattern.
-        hkl_idxs : Diffraction order indices.
-        alpha : Quantile level, which must be between 0 and 1 inclusive.
-        num_threads : Number of threads used in the calculations.
-
-    Notes:
-        The confidence interval for the mean of a Poisson distribution can be expressed using
-        the relationship between the cumulative distribution functions of the Poisson and
-        chi-squared distributions. The chi-squared distribution is itself closely related to
-        the gamma distribution, and this leads to an alternative expression. Given an observation
-        ``k`` from a Poisson distribution with mean :math:`\mu`, a confidence interval for
-        :math:`\mu` with confidence level :math:`1 - \alpha` is:
-
-        .. math::
-            \frac{1}{2} \chi^2(\alpha / 2, 2 k) \leq \mu \leq \frac{1}{2}
-            \chi^2(1 - \alpha / 2, 2 k + 2),
-
-        where :math:`\chi^2(p, n)` is the quantile function of the chi-squared distribuion with n
-        degrees.
-
-    Returns:
-        An array of outlier and total counts.
-    """
-    ...
-
 def normalise_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilations: Tuple[float, float, float],
                       profile: str='tophat', num_threads: int=1) -> np.ndarray:
     """Perform the normalisation of measured CBC patterns ``inp`` based on two-zone masking.
@@ -496,34 +535,6 @@ def refine_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilation: floa
 
     Returns:
         Refined diffraction streaks.
-    """
-    ...
-
-def project_effs(inp: np.ndarray, mask: np.ndarray, effs: np.ndarray, num_threads: int=1) -> np.ndarray:
-    """Calculate a projection of eigen flat-fields ``effs`` on a set of 2D arrays ``inp``.
-
-    Args:
-        inp : A set of 2D arrays.
-        mask : A set of 2D masks.
-        effs : A set of eigen flat-fields.
-        num_threads : A number of threads used in the computations.
-
-    Returns:
-        An output projection of eigen flat-fields.
-    """
-    ...
-
-def subtract_background(inp: np.ndarray, mask: np.ndarray, bgd: np.ndarray, num_threads: int=1) -> np.ndarray:
-    """Subtract background from a set of 2D arrays ``inp``.
-
-    Args:
-        inp : A set of 2D arrays.
-        mask : A set of 2D masks.
-        bgd : A set of background arrays.
-        num_threads : A number of threads used in the computations.
-
-    Returns:
-        An output projection of eigen flat-fields.
     """
     ...
 

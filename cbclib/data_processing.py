@@ -20,9 +20,8 @@ import pandas as pd
 from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks, CBDModel
 from .cxi_protocol import CXIProtocol, CXIStore, Indices
 from .data_container import DataContainer, Transform, ReferenceType
-from .bin import (subtract_background, project_effs, median, median_filter, LSD,
-                  normalise_pattern, refine_pattern, draw_line_mask, unique_indices,
-                  outlier_rate)
+from .bin import (median, robust_mean, robust_lsq, median_filter, LSD, refine_pattern,
+                  draw_line_mask, draw_line_image)
 
 C = TypeVar('C', bound='CrystData')
 
@@ -44,9 +43,8 @@ class CrystData(DataContainer):
         mask : Bad pixels mask.
         frames : List of frame indices inside the container.
         whitefield : Measured frames' white-field.
-        cor_data : Background corrected data.
-        background : Detector image backgrounds.
-        streak_mask : A mask of detected diffraction streaks.
+        snr : Signal-to-noise ratio.
+        whitefields : A set of white-fields generated for each pattern separately.
     """
     input_file  : Optional[CXIStore] = None
     transform   : Optional[Transform] = None
@@ -59,9 +57,8 @@ class CrystData(DataContainer):
     frames      : Optional[np.ndarray] = None
 
     whitefield  : Optional[np.ndarray] = None
-    cor_data    : Optional[np.ndarray] = None
-    background  : Optional[np.ndarray] = None
-    streak_mask : Optional[np.ndarray] = None
+    snr         : Optional[np.ndarray] = None
+    whitefields : Optional[np.ndarray] = None
 
     _no_data_exc: ClassVar[ValueError] = ValueError('No data in the container')
     _no_whitefield_exc: ClassVar[ValueError] = ValueError('No whitefield in the container')
@@ -325,21 +322,6 @@ class CrystData(DataContainer):
         """
         raise self._no_data_exc
 
-    def mask_pupil(self: C, setup: ScanSetup, padding: float=0.0) -> C:
-        """Return a new :class:`CrystData` object with the pupil region masked.
-
-        Args:
-            setup : Experimental setup.
-            padding : Pupil region padding in pixels.
-
-        Raises:
-            ValueError : If there is no ``data`` inside the container.
-
-        Returns:
-            New :class:`CrystData` object with the updated ``mask``.
-        """
-        raise self._no_data_exc
-
     def import_mask(self: C, mask: np.ndarray, update: str='reset') -> C:
         """Return a new :class:`CrystData` object with the new mask.
 
@@ -373,77 +355,81 @@ class CrystData(DataContainer):
         """
         raise self._no_data_exc
 
-    def update_mask(self: C, method: str='range-bad', pmin: float=0.0, pmax: float=99.99,
-                    vmin: int=0, vmax: int=65535, update: str='reset') -> C:
+    def reset_mask(self: C) -> C:
+        """Reset bad pixel mask. Every pixel is assumed to be good by default.
+
+        Raises:
+            ValueError : If there is no ``data`` inside the container.
+
+        Returns:
+            New :class:`CrystData` object with the default ``mask``.
+        """
+        raise self._no_data_exc
+
+    def update_mask(self: C, method: str='no-bad', vmin: int=0, vmax: int=65535,
+                    snr_max: float=3.0, roi: Optional[Indices]=None) -> C:
         """Return a new :class:`CrystData` object with the updated bad pixels mask.
 
         Args:
             method : Bad pixels masking methods. The following keyword values are
                 allowed:
 
+                * 'all-bad' : Mask out all pixels.
                 * 'no-bad' (default) : No bad pixels.
-                * 'range-bad' : Mask the pixels which values lie outside of (`vmin`,
+                * 'range' : Mask the pixels which values lie outside of (`vmin`,
                   `vmax`) range.
-                * 'perc-bad' : Mask the pixels which values lie outside of the (`pmin`,
-                  `pmax`) percentiles.
+                * 'snr' : Mask the pixels which SNR values lie exceed the SNR
+                  threshold `snr_max`. The snr is given by
+                  :code:`abs(data - whitefield) / sqrt(whitefield)`.
 
             vmin : Lower intensity bound of 'range-bad' masking method.
             vmax : Upper intensity bound of 'range-bad' masking method.
-            pmin : Lower percentage bound of 'perc-bad' masking method.
-            pmax : Upper percentage bound of 'perc-bad' masking method.
-            update : Multiply the new mask and the old one if 'multiply', use the new
-                one if 'reset'.
+            snr_max : SNR threshold.
+            roi : Region of the frame undertaking the update. The whole frame is updated
+                by default.
 
         Raises:
             ValueError : If there is no ``data`` inside the container.
+            ValueError : If there is no ``snr`` inside the container.
             ValueError : If ``method`` keyword is invalid.
-            ValueError : If ``update`` keyword is invalid.
             ValueError : If ``vmin`` is larger than ``vmax``.
-            ValueError : If ``pmin`` is larger than ``pmax``.
 
         Returns:
             New :class:`CrystData` object with the updated ``mask``.
         """
         raise self._no_data_exc
 
-    def update_whitefield(self: C, method: str='median', num_medians: int=5) -> C:
-        """Return a new :class:`CrystData` object with new whitefield as the median taken
-        through the stack of measured frames.
+    def update_whitefield(self, method: str='median', frames: Optional[Indices]=None,
+                          r0: float=0.0, r1: float=0.5, n_iter: int=12,
+                          lm: float=9.0) -> CrystDataFull:
+        """Return a new :class:`CrystData` object with new whitefield.
 
         Args:
-            method : Choose a method to generate a white-field. The following keyboard
-                attributes are allowed:
+            method : Choose method for white-field generation. The following keyword
+                values are allowed:
 
-                * `mean` : Taking a mean through the stack of frames.
-                * `median` : Taking a median through the stack of frames.
-                * `median + mean` : Taking ``num_medians`` medians through subsets of
-                  frames and then taking a mean through the stack of medians.
+                * 'median' : Taking a median through the stack of frames.
+                * 'robust-mean' : Finding a robust mean through the stack of frames.
 
-            num_medians : Number of medians to generate for `median + mean` method.
+            frames : List of frames to use for the white-field estimation.
+            r0 : A lower bound guess of ratio of inliers. We'd like to make a sample
+                out of worst inliers from data points that are between `r0` and `r1`
+                of sorted residuals.
+            r1 : An upper bound guess of ratio of inliers. Choose the `r0` to be as
+                high as you are sure the ratio of data is inlier.
+            n_iter : Number of iterations of fitting a gaussian with the FLkOS
+                algorithm.
+            lm : How far (normalized by STD of the Gaussian) from the mean of the
+                Gaussian, data is considered inlier.
 
         Raises:
             ValueError : If there is no ``data`` inside the container.
+            ValueError : If ``method`` keyword is invalid.
 
         Returns:
             New :class:`CrystData` object with the updated ``whitefield``.
         """
         raise self._no_data_exc
-
-    def blur_pupil(self: C, setup: ScanSetup, padding: float=0.0, blur: float=0.0) -> C:
-        """Blur pupil region in the background corrected images.
-
-        Args:
-            setup : Experimental setup.
-            padding : Pupil region padding in pixels.
-            blur : Blur width in pixels.
-
-        Raises:
-            ValueError : If there is no ``whitefield`` inside the container.
-
-        Returns:
-            New :class:`CrystData` object with the updated ``cor_data``.
-        """
-        raise self._no_whitefield_exc
 
     def get_pca(self) -> Dict[float, np.ndarray]:
         """Perform the Principal Component Analysis [PCA]_ of the measured data and return a
@@ -458,6 +444,7 @@ class CrystData(DataContainer):
 
         Raises:
             ValueError : If there is no ``whitefield`` inside the container.
+            ValueError : If there is no ``snr`` inside the container.
 
         References:
             .. [PCA] Vincent Van Nieuwenhove, Jan De Beenhouwer, Francesco De Carlo, Lucia
@@ -467,25 +454,12 @@ class CrystData(DataContainer):
         """
         raise self._no_whitefield_exc
 
-    def import_patterns(self: C, table: pd.DataFrame) -> C:
-        """Import a streak mask from a CBC table.
-
-        Args:
-            table : CBC table in :class:`pandas.DataFrame` format.
-
-        Returns:
-            New container with updated ``streak_mask``.
-
-        See Also:
-            cbclib.CBCTable : More info about the CBC table.
-        """
-        raise self._no_whitefield_exc
-
     def lsd_detector(self) -> LSDetector:
         """Return a new :class:`cbclib.LSDetector` object based on ``cor_data`` attribute.
 
         Raises:
             ValueError : If there is no ``whitefield`` inside the container.
+            ValueError : If there is no ``snr`` inside the container.
 
         Returns:
             A CBC pattern detector based on :class:`cbclib.bin.LSD` Line Segment Detection [LSD]_
@@ -504,25 +478,14 @@ class CrystData(DataContainer):
 
         Raises:
             ValueError : If there is no ``whitefield`` inside the container.
+            ValueError : If there is no ``snr`` inside the container.
 
         Returns:
             A CBC pattern detector based on :class:`cbclib.CBDModel` CBD pattern prediction model.
         """
         raise self._no_whitefield_exc
 
-    def update_background(self: C) -> C:
-        """Return a new :class:`CrystData` object with a new set of backgrounds. A set of
-        backgrounds is generated by fitting a white-field profile to the measured data.
-
-        Raises:
-            ValueError : If there is no ``whitefield`` inside the container.
-
-        Returns:
-            New :class:`CrystData` object with the updated ``background``.
-        """
-        raise self._no_whitefield_exc
-
-    def update_cor_data(self: C) -> C:
+    def update_snr(self: C) -> C:
         """Return a new :class:`CrystData` object with new background corrected detector
         images.
 
@@ -531,6 +494,33 @@ class CrystData(DataContainer):
 
         Returns:
             New :class:`CrystData` object with the updated ``cor_data``.
+        """
+        raise self._no_whitefield_exc
+
+    def update_whitefields(self: C, W: Optional[np.ndarray]=None, r0: float=0.0, r1: float=0.5,
+                           n_iter: int=12, lm: float=9.0) -> C:
+        """Return a new :class:`CrystData` object with a new set of whitefields. A set of
+        backgrounds is generated by robustly fitting a design matrix `W` to the measured
+        patterns.
+
+        Args:
+            W : Design matrix. `whitefield` is used by default.
+            r0 : A lower bound guess of ratio of inliers. We'd like to make a sample
+                out of worst inliers from data points that are between `r0` and `r1`
+                of sorted residuals.
+            r1 : An upper bound guess of ratio of inliers. Choose the `r0` to be as
+                high as you are sure the ratio of data is inlier.
+            n_iter : Number of iterations of fitting a gaussian with the FLkOS
+                algorithm.
+            lm : How far (normalized by STD of the Gaussian) from the mean of the
+                Gaussian, data is considered inlier.
+
+        Raises:
+            ValueError : If there is no ``data`` inside the container.
+            ValueError : If there is no ``whitefield`` inside the container.
+
+        Returns:
+            New :class:`CrystData` object with the updated ``whitefields``.
         """
         raise self._no_whitefield_exc
 
@@ -547,9 +537,8 @@ class CrystDataPart(CrystData):
     frames      : Optional[np.ndarray] = None
 
     whitefield  : Optional[np.ndarray] = None
-    cor_data    : Optional[np.ndarray] = None
-    background  : Optional[np.ndarray] = None
-    streak_mask : Optional[np.ndarray] = None
+    snr         : Optional[np.ndarray] = None
+    whitefields : Optional[np.ndarray] = None
 
     def __post_init__(self):
         if self.good_frames is None:
@@ -561,23 +550,6 @@ class CrystDataPart(CrystData):
         if frames is None:
             frames = np.where(self.data.sum(axis=(1, 2)) > 0)[0]
         return self.replace(good_frames=np.asarray(frames))
-
-    def mask_region(self: C, roi: Indices) -> C:
-        mask = self.mask.copy()
-        mask[:, roi[0]:roi[1], roi[2]:roi[3]] = False
-
-        if self.cor_data is not None:
-            cor_data = self.cor_data.copy()
-            cor_data[:, roi[0]:roi[1], roi[2]:roi[3]] = 0.0
-            return self.replace(mask=mask, cor_data=cor_data)
-
-        return self.replace(mask=mask)
-
-    def mask_pupil(self: C, setup: ScanSetup, padding: float=0.0) -> C:
-        x0, y0 = self.forward_points(x=setup.pupil_roi[2], y=setup.pupil_roi[0])
-        x1, y1 = self.forward_points(x=setup.pupil_roi[3], y=setup.pupil_roi[1])
-        return self.mask_region((int(y0 - padding), int(y1 + padding),
-                                 int(x0 - padding), int(x1 + padding)))
 
     def import_mask(self: C, mask: np.ndarray, update: str='reset') -> C:
         if mask.shape != self.shape[1:]:
@@ -597,51 +569,53 @@ class CrystDataPart(CrystData):
                              f'{whitefield.shape} != {self.shape[1:]}')
         return CrystDataFull(**dict(self, whitefield=whitefield))
 
-    def update_mask(self, method: str='range-bad', pmin: float=0.0, pmax: float=99.99,
-                    vmin: int=0, vmax: int=65535, update: str='reset') -> C:
+    def reset_mask(self: C) -> C:
+        return self.replace(mask=np.ones(self.shape, dtype=bool))
+
+    def update_mask(self: C, method: str='no-bad', vmin: int=0, vmax: int=65535,
+                    snr_max: float=3.0, roi: Optional[Indices]=None) -> C:
         if vmin >= vmax:
             raise ValueError('vmin must be less than vmax')
-        if pmin >= pmax:
-            raise ValueError('pmin must be less than pmax')
+        if roi is None:
+            roi = (0, self.shape[1], 0, self.shape[2])
 
-        if update == 'reset':
-            data = self.data
-        elif update == 'multiply':
-            data = self.data * self.mask
-        else:
-            raise ValueError(f'Invalid update keyword: {update:s}')
+        data = (self.data * self.mask)[:, roi[0]:roi[1], roi[2]:roi[3]]
 
-        if method == 'no-bad':
-            mask = np.ones(self.shape, dtype=bool)
-        elif method == 'range-bad':
+        if method == 'all-bad':
+            mask = np.zeros(data.shape, dtype=bool)
+        elif method == 'no-bad':
+            mask = np.ones(data.shape, dtype=bool)
+        elif method == 'range':
             mask = (data >= vmin) & (data < vmax)
-        elif method == 'perc-bad':
-            average = median_filter(data, (1, 3, 3), num_threads=self.num_threads)
-            offsets = (data.astype(np.int32) - average.astype(np.int32))
-            mask = (offsets >= np.percentile(offsets, pmin)) & \
-                   (offsets <= np.percentile(offsets, pmax))
+        elif method == 'snr':
+            if self.snr is None:
+                raise ValueError('No snr in the container')
+
+            snr = self.snr[:, roi[0]:roi[1], roi[2]:roi[3]]
+            mask = np.mean(np.abs(snr), axis=0) < snr_max
         else:
             raise ValueError(f'Invalid method argument: {method:s}')
 
-        if update == 'reset':
-            return self.replace(mask=mask)
-        if update == 'multiply':
-            return self.replace(mask=mask * self.mask)
-        raise ValueError(f'Invalid update keyword: {update:s}')
+        new_mask = np.copy(self.mask)
+        new_mask[:, roi[0]:roi[1], roi[2]:roi[3]] &= mask
+        return self.replace(mask=new_mask)
 
-    def update_whitefield(self, method: str='median', num_medians: int=5) -> CrystDataFull:
+    def update_whitefield(self, method: str='median', frames: Optional[Indices]=None,
+                          r0: float=0.0, r1: float=0.5, n_iter: int=12,
+                          lm: float=9.0) -> CrystDataFull:
+        if frames is None:
+            frames = np.arange(self.shape[0])
+
         if method == 'median':
-            whitefield = median(self.data[self.good_frames], mask=self.mask[self.good_frames],
-                                axis=0, num_threads=self.num_threads)
-        elif method == 'mean':
-            whitefield = np.mean(self.data[self.good_frames] * self.mask[self.good_frames], axis=0)
-        elif method == 'median + mean':
-            data = (self.data[self.good_frames] * self.mask[self.good_frames])
-            data = data[:num_medians * (data.shape[0] // num_medians)]
-            data = data.reshape((-1, num_medians) + self.shape[-2:])
-            whitefield = median(data, axis=0, num_threads=self.num_threads).mean(axis=0)
+            whitefield = median(inp=self.data[frames], axis=0,
+                                mask=self.mask[frames],
+                                num_threads=self.num_threads)
+        elif method == 'robust-mean':
+            whitefield = robust_mean(inp=self.data[frames] * self.mask[frames],
+                                     axis=0, r0=r0, r1=r1, n_iter=n_iter, lm=lm,
+                                     num_threads=self.num_threads)
         else:
-            raise ValueError(f'Invalid method argument: {method:s}')
+            raise ValueError('Invalid method argument')
 
         return CrystDataFull(**dict(self, whitefield=whitefield))
 
@@ -658,63 +632,30 @@ class CrystDataFull(CrystDataPart):
     frames      : Optional[np.ndarray] = None
 
     whitefield  : Optional[np.ndarray] = None
-    cor_data    : Optional[np.ndarray] = None
-    background  : Optional[np.ndarray] = None
-    streak_mask : Optional[np.ndarray] = None
-
-    def __post_init__(self):
-        super().__post_init__()
-        if self.background is None:
-            if self.streak_mask is None:
-                mask = self.mask
-            else:
-                mask = self.mask & np.invert(self.streak_mask)
-            self.background = project_effs(self.data, mask=mask,
-                                           effs=self.whitefield[None, ...],
-                                           num_threads=self.num_threads)
-        if self.cor_data is None:
-            self.cor_data = subtract_background(self.data, mask=self.mask,
-                                                bgd=self.background,
-                                                num_threads=self.num_threads)
-
-    def blur_pupil(self, setup: ScanSetup, padding: float=0.0, blur: float=0.0) -> CrystDataFull:
-        x0, y0 = self.forward_points(x=setup.pupil_roi[2], y=setup.pupil_roi[0])
-        x1, y1 = self.forward_points(x=setup.pupil_roi[3], y=setup.pupil_roi[1])
-
-        i, j = np.indices(self.shape[1:])
-        dtype = self.cor_data.dtype
-        window = 0.25 * (np.tanh((i - y0 + padding) / blur, dtype=dtype) + \
-                         np.tanh((y1 + padding - i) / blur, dtype=dtype)) * \
-                        (np.tanh((j - x0 + padding) / blur, dtype=dtype) + \
-                         np.tanh((x1 + padding - j) / blur, dtype=dtype))
-        return CrystDataFull(**dict(self, cor_data=self.cor_data * (1.0 - window)))
+    snr         : Optional[np.ndarray] = None
+    whitefields : Optional[np.ndarray] = None
 
     def get_pca(self) -> Dict[float, np.ndarray]:
-        mat_svd = np.tensordot(self.cor_data, self.cor_data, axes=((1, 2), (1, 2)))
+        if self.snr is None:
+            raise ValueError('No snr in the container')
+
+        mat_svd = np.tensordot(self.snr, self.snr, axes=((1, 2), (1, 2)))
         eig_vals, eig_vecs = np.linalg.eig(mat_svd)
-        effs = np.tensordot(eig_vecs, self.cor_data, axes=((0,), (0,)))
+        effs = np.tensordot(eig_vecs, self.snr, axes=((0,), (0,)))
         return dict(zip(eig_vals / eig_vals.sum(), effs))
 
-    def import_patterns(self, table: pd.DataFrame) -> CrystDataFull:
-        streak_mask = np.zeros(self.shape, dtype=bool)
-        for index, frame in zip(self.good_frames, self.frames[self.good_frames]):
-            pattern = table[table['frames'] == frame]
-            pattern.loc[:, ['x', 'y']] = np.stack(self.forward_points(pattern['x'],
-                                                                      pattern['y']), axis=1)
-            mask = (0 < pattern['y']) & (pattern['y'] < self.shape[1]) & \
-                   (0 < pattern['x']) & (pattern['x'] < self.shape[2])
-            pattern = pattern[mask]
-            streak_mask[index, pattern['y'], pattern['x']] = True
-        return CrystDataFull(**dict(self, streak_mask=streak_mask))
-
     def lsd_detector(self) -> LSDetector:
+        if self.snr is None:
+            raise ValueError('No snr in the container')
         if not self.good_frames.size:
             raise ValueError('No good frames in the stack')
 
-        return LSDetector(data=self.cor_data[self.good_frames], parent=ref(self),
+        return LSDetector(snr=self.snr[self.good_frames], parent=ref(self),
                           frames=self.frames[self.good_frames], num_threads=self.num_threads)
 
     def model_detector(self, basis: Basis, samples: ScanSamples, setup: ScanSetup) -> ModelDetector:
+        if self.snr is None:
+            raise ValueError('No snr in the container')
         if not self.good_frames.size:
             raise ValueError('No good frames in the stack')
 
@@ -723,14 +664,31 @@ class CrystDataFull(CrystDataPart):
                                 transform=self.transform, shape=self.shape[-2:])
                   for idx, frame in enumerate(frames)}
 
-        return ModelDetector(data=self.cor_data[self.good_frames], parent=ref(self),
+        return ModelDetector(snr=self.snr[self.good_frames], parent=ref(self),
                              frames=frames, models=models, num_threads=self.num_threads)
 
-    def update_background(self) -> CrystDataFull:
-        return CrystDataFull(**dict(self, background=None, cor_data=None))
+    def update_snr(self) -> CrystDataFull:
+        if self.whitefields is None:
+            std = np.sqrt(self.whitefield)
+            snr = np.where(self.whitefield, np.divide(self.data - self.whitefield, std,
+                                                      dtype=self.whitefield.dtype), 0.0)
+        else:
+            std = np.sqrt(self.whitefields)
+            snr = np.where(self.whitefields, np.divide(self.data - self.whitefields, std,
+                                                       dtype=self.whitefields.dtype), 0.0)
+        return self.replace(snr=self.mask * snr)
 
-    def update_cor_data(self) -> CrystDataFull:
-        return CrystDataFull(**dict(self, cor_data=None))
+    def update_whitefields(self, W: Optional[np.ndarray]=None, r0: float=0.0, r1: float=0.5,
+                           n_iter: int=12, lm: float=9.0) -> CrystDataFull:
+        if W is None:
+            W = self.whitefield
+
+        std = np.sqrt(self.whitefield)
+        y = np.where(std, np.divide(self.data * self.mask, std, dtype=std.dtype), 0.0)
+        W = np.where(std, np.divide(W, std, dtype=std.dtype), 0.0)
+        x = robust_lsq(W=W, y=y, axis=(1, 2), r0=r0, r1=r1, n_iter=n_iter, lm=lm,
+                       num_threads=self.num_threads)
+        return self.replace(whitefields=np.sum(x[..., None, None] * W * std, axis=1))
 
 D = TypeVar('D', bound='Detector')
 
@@ -738,17 +696,15 @@ class Detector(DataContainer):
     profile         : ClassVar[str] = 'gauss'
     _no_streaks_exc : ClassVar[ValueError] = ValueError('No streaks in the container')
 
-    data            : np.ndarray
+    snr             : np.ndarray
     frames          : np.ndarray
     num_threads     : int
     parent          : ReferenceType[CrystData]
     streaks         : Dict[int, Streaks]
 
-    patterns        : Optional[np.ndarray] = None
-
     @property
     def shape(self) -> Tuple[int, ...]:
-        return self.data.shape
+        return self.snr.shape
 
     def mask_frames(self: D, idxs: Indices) -> D:
         """Choose a subset of frames stored in the container and return a new
@@ -769,8 +725,8 @@ class Detector(DataContainer):
             data_dict['streaks'] = {idx: self.streaks[idx] for idx in idxs}
         return self.replace(**data_dict)
 
-    def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
-        """Draw a pattern mask by using the detected streaks ``streaks``.
+    def draw_mask(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
+        """Draw pattern masks by using the detected streaks ``streaks``.
 
         Args:
             max_val : Maximal mask value
@@ -786,16 +742,27 @@ class Detector(DataContainer):
             ValueError : If there is no ``streaks`` inside the container.
 
         Returns:
-            A pattern mask.
+            A set of pattern masks.
         """
         raise self._no_streaks_exc
+    
+    def draw_image(self, dilation: float=0.0, profile: str='gauss') -> np.ndarray:
+        """Draw pattern images by using the detected streaks ``streaks``.
 
-    def export_streaks(self):
-        """Export ``streak_mask`` to the parent :class:`cbclib.CrystData` data container.
+        Args:
+            dilation : Line mask dilation in pixels.
+            profile : Line width profiles. The following keyword values are allowed:
+
+                * `tophat` : Top-hat (rectangular) function profile.
+                * `linear` : Linear (triangular) function profile.
+                * `quad` : Quadratic (parabola) function profile.
+                * `gauss` : Gaussian function profile.
 
         Raises:
             ValueError : If there is no ``streaks`` inside the container.
-            ValueError : If there is no ``streak_mask`` inside the container.
+
+        Returns:
+            A set of pattern images.
         """
         raise self._no_streaks_exc
 
@@ -818,7 +785,7 @@ class Detector(DataContainer):
 
             * `frames` : Frame index.
             * `x`, `y` : Pixel coordinates.
-            * `p` : Normalised pattern values.
+            * `snr` : Signal-to-noise values.
             * `rp` : Reflection profiles.
             * `I_raw` : Measured intensity.
             * `bgd` : Background values.
@@ -833,25 +800,6 @@ class Detector(DataContainer):
 
         Returns:
             A new detector with the updated diffraction streaks.
-        """
-        raise self._no_streaks_exc
-
-    def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
-        """Return a new detector object with updated normalised CBC patterns. The image is
-        segmented into two region around each reflection to calculate the local background
-        and local peak intensity. The estimated values are used to normalise each diffraction
-        streak separately.
-
-        Args:
-            dilations : A tuple of three dilations (`d0`, `d1`, `d2`) in pixels of the streak
-                mask that is used to define the inner and outer streak zones:
-
-                * The inner zone is based on the mask dilated by `d0`.
-                * The outer zone is based on the difference between a mask dilated by `d2` and
-                  by `d1`.
-
-        Returns:
-            A new detector object with updated ``patterns``.
         """
         raise self._no_streaks_exc
 
@@ -879,18 +827,15 @@ class Detector(DataContainer):
         raise self._no_streaks_exc
 
 class DetectorFull(Detector):
-    def draw(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
+    def draw_mask(self, max_val: int=1, dilation: float=0.0, profile: str='tophat') -> np.ndarray:
         lines = [streaks.to_lines() for streaks in self.streaks.values()]
         return draw_line_mask(self.shape, lines=lines, max_val=max_val, dilation=dilation,
                               profile=profile, num_threads=self.num_threads)
 
-    def export_streaks(self):
-        if self.parent() is None:
-            raise ValueError('Invalid parent: the parent data container was deleted')
-
-        streak_mask = np.zeros(self.parent().shape, dtype=bool)
-        streak_mask[self.parent().good_frames] = self.draw()
-        self.parent().streak_mask = streak_mask
+    def draw_image(self, dilation: float=0.0, profile: str='gauss') -> np.ndarray:
+        lines = [streaks.to_lines() for streaks in self.streaks.values()]
+        return draw_line_image(self.shape, lines=lines, dilation=dilation,
+                               profile=profile, num_threads=self.num_threads)
 
     def export_table(self, dilation: float=0.0, concatenate: bool=True) -> Union[pd.DataFrame,
                                                                                  List[pd.DataFrame]]:
@@ -910,10 +855,9 @@ class DetectorFull(Detector):
             index = self.parent().good_frames[idx]
             df = df[self.parent().mask[index, df['y'], df['x']]]
 
-            if self.patterns is not None:
-                df['p'] = self.patterns[idx, df['y'], df['x']]
+            df['snr'] = self.snr[idx, df['y'], df['x']]
             df['I_raw'] = self.parent().data[index, df['y'], df['x']]
-            df['bgd'] = self.parent().background[index, df['y'], df['x']]
+            df['bgd'] = self.parent().whitefields[index, df['y'], df['x']]
             df['x'], df['y'] = self.parent().backward_points(df['x'], df['y'])
 
             dataframes[self.frames[idx]] = df
@@ -926,18 +870,12 @@ class DetectorFull(Detector):
 
     def refine_streaks(self: D, dilation: float=0.0) -> D:
         lines = {idx: stks.to_lines() for idx, stks in self.streaks.items()}
-        lines = refine_pattern(inp=self.data, lines=lines, dilation=dilation,
+        lines = refine_pattern(inp=self.snr, lines=lines, dilation=dilation,
                                num_threads=self.num_threads)
         streaks = {idx: self.streaks[idx].replace(x0=lns[:, 0], y0=lns[:, 1], x1=lns[:, 2],
                                                   y1=lns[:, 3], width=lns[:, 4])
                    for idx, lns in lines.items()}
         return self.replace(streaks=streaks)
-
-    def update_patterns(self: D, dilations: Tuple[float, float, float]=(1.0, 3.0, 7.0)) -> D:
-        lines = {idx: stks.to_lines() for idx, stks in self.streaks.items()}
-        patterns = normalise_pattern(inp=self.data, lines=lines, dilations=dilations,
-                                     profile=self.profile, num_threads=self.num_threads)
-        return self.replace(patterns=patterns)
 
     def to_dataframe(self, concatenate: bool=True) -> Union[pd.DataFrame, List[pd.DataFrame]]:
         dataframes = []
@@ -963,22 +901,22 @@ class LSDetector(Detector):
     Detector [LSD]_ algorithm. Provides an interface to generate an indexing tabular data.
 
     Args:
-        data : Background corrected detector data.
+        snr : Signal-to-noise ratio patterns.
         frames : Frame indices of the detector images.
         num_threads : Number of threads used in the calculations.
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         lsd_obj : a Line Segment Detector object.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
-        patterns : Normalized diffraction patterns.
+        images : Images used for detection.
     """
-    data            : np.ndarray
+    snr             : np.ndarray
     frames          : np.ndarray
     num_threads     : int
     parent          : ReferenceType[CrystData]
     lsd_obj         : LSD = field(default=LSD(0.9, 0.9, 0.0, 45.0, 0.5, 2e-2))
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    patterns        : Optional[np.ndarray] = None
+    images          : Optional[np.ndarray] = None
 
     def detect(self, cutoff: float, filter_threshold: float=0.0, group_threshold: float=1.0,
                dilation: float=0.0, profile: str='linear') -> LSDetectorFull:
@@ -1007,10 +945,10 @@ class LSDetector(Detector):
         Returns:
             A new :class:`LSDetector` container with ``streaks`` updated.
         """
-        if self.patterns is None:
-            raise ValueError('No pattern in the container')
+        if self.images is None:
+            raise ValueError('No images in the container')
 
-        out_dict = self.lsd_obj.detect(self.patterns, cutoff=cutoff,
+        out_dict = self.lsd_obj.detect(self.images, cutoff=cutoff,
                                        filter_threshold=filter_threshold,
                                        group_threshold=group_threshold,
                                        dilation=dilation, profile=profile,
@@ -1051,8 +989,8 @@ class LSDetector(Detector):
                                         log_eps=log_eps, ang_th=ang_th,
                                         density_th=density_th, quant=quant))
 
-    def generate_patterns(self: D, vmin: float, vmax: float,
-                          size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> D:
+    def generate_images(self: D, vmin: float, vmax: float,
+                        size: Union[Tuple[int, ...], int]=(1, 3, 3)) -> D:
         """Generate a set of normalised diffraction patterns ``patterns`` based on
         taking a 2D median filter of background corrected detector images ``data`` and
         clipping the values to a (``vmin``, ``vmax``) interval.
@@ -1070,20 +1008,22 @@ class LSDetector(Detector):
         """
         if vmin >= vmax:
             raise ValueError('vmin must be less than vmax')
-        patterns = median_filter(self.data, size=size, num_threads=self.num_threads)
-        patterns = np.divide(np.clip(patterns, vmin, vmax) - vmin, vmax - vmin)
-        return self.replace(patterns=np.asarray(patterns, dtype=np.float32))
+
+        images = median_filter(self.snr, size=size, num_threads=self.num_threads)
+        images = np.divide(np.clip(images, vmin, vmax) - vmin, vmax - vmin,
+                           dtype=images.dtype)
+        return self.replace(images=images)
 
 @dataclass
 class LSDetectorFull(DetectorFull, LSDetector):
-    data            : np.ndarray
+    snr             : np.ndarray
     frames          : np.ndarray
     num_threads     : int
     parent          : ReferenceType[CrystData]
     lsd_obj         : LSD = field(default=LSD(0.9, 0.9, 0.0, 60.0, 0.5, 2e-2))
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    patterns        : Optional[np.ndarray] = None
+    images          : Optional[np.ndarray] = None
 
 @dataclass
 class ModelDetector(Detector):
@@ -1093,48 +1033,38 @@ class ModelDetector(Detector):
     data.
 
     Args:
-        data : Background corrected detector data.
+        snr : Signal-to-noise ratio patterns.
         frames : Frame indices of the detector images.
         num_threads : Number of threads used in the calculations.
         parent : A reference to the parent :class:`cbclib.CrystData` container.
         models : A dictionary of CBD models.
         streaks : A dictionary of detected :class:`cbclib.Streaks` streaks.
-        patterns : Normalized diffraction patterns.
     """
-    data            : np.ndarray
+    snr             : np.ndarray
     frames          : np.ndarray
     num_threads     : int
     parent          : ReferenceType[CrystData]
     models          : Dict[int, CBDModel]
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
 
-    patterns        : Optional[np.ndarray] = None
-
-    def count_outliers(self, hkl: np.ndarray, width: float=4.0, alpha: float=0.05) -> pd.DataFrame:
-        r"""Count the number of photon counts for a set of diffraction orders ``hkl``, that lie
-        above the :math:`\alpha` quantile for the Poisson distribution with the mean equal to the
-        background signal.
+    def count_snr(self, hkl: np.ndarray, width: float=4.0) -> np.ndarray:
+        r"""Count the average signal-to-noise ratio for a set of reciprocal lattice points `hkl`.
 
         Args:
-            hkl : Miller indices.
+            hkl : Miller indices of reciprocal lattice points.
             width : Diffraction streak width in pixels.
-            alpha : Quantile level, which must be between 0 and 1 inclusive.
 
         Returns:
-            A dataframe with the columns corresponding to the outlier and total counts.
+            An array of average SNR values for each reciprocal lattice point in `hkl`.
         """
-        if self.parent() is None:
-            raise ValueError('Invalid parent: the parent data container was deleted')
-
-        patterns = self.detect(hkl, width, hkl_index=True).export_table()
-        patterns = patterns.drop_duplicates(['frames', 'x', 'y'], keep=False)
-        iidxs = unique_indices(patterns['index'].to_numpy())[1]
-        outs, cnts = outlier_rate(data=patterns['I_raw'].to_numpy(), iidxs=iidxs,
-                                  bgd=patterns['bgd'].to_numpy(), alpha=alpha,
-                                  hkl_idxs=patterns['hkl_id'].to_numpy(),
-                                  num_threads=self.num_threads)
-        idxs = np.where(cnts > 0)[0]
-        return pd.DataFrame({'outliers': outs[idxs], 'counts': cnts[idxs]}, index=idxs)
+        snr = np.zeros(hkl.shape[0])
+        cnts = np.zeros(hkl.shape[0], dtype=int)
+        for idx, model in self.models.items():
+            streaks = model.generate_streaks(hkl, width, hkl_index=True)
+            df = streaks.pattern_dataframe(shape=self.shape[1:])
+            np.add.at(snr, df['hkl_id'], self.snr[idx, df['y'], df['x']])
+            np.add.at(cnts, df['hkl_id'], np.ones(df.shape[0], dtype=int))
+        return np.where(cnts, snr / cnts, 0.0)
 
     def detect(self, hkl: np.ndarray, width: float=4.0, hkl_index: bool=False) -> ModelDetectorFull:
         """Perform the streak detection based on prediction. Generate a predicted pattern and
@@ -1155,7 +1085,7 @@ class ModelDetector(Detector):
 
 @dataclass
 class ModelDetectorFull(DetectorFull, ModelDetector):
-    data            : np.ndarray
+    snr             : np.ndarray
     frames          : Dict[int, int]
     num_threads     : int
     parent          : ReferenceType[CrystData]
@@ -1163,5 +1093,3 @@ class ModelDetectorFull(DetectorFull, ModelDetector):
     models          : Dict[int, CBDModel]
     indices         : Dict[int, int] = field(default_factory=dict)
     streaks         : Dict[int, Streaks] = field(default_factory=dict)
-
-    patterns        : Optional[np.ndarray] = None

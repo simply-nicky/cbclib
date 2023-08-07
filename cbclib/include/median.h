@@ -30,10 +30,12 @@ typedef struct footprint_s *footprint;
 footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned char *fmask);
 void free_footprint(footprint fpt);
 
-void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_MODE mode, void *cval);
+void update_footprint(footprint fpt, int *coord, array arr, array mask, EXTEND_MODE mode,
+                      void *cval);
 
-int median(void *out, void *data, unsigned char *mask, int ndim, const size_t *dims, size_t item_size,
-    int axis, int (*compar)(const void*, const void*), unsigned threads);
+int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *dims,
+           size_t item_size, int axis, int (*compar)(const void*, const void*),
+           unsigned threads);
 
 /*-------------------------------------------------------------------------------*/
 /** Calculate a multidimensional median filter.
@@ -64,9 +66,10 @@ int median(void *out, void *data, unsigned char *mask, int ndim, const size_t *d
 
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
-int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
-    size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
-    unsigned threads);
+int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim,
+                  const size_t *dims, size_t item_size, size_t *fsize, unsigned char *fmask,
+                  EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+                  unsigned threads);
 
 /*-------------------------------------------------------------------------------*/
 /** Calculate a multidimensional maximum filter.
@@ -97,8 +100,17 @@ int median_filter(void *out, void *inp, unsigned char *mask, unsigned char *imas
 
     @return             Returns 0 if it finished normally, 1 otherwise.
  */
-int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim, const size_t *dims,
-    size_t item_size, size_t *fsize, unsigned char *fmask, EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
-    unsigned threads);
+int maximum_filter(void *out, void *inp, unsigned char *mask, unsigned char *imask, int ndim,
+                   const size_t *dims, size_t item_size, size_t *fsize, unsigned char *fmask,
+                   EXTEND_MODE mode, void *cval, int (*compar)(const void*, const void*),
+                   unsigned threads);
+
+int robust_mean(float *out, void *inp, int ndim, const size_t *dims, size_t item_size, int axis,
+                int (*compar)(const void*, const void*), float (*getter)(const void*),
+                float r0, float r1, int n_iter, float lm, unsigned threads);
+
+int robust_fit(float *out, float *W, void *y, int nf, int ndim, const size_t *ydims, size_t item_size,
+               int (*compar)(const void*, const void*), float (*getter)(const void*), float r0,
+               float r1, int n_iter, float lm, unsigned threads);
 
 #endif

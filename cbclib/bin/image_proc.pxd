@@ -55,6 +55,12 @@ cdef extern from "array.h":
     int compare_ulong(void *a, void *b) nogil
 
 cdef extern from "median.h":
+    float get_double(void *a) nogil
+    float get_float(void *a) nogil
+    float get_int(void *a) nogil
+    float get_uint(void *a) nogil
+    float get_ulong(void *a) nogil
+
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
@@ -67,6 +73,14 @@ cdef extern from "median.h":
                         int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
                         unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
                         unsigned threads) nogil
+
+    int robust_mean_c "robust_mean" (float *out, void *inp, int ndim, unsigned long *dims,
+                      unsigned long item_size, int axis, int (*compar)(void*, void*), float (*getter)(void*),
+                      float r0, float r1, int n_iter, float lm, unsigned threads) nogil 
+
+    int robust_fit(float *out, float *W, void *y, int nf, int ndim, unsigned long *ydims,
+                   unsigned long item_size, int (*compar)(void*, void*), float (*getter)(void*), float r0,
+                   float r1, int n_iter, float lm, unsigned threads) nogil 
 
 ctypedef float (*line_profile)(float, float)
 
@@ -85,10 +99,6 @@ cdef extern from "img_proc.h":
     int draw_line_index(unsigned **idx, unsigned **x, unsigned **y, float **val, unsigned long *n_idxs,
                         unsigned long *dims, float *lines, unsigned long *ldims, float dilation,
                         line_profile profile) nogil
-
-    int count_outliers(unsigned *outs, unsigned *cnts, unsigned long osize, unsigned *data, float *bgd,
-                       unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize, float alpha,
-                       unsigned threads) nogil
 
     int normalise_line(float *out, float *data, unsigned long *dims, float *lines, unsigned long *ldims,
                        float *dilations, line_profile profile) nogil
@@ -148,7 +158,7 @@ cdef inline np.ndarray number_to_array(object num, np.npy_intp rank, int type_nu
         arr[i] = num
     return arr
 
-cdef inline np.ndarray normalize_sequence(object inp, np.npy_intp rank, int type_num):
+cdef inline np.ndarray normalise_sequence(object inp, np.npy_intp rank, int type_num):
     # If input is a scalar, create a sequence of length equal to the
     # rank by duplicating the input. If input is a sequence,
     # check if its length is equal to the length of array.
@@ -165,4 +175,21 @@ cdef inline np.ndarray normalize_sequence(object inp, np.npy_intp rank, int type
     cdef np.npy_intp size = np.PyArray_SIZE(arr)
     if size != rank:
         raise ValueError("Sequence argument must have length equal to input rank")
+    return arr
+
+cdef inline np.ndarray to_array(object inp, int type_num):
+    # If input is a scalar, create a sequence of length equal to the
+    # rank by duplicating the input. If input is a sequence,
+    # check if its length is equal to the length of array.
+    cdef np.ndarray arr
+    cdef int tn
+    if np.PyArray_IsAnyScalar(inp):
+        arr = number_to_array(inp, 1, type_num)
+    elif np.PyArray_Check(inp):
+        arr = check_array(<np.ndarray>inp, type_num)
+    elif isinstance(inp, (list, tuple)):
+        arr = <np.ndarray>np.PyArray_FROM_OTF(inp, type_num, np.NPY_ARRAY_C_CONTIGUOUS)
+    else:
+        raise ValueError("Wrong sequence argument type")
+    cdef np.npy_intp size = np.PyArray_SIZE(arr)
     return arr

@@ -4,7 +4,7 @@ cimport openmp
 from cpython.ref cimport Py_INCREF
 from libc.stdlib cimport free, malloc, calloc, realloc
 from libc.string cimport memset
-from cbclib.bin.image_proc cimport check_array, normalize_sequence, median_filter_c, mode_to_code
+from cbclib.bin.image_proc cimport check_array, normalise_sequence, to_array, median_filter_c, mode_to_code
 from cbclib.bin.line_detector cimport ArrayWrapper
 
 cdef enum:
@@ -30,12 +30,28 @@ cdef extern from "array.h":
                                int (*compar)(void*, void*)) nogil
 
 cdef extern from "geometry.h":
-    int det2k(double *karr, double *x, double *y, unsigned *idxs, unsigned long ksize, double *src,
+    int det2k(float *karr, float *x, float *y, unsigned *idxs, unsigned long ksize, float *src,
               unsigned threads) nogil
-    int k2det(double *x, double *y, double *karr, unsigned *idxs, unsigned long ksize, double *src,
+    int det2k_vjp(float *xout, float *yout, float *sout, float *vec, float *x, float *y, unsigned *idxs,
+                  unsigned long ksize, float *src, unsigned long ssize, unsigned threads) nogil
+
+    int k2det(float *x, float *y, float *karr, unsigned *idxs, unsigned long ksize, float *src,
               unsigned threads) nogil
-    int rotate_vec(double *out, double *vecs, unsigned *idxs, unsigned long vsize, double *rmats,
+    int k2det_vjp(float *kout, float *sout, float *xvec, float *yvec, float *karr, unsigned *idxs,
+                  unsigned long ksize, float *src, unsigned long ssize, unsigned threads) nogil
+
+    int k2smp(float *pts, float *karr, unsigned *idxs, unsigned long ksize, float *z, float *src,
+              unsigned threads) nogil
+    int k2smp_vjp(float *kout, float *zout, float *sout, float *vec, float *karr, unsigned *idxs,
+                  unsigned long ksize, float *z, unsigned long zsize, float *src, unsigned threads) nogil
+
+    int rotate_vec(float *out, float *vecs, unsigned *idxs, unsigned long vsize, float *rmats,
                    unsigned threads) nogil
+
+    int find_kins(float *out, unsigned char *mask, unsigned long N, int *hkl, unsigned *hidxs,
+                  float *basis, unsigned *bidxs, float *pupil, unsigned threads) nogil
+    int find_kins_vjp(float *bout, float *kout, float *vec, unsigned long N, int *hkl, unsigned *hidxs,
+                      float *basis, unsigned long bsize, unsigned *bidxs, float *pupil, unsigned threads) nogil
 
 ctypedef float (*kernel)(float, float)
 ctypedef float (*loss_func)(float)
@@ -84,7 +100,7 @@ cdef extern from "img_proc.h":
     float tophat_profile(float err, float wd) nogil
     float quad_profile(float err, float wd) nogil
     float gauss_profile(float err, float wd) nogil
-    
+
     int draw_line_int(unsigned *out, unsigned long *dims, unsigned max_val, float *lines,
                       unsigned long *ldims, float dilation, line_profile profile) nogil
 
@@ -99,17 +115,14 @@ cdef extern from "img_proc.h":
                     unsigned long *ldims, float threshold, float dilation, line_profile profile) nogil
 
     int group_line(float *olines, unsigned char *proc, float *data, unsigned long *dims, float *ilines,
-                   unsigned long *ldims, float cutoff, float threshold, float dilation, line_profile profile) nogil
+                   unsigned long *ldims, float cutoff, float threshold, float dilation,
+                   line_profile profile) nogil
 
     int normalise_line(float *out, float *data, unsigned long *dims, float *lines, unsigned long *ldims,
                        float *dilations, line_profile profile) nogil
 
     int refine_line(float *olines, float *data, unsigned long *dims, float *ilines, unsigned long *ldims,
                     float dilation, line_profile profile) nogil
-
-    int count_outliers(unsigned *outs, unsigned *cnts, unsigned long osize, unsigned *data, float *bgd,
-                       unsigned *hkl_idxs, unsigned *iidxs, unsigned long isize, float alpha,
-                       unsigned threads) nogil
 
     double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, unsigned long *dims, float **lines,
                          unsigned long *ldims, unsigned long lsize, float dilation, float epsilon,
@@ -121,6 +134,12 @@ cdef extern from "lsd.h":
                              float density_th, int n_bins, int **reg_img, int *reg_x, int *reg_y) nogil
 
 cdef extern from "median.h":
+    float get_double(void *a) nogil
+    float get_float(void *a) nogil
+    float get_int(void *a) nogil
+    float get_uint(void *a) nogil
+    float get_ulong(void *a) nogil
+
     int median_c "median" (void *out, void *data, unsigned char *mask, int ndim, unsigned long *dims,
                  unsigned long item_size, int axis, int (*compar)(void*, void*), unsigned threads) nogil
 
@@ -130,6 +149,14 @@ cdef extern from "median.h":
                         unsigned threads) nogil
 
     int maximum_filter_c "maximum_filter" (void *out, void *data, unsigned char *mask, unsigned char *imask,
-                         int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
-                         unsigned char *fmask, int mode, void *cval, int (*compar)(void *, void *),
-                         unsigned threads) nogil
+                        int ndim, unsigned long *dims, unsigned long item_size, unsigned long *fsize,
+                        unsigned char *fmask, int mode, void *cval, int (*compar)(void*, void*),
+                        unsigned threads) nogil
+
+    int robust_mean_c "robust_mean" (float *out, void *inp, int ndim, unsigned long *dims,
+                      unsigned long item_size, int axis, int (*compar)(void*, void*), float (*getter)(void*),
+                      float r0, float r1, int n_iter, float lm, unsigned threads) nogil 
+
+    int robust_fit(float *out, float *W, void *y, int nf, int ndim, unsigned long *ydims,
+                   unsigned long item_size, int (*compar)(void*, void*), float (*getter)(void*), float r0,
+                   float r1, int n_iter, float lm, unsigned threads) nogil 

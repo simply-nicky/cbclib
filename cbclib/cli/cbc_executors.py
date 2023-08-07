@@ -79,7 +79,13 @@ class DetectExecutor(Executor, INIContainer):
     def __post_init__(self):
         super(DetectExecutor, self).__post_init__()
         if os.path.isfile(self.wf_path):
-            self.whitefield = np.load(self.wf_path)
+            ext = os.path.splitext(self.wf_path)[1]
+            if ext in ['.npy', '.npz']:
+                self.whitefield = np.load(self.wf_path)
+            elif ext == '.h5':
+                self.whitefield = CrystData(CXIStore(self.wf_path)).load('whitefield').whitefield
+            else:
+                raise ValueError(f'whitefield file extension is invalid: {ext:s}')
         else:
             self.whitefield = None
 

@@ -177,7 +177,7 @@ static int float_equal(float a, float b)
 }
 
 /*----------------------------------------------------------------------------*/
-/** Computes Euclidean distance between point (x1,y1) and point (x2,y2).
+/** Computes Euclidean distance between point (x1, y1) and point (x2, y2).
  */
 static float dist(float x1, float y1, float x2, float y2)
 {
@@ -660,8 +660,8 @@ static image_float gaussian_sampler(image_float in, float scale, float sigma_sca
 	{
 		/*
 			y     is the coordinate in the new image.
-			yy    is the corresponding x-value in the original size image.
-			yc    is the integer value, the pixel coordinate of xx.
+			yy    is the corresponding y-value in the original size image.
+			yc    is the integer value, the pixel coordinate of yy.
 		*/
 		yy = (float)y / scale;
 		/* coordinate (0.0f,0.0f) is in the center of pixel (0,0),
@@ -1194,7 +1194,7 @@ static void rect_copy(struct rect * in, struct rect * out)
 	'column' a set of pixels with the same x value that are inside the
 	rectangle. The following is an schematic representation of a
 	rectangle, the 'column' being expflored is marked by colons, and
-	the current pixel being expflored is 'x, y'.
+	the current pixel being explored is 'x, y'.
 	\verbatim
 
 						      vx[1], vy[1]

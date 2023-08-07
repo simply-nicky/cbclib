@@ -52,7 +52,8 @@ class CBCTable():
         return (self.frames.size, self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     @classmethod
-    def import_csv(cls, path: str, setup: ScanSetup) -> CBCTable:
+    def import_csv(cls, path: str, setup: ScanSetup,
+                   bounds: Optional[Tuple[List[int], List[int]]]=None) -> CBCTable:
         """Initialize a CBC table with a CSV file ``path`` and an experimental geometry object
         ``setup``.
 
@@ -63,10 +64,17 @@ class CBCTable():
         Returns:
             A new CBC table object.
         """
-        return cls(pd.read_csv(path, usecols=cls.columns), setup)
+        if bounds is None:
+            table = pd.read_csv(path, usecols=cls.columns)
+        else:
+            table = pd.concat([pd.read_csv(path, usecols=cls.columns,
+                                           skiprows=start, nrows=stop - start)
+                               for start, stop in zip(bounds[0], bounds[1])], ignore_index=True)
+        return cls(table, setup)
 
     @classmethod
-    def import_hdf(cls, path: str, key: str, setup: ScanSetup) -> CBCTable:
+    def import_hdf(cls, path: str, key: str, setup: ScanSetup,
+                   bounds: Optional[Tuple[List[int], List[int]]]=None) -> CBCTable:
         """Initialize a CBC table with data saved in a HDF5 file ``path`` at a ``key`` key inside
         the file and an experimental geometry object ``setup``.
 
@@ -78,7 +86,12 @@ class CBCTable():
         Returns:
             A new CBC table object.
         """
-        return cls(pd.read_hdf(path, key, usecols=cls.columns), setup)
+        if bounds is None:
+            table = pd.read_hdf(path, key)
+        else:
+            table = pd.concat([pd.read_hdf(path, key, usecols=cls.columns, start=start, stop=stop)
+                               for start, stop in zip(bounds[0], bounds[1])], ignore_index=True)
+        return cls(table, setup)
 
     @property
     def dtype(self) -> np.dtype:
@@ -953,7 +966,7 @@ class IntensityScaler(DataContainer):
         cnts = np.zeros(obj.hkl_idxs.max() + 1, dtype=int)
         np.add.at(norm, obj.hkl_idxs, self.iidxs[1:] - self.iidxs[:-1])
         np.add.at(sfac, obj.hkl_idxs, np.exp(x[self.idxs[-1] + self.hkl_idxs + 1]))
-        np.add.at(sfac, obj.hkl_idxs, np.ones(self.iidxs.size - 1, dtype=int))
+        np.add.at(cnts, obj.hkl_idxs, np.ones(self.iidxs.size - 1, dtype=int))
         sfac = np.where(cnts, sfac / cnts, 0.0)
         sfac_err = np.where(norm, np.sqrt(sfac / norm), 0.0)
 

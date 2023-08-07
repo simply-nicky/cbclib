@@ -1,6 +1,6 @@
 import numpy as np
 from cython.parallel import parallel, prange
-from .image_proc cimport check_array, normalize_sequence
+from .image_proc cimport check_array, normalise_sequence
 from .line_detector cimport ArrayWrapper
 
 # Numpy must be initialized. When using numpy from C or Cython you must
@@ -10,7 +10,7 @@ np.import_array()
 DEF CUTOFF = 3.0
 
 def euler_angles(np.ndarray rmats not None):
-    rmats = check_array(rmats, np.NPY_FLOAT64)
+    rmats = check_array(rmats, np.NPY_FLOAT32)
 
     cdef np.npy_intp *new_dims
     cdef np.PyArray_Dims *new_shape
@@ -28,10 +28,10 @@ def euler_angles(np.ndarray rmats not None):
         raise ValueError('rmats has incompatible shape')
 
     cdef np.npy_intp *edims = [rmats.shape[0], 3]
-    cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT64)
+    cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT32)
 
-    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rmats)
+    cdef float *e_ptr = <float *>np.PyArray_DATA(angles)
+    cdef float *rm_ptr = <float *>np.PyArray_DATA(rmats)
     cdef unsigned long n_mats = rmats.shape[0]
 
     cdef int fail = 0
@@ -45,7 +45,7 @@ def euler_angles(np.ndarray rmats not None):
     return angles
 
 def euler_matrix(np.ndarray angles not None):
-    angles = check_array(angles, np.NPY_FLOAT64)
+    angles = check_array(angles, np.NPY_FLOAT32)
 
     cdef np.npy_intp *new_dims
     cdef np.PyArray_Dims *new_shape
@@ -63,10 +63,10 @@ def euler_matrix(np.ndarray angles not None):
         raise ValueError('angles has incompatible shape')
 
     cdef np.npy_intp *rmdims = [angles.shape[0], 3, 3]
-    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT32)
 
-    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rmats)
+    cdef float *e_ptr = <float *>np.PyArray_DATA(angles)
+    cdef float *rm_ptr = <float *>np.PyArray_DATA(rmats)
     cdef unsigned long n_mats = angles.shape[0]
 
     cdef int fail = 0
@@ -80,7 +80,7 @@ def euler_matrix(np.ndarray angles not None):
     return rmats
 
 def tilt_angles(np.ndarray rmats not None):
-    rmats = check_array(rmats, np.NPY_FLOAT64)
+    rmats = check_array(rmats, np.NPY_FLOAT32)
 
     cdef np.npy_intp *new_dims
     cdef np.PyArray_Dims *new_shape
@@ -98,10 +98,10 @@ def tilt_angles(np.ndarray rmats not None):
         raise ValueError('rmats has incompatible shape')
 
     cdef np.npy_intp *edims = [rmats.shape[0], 3]
-    cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT64)
+    cdef np.ndarray angles = <np.ndarray>np.PyArray_SimpleNew(2, edims, np.NPY_FLOAT32)
 
-    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rmats)
+    cdef float *e_ptr = <float *>np.PyArray_DATA(angles)
+    cdef float *rm_ptr = <float *>np.PyArray_DATA(rmats)
     cdef unsigned long n_mats = rmats.shape[0]
 
     cdef int fail = 0
@@ -115,7 +115,7 @@ def tilt_angles(np.ndarray rmats not None):
     return angles
 
 def tilt_matrix(np.ndarray angles not None):
-    angles = check_array(angles, np.NPY_FLOAT64)
+    angles = check_array(angles, np.NPY_FLOAT32)
 
     cdef np.npy_intp *new_dims
     cdef np.PyArray_Dims *new_shape
@@ -133,10 +133,10 @@ def tilt_matrix(np.ndarray angles not None):
         raise ValueError('angles has incompatible shape')
 
     cdef np.npy_intp *rmdims = [angles.shape[0], 3, 3]
-    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT32)
 
-    cdef double *e_ptr = <double *>np.PyArray_DATA(angles)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rmats)
+    cdef float *e_ptr = <float *>np.PyArray_DATA(angles)
+    cdef float *rm_ptr = <float *>np.PyArray_DATA(rmats)
     cdef unsigned long n_mats = angles.shape[0]
 
     cdef int fail = 0
@@ -167,30 +167,29 @@ def det_to_k(np.ndarray x not None, np.ndarray y not None, np.ndarray src not No
     if _ksize != y.size or _ksize != idxs.size:
         raise ValueError('x, y, and idxs have incompatible shapes')
 
-    x = check_array(x, np.NPY_FLOAT64)
-    y = check_array(y, np.NPY_FLOAT64)
+    x = check_array(x, np.NPY_FLOAT32)
+    y = check_array(y, np.NPY_FLOAT32)
     idxs = check_array(idxs, np.NPY_UINT32)
-    src = check_array(src, np.NPY_FLOAT64)
+    src = check_array(src, np.NPY_FLOAT32)
 
     cdef int i
     cdef np.npy_intp *kdims = <np.npy_intp *>malloc((x.ndim + 1) * sizeof(np.npy_intp))
     for i in range(x.ndim):
         kdims[i] = x.shape[i]
     kdims[x.ndim] = 3
-    cdef np.ndarray karr = np.PyArray_SimpleNew(x.ndim + 1, kdims, np.NPY_FLOAT64)
+    cdef np.ndarray karr = np.PyArray_SimpleNew(x.ndim + 1, kdims, np.NPY_FLOAT32)
 
     free(kdims)
 
-    cdef double *_karr = <double *>np.PyArray_DATA(karr)
-    cdef double *_x = <double *>np.PyArray_DATA(x)
-    cdef double *_y = <double *>np.PyArray_DATA(y)
+    cdef float *_karr = <float *>np.PyArray_DATA(karr)
+    cdef float *_x = <float *>np.PyArray_DATA(x)
+    cdef float *_y = <float *>np.PyArray_DATA(y)
     cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
-    cdef double *_src = <double *>np.PyArray_DATA(src)
-    cdef int fail = 0
+    cdef float *_src = <float *>np.PyArray_DATA(src)
 
+    cdef int fail = 0
     with nogil:
         fail = det2k(_karr, _x, _y, _idxs, _ksize, _src, num_threads)
-    
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -215,22 +214,22 @@ def k_to_det(np.ndarray karr not None, np.ndarray src not None, np.ndarray idxs=
     if _ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
-    karr = check_array(karr, np.NPY_FLOAT64)
+    karr = check_array(karr, np.NPY_FLOAT32)
     idxs = check_array(idxs, np.NPY_UINT32)
-    src = check_array(src, np.NPY_FLOAT64)
+    src = check_array(src, np.NPY_FLOAT32)
 
-    cdef np.ndarray x = np.PyArray_SimpleNew(karr.ndim - 1, karr.shape, np.NPY_FLOAT64)
-    cdef np.ndarray y = np.PyArray_SimpleNew(karr.ndim - 1, karr.shape, np.NPY_FLOAT64)
+    cdef np.ndarray x = np.PyArray_SimpleNew(karr.ndim - 1, karr.shape, np.NPY_FLOAT32)
+    cdef np.ndarray y = np.PyArray_SimpleNew(karr.ndim - 1, karr.shape, np.NPY_FLOAT32)
 
-    cdef double *_karr = <double *>np.PyArray_DATA(karr)
-    cdef double *_x = <double *>np.PyArray_DATA(x)
-    cdef double *_y = <double *>np.PyArray_DATA(y)
+    cdef float *_karr = <float *>np.PyArray_DATA(karr)
+    cdef float *_x = <float *>np.PyArray_DATA(x)
+    cdef float *_y = <float *>np.PyArray_DATA(y)
     cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
-    cdef double *_src = <double *>np.PyArray_DATA(src)
+    cdef float *_src = <float *>np.PyArray_DATA(src)
 
+    cdef int fail = 0
     with nogil:
         fail = k2det(_x, _y, _karr, _idxs, _ksize, _src, num_threads)
-    
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -255,22 +254,22 @@ def k_to_smp(np.ndarray karr not None, np.ndarray z not None, np.ndarray src not
     if _ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
-    karr = check_array(karr, np.NPY_FLOAT64)
+    karr = check_array(karr, np.NPY_FLOAT32)
     idxs = check_array(idxs, np.NPY_UINT32)
-    z = check_array(z, np.NPY_FLOAT64)
-    src = check_array(src, np.NPY_FLOAT64)
+    z = check_array(z, np.NPY_FLOAT32)
+    src = check_array(src, np.NPY_FLOAT32)
 
-    cdef np.ndarray pts = np.PyArray_SimpleNew(karr.ndim, karr.shape, np.NPY_FLOAT64)
+    cdef np.ndarray pts = np.PyArray_SimpleNew(karr.ndim, karr.shape, np.NPY_FLOAT32)
 
-    cdef double *_pts = <double *>np.PyArray_DATA(pts)
-    cdef double *_karr = <double *>np.PyArray_DATA(karr)
+    cdef float *_pts = <float *>np.PyArray_DATA(pts)
+    cdef float *_karr = <float *>np.PyArray_DATA(karr)
     cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
-    cdef double *_z = <double *>np.PyArray_DATA(z)
-    cdef double *_src = <double *>np.PyArray_DATA(src)
+    cdef float *_z = <float *>np.PyArray_DATA(z)
+    cdef float *_src = <float *>np.PyArray_DATA(src)
 
+    cdef int fail = 0
     with nogil:
         fail = k2smp(_pts, _karr, _idxs, _ksize, _z, _src, num_threads)
-    
     if fail:
         raise RuntimeError('C backend exited with error.')
 
@@ -295,28 +294,27 @@ def rotate(np.ndarray vecs not None, np.ndarray rmats not None, np.ndarray idxs=
     if _vsize != idxs.size:
         raise ValueError('vecs and idxs have incompatible shapes')  
 
-    vecs = check_array(vecs, np.NPY_FLOAT64)
+    vecs = check_array(vecs, np.NPY_FLOAT32)
     idxs = check_array(idxs, np.NPY_UINT32)
-    rmats = check_array(rmats, np.NPY_FLOAT64)
+    rmats = check_array(rmats, np.NPY_FLOAT32)
 
-    cdef np.ndarray out = np.PyArray_SimpleNew(vecs.ndim, vecs.shape, np.NPY_FLOAT64)
+    cdef np.ndarray out = np.PyArray_SimpleNew(vecs.ndim, vecs.shape, np.NPY_FLOAT32)
 
-    cdef double *_out = <double *>np.PyArray_DATA(out)
-    cdef double *_vecs = <double *>np.PyArray_DATA(vecs)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
+    cdef float *_vecs = <float *>np.PyArray_DATA(vecs)
     cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
-    cdef double *_rmats = <double *>np.PyArray_DATA(rmats)
-    cdef int fail = 0
+    cdef float *_rmats = <float *>np.PyArray_DATA(rmats)
 
+    cdef int fail = 0
     with nogil:
         fail = rotate_vec(_out, _vecs, _idxs, _vsize, _rmats, num_threads)
-
     if fail:
         raise RuntimeError('C backend exited with error.')
 
     return out
 
 def find_rotations(np.ndarray a not None, np.ndarray b not None):
-    a = check_array(a, np.NPY_FLOAT64)
+    a = check_array(a, np.NPY_FLOAT32)
 
     cdef np.npy_intp *new_dims
     cdef np.PyArray_Dims *new_shape
@@ -333,7 +331,7 @@ def find_rotations(np.ndarray a not None, np.ndarray b not None):
     if a.ndim != 2 or a.shape[1] != 3:
         raise ValueError('a has incompatible shape')
 
-    b = check_array(b, np.NPY_FLOAT64)
+    b = check_array(b, np.NPY_FLOAT32)
 
     if b.ndim == 1:
         new_dims = <np.npy_intp *>malloc(2 * sizeof(np.npy_intp))
@@ -349,11 +347,11 @@ def find_rotations(np.ndarray a not None, np.ndarray b not None):
         raise ValueError('b has incompatible shape')
 
     cdef np.npy_intp *rmdims = [a.shape[0], 3, 3]
-    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT64)
+    cdef np.ndarray rmats = <np.ndarray>np.PyArray_SimpleNew(3, rmdims, np.NPY_FLOAT32)
 
-    cdef double *a_ptr = <double *>np.PyArray_DATA(a)
-    cdef double *b_ptr = <double *>np.PyArray_DATA(b)
-    cdef double *rm_ptr = <double *>np.PyArray_DATA(rmats)
+    cdef float *a_ptr = <float *>np.PyArray_DATA(a)
+    cdef float *b_ptr = <float *>np.PyArray_DATA(b)
+    cdef float *rm_ptr = <float *>np.PyArray_DATA(rmats)
     cdef unsigned long n_mats = a.shape[0]
 
     cdef int fail = 0
@@ -437,7 +435,7 @@ def spherical_to_cartesian(np.ndarray vecs not None):
 def filter_direction(np.ndarray grid not None, object axis not None, double rng, double sigma, int num_threads=1):
     grid = check_array(grid, np.NPY_FLOAT64)
 
-    cdef np.ndarray ax = normalize_sequence(axis, 3, np.NPY_FLOAT64)
+    cdef np.ndarray ax = normalise_sequence(axis, 3, np.NPY_FLOAT64)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(grid.ndim - 1, grid.shape, np.NPY_FLOAT64)
 
     cdef np.float64_t[:, :, :, ::1] _grid = grid

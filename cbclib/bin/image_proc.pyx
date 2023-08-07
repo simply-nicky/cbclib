@@ -42,7 +42,9 @@ def fft_convolve(np.ndarray array not None, np.ndarray kernel not None, int axis
     cdef int fail = 0
     cdef int ndim = array.ndim
     axis = axis if axis >= 0 else ndim + axis
-    axis = axis if axis <= ndim - 1 else ndim - 1
+    if axis >= ndim:
+        raise ValueError(f"Axis {axis:d} is out of bounds")
+
     cdef np.npy_intp ksize = np.PyArray_DIM(kernel, 0)
     cdef int _mode = mode_to_code(mode)
     cdef np.npy_intp *dims = array.shape
@@ -111,8 +113,8 @@ def gaussian_filter(np.ndarray inp not None, object sigma not None, object order
                     str mode='reflect', double cval=0.0, double truncate=4.0, str backend='numpy',
                     unsigned num_threads=1):
     cdef int ndim = inp.ndim
-    cdef np.ndarray sigmas = normalize_sequence(sigma, ndim, np.NPY_FLOAT64)
-    cdef np.ndarray orders = normalize_sequence(order, ndim, np.NPY_UINT32)
+    cdef np.ndarray sigmas = normalise_sequence(sigma, ndim, np.NPY_FLOAT64)
+    cdef np.ndarray orders = normalise_sequence(order, ndim, np.NPY_UINT32)
     cdef double *_sig = <double *>np.PyArray_DATA(sigmas)
     cdef unsigned *_ord = <unsigned *>np.PyArray_DATA(orders)
 
@@ -174,7 +176,7 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
                                 double cval=0.0, double truncate=4.0, str backend='numpy',
                                 unsigned num_threads=1):
     cdef int ndim = inp.ndim
-    cdef np.ndarray sigmas = normalize_sequence(sigma, ndim, np.NPY_FLOAT64)
+    cdef np.ndarray sigmas = normalise_sequence(sigma, ndim, np.NPY_FLOAT64)
     cdef double *_sig = <double *>np.PyArray_DATA(sigmas)
 
     cdef int n
@@ -225,56 +227,73 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
         raise RuntimeError('C backend exited with error.')
     return out
 
-def median(np.ndarray inp not None, np.ndarray mask=None, int axis=0, unsigned num_threads=1):
-    if not np.PyArray_IS_C_CONTIGUOUS(inp):
-        inp = np.PyArray_GETCONTIGUOUS(inp)
-
-    cdef int ndim = inp.ndim
-    axis = axis if axis >= 0 else ndim + axis
-    axis = axis if axis <= ndim - 1 else ndim - 1
-
+def median(np.ndarray inp not None, np.ndarray mask=None, object axis=0,
+           unsigned num_threads=1):
     if mask is None:
-        mask = <np.ndarray>np.PyArray_SimpleNew(ndim, inp.shape, np.NPY_BOOL)
+        mask = <np.ndarray>np.PyArray_SimpleNew(inp.ndim, inp.shape, np.NPY_BOOL)
         np.PyArray_FILLWBYTE(mask, 1)
     else:
         mask = check_array(mask, np.NPY_BOOL)
-        if memcmp(inp.shape, mask.shape, ndim * sizeof(np.npy_intp)):
+        if memcmp(inp.shape, mask.shape, inp.ndim * sizeof(np.npy_intp)):
             raise ValueError('mask and inp arrays must have identical shapes')
 
-    cdef unsigned long *_dims = <unsigned long *>inp.shape
+    cdef int ndim = 0, i, j, repeats = 1
+    cdef np.ndarray axarr = to_array(axis, np.NPY_INT32)
+    for i in range(axarr.size):
+        axarr[i] = axarr[i] if axarr[i] >= 0 else inp.ndim + axarr[i]
+        if axarr[i] >= inp.ndim:
+            raise ValueError(f'Axis {axarr[i]:d} is out of bounds')
 
-    cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim - 1) * sizeof(np.npy_intp))
-    if odims is NULL:
-        raise MemoryError('not enough memory')
-    cdef int i
-    for i in range(axis):
+    for i in range(inp.ndim):
+        j = 0
+        while j < axarr.size and axarr[j] != i:
+            j += 1
+
+        if j == axarr.size:
+            inp = np.PyArray_SwapAxes(inp, ndim, i)
+            repeats *= inp.shape[ndim]
+            ndim += 1
+
+    cdef np.npy_intp *new_dims = <np.npy_intp *>malloc((ndim + 1) * sizeof(np.npy_intp))
+    cdef np.npy_intp *odims = <np.npy_intp *>malloc(ndim * sizeof(np.npy_intp))
+    for i in range(ndim):
+        new_dims[i] = inp.shape[i]
         odims[i] = inp.shape[i]
-    for i in range(axis + 1, ndim):
-        odims[i - 1] = inp.shape[i]
+    new_dims[ndim] = inp.size / repeats
+    new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+    new_shape[0].ptr = new_dims; new_shape[0].len = ndim + 1
 
     cdef int type_num = np.PyArray_TYPE(inp)
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim - 1, odims, type_num)
+    inp = np.PyArray_Newshape(inp, new_shape, np.NPY_CORDER)
+    if not np.PyArray_IS_C_CONTIGUOUS(inp):
+        inp = np.PyArray_GETCONTIGUOUS(inp)
+    mask = np.PyArray_Newshape(mask, new_shape, np.NPY_CORDER)
+    if not np.PyArray_IS_C_CONTIGUOUS(mask):
+        mask = np.PyArray_GETCONTIGUOUS(mask)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, type_num)
+    free(odims); free(new_dims); free(new_shape)
+
     cdef void *_out = <void *>np.PyArray_DATA(out)
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
+    cdef unsigned long *_dims = <unsigned long *>inp.shape
 
     with nogil:
         if type_num == np.NPY_FLOAT64:
-            fail = median_c(_out, _inp, _mask, ndim, _dims, 8, axis, compare_double, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim + 1, _dims, 8, ndim, compare_double, num_threads)
         elif type_num == np.NPY_FLOAT32:
-            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_float, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim + 1, _dims, 4, ndim, compare_float, num_threads)
         elif type_num == np.NPY_INT32:
-            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_int, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim + 1, _dims, 4, ndim, compare_int, num_threads)
         elif type_num == np.NPY_UINT32:
-            fail = median_c(_out, _inp, _mask, ndim, _dims, 4, axis, compare_uint, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim + 1, _dims, 4, ndim, compare_uint, num_threads)
         elif type_num == np.NPY_UINT64:
-            fail = median_c(_out, _inp, _mask, ndim, _dims, 8, axis, compare_ulong, num_threads)
+            fail = median_c(_out, _inp, _mask, ndim + 1, _dims, 8, ndim, compare_ulong, num_threads)
         else:
             raise TypeError(f'inp argument has incompatible type: {str(inp.dtype)}')
     if fail:
         raise RuntimeError('C backend exited with error.')
 
-    free(odims)
     return out
 
 def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprint=None,
@@ -305,7 +324,7 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
     if size is None:
         _fsize = <unsigned long *>footprint.shape
     else:
-        fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+        fsize = normalise_sequence(size, ndim, np.NPY_INTP)
         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
 
     if footprint is None:
@@ -374,7 +393,7 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
     if size is None:
         _fsize = <unsigned long *>footprint.shape
     else:
-        fsize = normalize_sequence(size, ndim, np.NPY_INTP)
+        fsize = normalise_sequence(size, ndim, np.NPY_INTP)
         _fsize = <unsigned long *>np.PyArray_DATA(fsize)
 
     if footprint is None:
@@ -413,6 +432,135 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
         raise RuntimeError('C backend exited with error.')
     return out
 
+def robust_mean(np.ndarray inp not None, object axis=0, double r0=0.0, double r1=0.5,
+                int n_iter=12, double lm=9.0, unsigned num_threads=1):
+    cdef int ndim = 0, i, j, repeats = 1
+    cdef np.ndarray axarr = to_array(axis, np.NPY_INT32)
+    for i in range(axarr.size):
+        axarr[i] = axarr[i] if axarr[i] >= 0 else inp.ndim + axarr[i]
+        if axarr[i] >= inp.ndim:
+            raise ValueError(f'Axis {axarr[i]:d} is out of bounds')
+
+    for i in range(inp.ndim):
+        j = 0
+        while j < axarr.size and axarr[j] != i:
+            j += 1
+
+        if j == axarr.size:
+            inp = np.PyArray_SwapAxes(inp, ndim, i)
+            repeats *= inp.shape[ndim]
+            ndim += 1
+
+    cdef np.npy_intp *new_dims = <np.npy_intp *>malloc((ndim + 1) * sizeof(np.npy_intp))
+    cdef np.npy_intp *odims = <np.npy_intp *>malloc(ndim * sizeof(np.npy_intp))
+    for i in range(ndim):
+        new_dims[i] = inp.shape[i]
+        odims[i] = inp.shape[i]
+    new_dims[ndim] = inp.size / repeats
+    new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+    new_shape[0].ptr = new_dims; new_shape[0].len = ndim + 1
+
+    inp = np.PyArray_Newshape(inp, new_shape, np.NPY_CORDER)
+    if not np.PyArray_IS_C_CONTIGUOUS(inp):
+        inp = np.PyArray_GETCONTIGUOUS(inp)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, np.NPY_FLOAT32)
+    free(odims); free(new_dims); free(new_shape)
+
+    cdef int type_num = np.PyArray_TYPE(inp)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
+    cdef void *_inp = <void *>np.PyArray_DATA(inp)
+    cdef unsigned long *_dims = <unsigned long *>inp.shape
+
+    with nogil:
+        if type_num == np.NPY_FLOAT64:
+            fail = robust_mean_c(_out, _inp, ndim + 1, _dims, 8, ndim, compare_double,
+                                 get_double, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_FLOAT32:
+            fail = robust_mean_c(_out, _inp, ndim + 1, _dims, 4, ndim, compare_float,
+                                 get_float, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_INT32:
+            fail = robust_mean_c(_out, _inp, ndim + 1, _dims, 4, ndim, compare_int,
+                                 get_int, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_UINT32:
+            fail = robust_mean_c(_out, _inp, ndim + 1, _dims, 4, ndim, compare_uint,
+                                 get_uint, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_UINT64:
+            fail = robust_mean_c(_out, _inp, ndim + 1, _dims, 8, ndim, compare_ulong,
+                                 get_ulong, r0, r1, n_iter, lm, num_threads)
+        else:
+            raise TypeError(f'inp argument has incompatible type: {str(inp.dtype)}')
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+
+    return out
+
+def robust_lsq(np.ndarray W not None, np.ndarray y not None, object axis=-1, double r0=0.0,
+               double r1=0.5, int n_iter=12, double lm=9.0, unsigned num_threads=1):
+    W = check_array(W, np.NPY_FLOAT32)
+
+    cdef int ndim = 0, i, j, repeats = 1
+    cdef np.ndarray axarr = to_array(axis, np.NPY_INT32)
+    for i in range(axarr.size):
+        axarr[i] = axarr[i] if axarr[i] >= 0 else y.ndim + axarr[i]
+        if axarr[i] >= y.ndim:
+            raise ValueError(f'Axis {axarr[i]:d} is out of bounds')
+
+    for i in range(y.ndim):
+        j = 0
+        while j < axarr.size and axarr[j] != i:
+            j += 1
+
+        if j == axarr.size:
+            y = np.PyArray_SwapAxes(y, ndim, i)
+            repeats *= y.shape[ndim]
+            ndim += 1
+
+    cdef np.npy_intp *new_dims = <np.npy_intp *>malloc((ndim + 1) * sizeof(np.npy_intp))
+    cdef np.npy_intp *odims = <np.npy_intp *>malloc((ndim + 1) * sizeof(np.npy_intp))
+    for i in range(ndim):
+        new_dims[i] = y.shape[i]
+        odims[i] = y.shape[i]
+    new_dims[ndim] = y.size / repeats
+    new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
+    new_shape[0].ptr = new_dims; new_shape[0].len = ndim + 1
+
+    cdef int nf = W.size / new_dims[ndim]
+    odims[ndim] = nf
+    y = np.PyArray_Newshape(y, new_shape, np.NPY_CORDER)
+    if not np.PyArray_IS_C_CONTIGUOUS(y):
+        y = np.PyArray_GETCONTIGUOUS(y)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim + 1, odims, np.NPY_FLOAT32)
+    free(odims); free(new_dims); free(new_shape)
+
+    cdef int type_num = np.PyArray_TYPE(y)
+    cdef float *_out = <float *>np.PyArray_DATA(out)
+    cdef float *_W = <float *>np.PyArray_DATA(W)
+    cdef void *_y = <void *>np.PyArray_DATA(y)
+    cdef unsigned long *_ydims = <unsigned long *>y.shape
+
+    with nogil:
+        if type_num == np.NPY_FLOAT64:
+            fail = robust_fit(_out, _W, _y, nf, ndim + 1, _ydims, 8, compare_double,
+                              get_double, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_FLOAT32:
+            fail = robust_fit(_out, _W, _y, nf, ndim + 1, _ydims, 4, compare_float,
+                              get_float, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_INT32:
+            fail = robust_fit(_out, _W, _y, nf, ndim + 1, _ydims, 4, compare_int,
+                              get_int, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_UINT32:
+            fail = robust_fit(_out, _W, _y, nf, ndim + 1, _ydims, 4, compare_uint,
+                              get_uint, r0, r1, n_iter, lm, num_threads)
+        elif type_num == np.NPY_UINT64:
+            fail = robust_fit(_out, _W, _y, nf, ndim + 1, _ydims, 8, compare_ulong,
+                              get_ulong, r0, r1, n_iter, lm, num_threads)
+        else:
+            raise TypeError(f'y argument has incompatible type: {str(y.dtype)}')
+    if fail:
+        raise RuntimeError('C backend exited with error.')
+
+    return out
+
 def draw_line_mask(object shape not None, object lines not None, int max_val=1, double dilation=0.0,
                    str profile='tophat', unsigned int num_threads=1):
     if profile not in profile_scheme:
@@ -422,7 +570,7 @@ def draw_line_mask(object shape not None, object lines not None, int max_val=1, 
     if ndim < 2:
         raise ValueError(f"Invalid shape: '{shape}'")
 
-    cdef np.ndarray _shape = normalize_sequence(shape, ndim, np.NPY_INTP)
+    cdef np.ndarray _shape = normalise_sequence(shape, ndim, np.NPY_INTP)
     cdef np.ndarray inp = np.PyArray_ZEROS(ndim, <np.npy_intp *>np.PyArray_DATA(_shape), np.NPY_UINT32, 0)
     cdef unsigned *_inp = <unsigned *>np.PyArray_DATA(inp)
 
@@ -441,6 +589,9 @@ def draw_line_mask(object shape not None, object lines not None, int max_val=1, 
 
     if N == 1:
         arr = check_array(lines, np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+
         _ldims[0] = arr.shape[0]; _ldims[1] =  arr.shape[1]
         _lptrs[0] = <float *>np.PyArray_DATA(arr)
     else:
@@ -448,6 +599,7 @@ def draw_line_mask(object shape not None, object lines not None, int max_val=1, 
             arr = check_array(lines[i], np.NPY_FLOAT32)
             if arr.ndim != 2 or arr.shape[1] < 5:
                 raise ValueError("lines array has an incompatible shape")
+
             _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
             _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
             memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
@@ -483,7 +635,7 @@ def draw_line_image(object shape not None, object lines not None, double dilatio
     if ndim < 2:
         raise ValueError(f"Invalid shape: '{shape}'")
 
-    cdef np.ndarray _shape = normalize_sequence(shape, ndim, np.NPY_INTP)
+    cdef np.ndarray _shape = normalise_sequence(shape, ndim, np.NPY_INTP)
     cdef np.ndarray inp = np.PyArray_ZEROS(ndim, <np.npy_intp *>np.PyArray_DATA(_shape), np.NPY_FLOAT32, 0)
     cdef float *_inp = <float *>np.PyArray_DATA(inp)
 
@@ -502,6 +654,9 @@ def draw_line_image(object shape not None, object lines not None, double dilatio
 
     if N == 1:
         arr = check_array(lines, np.NPY_FLOAT32)
+        if arr.ndim != 2 or arr.shape[1] < 5:
+            raise ValueError("lines array has an incompatible shape")
+
         _ldims[0] = arr.shape[0]; _ldims[1] =  arr.shape[1]
         _lptrs[0] = <float *>np.PyArray_DATA(arr)
     else:
@@ -509,6 +664,7 @@ def draw_line_image(object shape not None, object lines not None, double dilatio
             arr = check_array(lines[i], np.NPY_FLOAT32)
             if arr.ndim != 2 or arr.shape[1] < 5:
                 raise ValueError("lines array has an incompatible shape")
+
             _ldims[2 * i] = arr.shape[0]; _ldims[2 * i + 1] = arr.shape[1]
             _lptrs[i] = <float *>malloc(arr.size * sizeof(float))
             memcpy(_lptrs[i], np.PyArray_DATA(arr), arr.size * sizeof(float))
@@ -548,7 +704,7 @@ def draw_line_table(np.ndarray lines not None, object shape=None, double dilatio
         _shape = np.PyArray_Max(lines, 0, <np.ndarray>NULL)
         _shape[0] += 1; _shape[1] += 1
     else:
-        _shape = normalize_sequence(shape, 2, np.NPY_INTP)
+        _shape = normalise_sequence(shape, 2, np.NPY_INTP)
     cdef unsigned long *_dims = [_shape[0], _shape[1]]
 
     cdef unsigned *_idx
@@ -574,38 +730,13 @@ def draw_line_table(np.ndarray lines not None, object shape=None, double dilatio
 
     return idx, x, y, val
 
-def outlier_rate(np.ndarray data not None, np.ndarray bgd not None, np.ndarray iidxs not None,
-                 np.ndarray hkl_idxs not None, double alpha, unsigned int num_threads=1):
-    data = check_array(data, np.NPY_UINT32)
-    bgd = check_array(bgd, np.NPY_FLOAT32)
-    iidxs = check_array(iidxs, np.NPY_UINT32)
-    hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
-
-    cdef unsigned *_data = <unsigned *>np.PyArray_DATA(data)
-    cdef float *_bgd = <float *>np.PyArray_DATA(bgd)
-    cdef unsigned *_iidxs = <unsigned *>np.PyArray_DATA(iidxs)
-    cdef unsigned *_hkl_idxs = <unsigned *>np.PyArray_DATA(hkl_idxs)
-
-    cdef int _isize = iidxs.size - 1
-    cdef int _osize = np.PyArray_Max(hkl_idxs, 0, <np.ndarray>NULL) + 1
-    cdef np.ndarray outs = np.PyArray_ZEROS(1, [_osize,], np.NPY_UINT32, 0)
-    cdef np.ndarray cnts = np.PyArray_ZEROS(1, [_osize,], np.NPY_UINT32, 0)
-    cdef unsigned *_outs = <unsigned *>np.PyArray_DATA(outs)
-    cdef unsigned *_cnts = <unsigned *>np.PyArray_DATA(cnts)
-
-    with nogil:
-        count_outliers(_outs, _cnts, _osize, _data, _bgd, _hkl_idxs, _iidxs, _isize,
-                       alpha, num_threads)
-
-    return outs, cnts
-
 def normalise_pattern(np.ndarray inp not None, object lines not None, object dilations not None,
                       str profile='tophat', unsigned int num_threads=1):
     if inp.ndim != 3:
         raise ValueError('Input array must be a 3D array.')
     inp = check_array(inp, np.NPY_FLOAT32)
 
-    cdef np.ndarray dils = normalize_sequence(dilations, 3, np.NPY_FLOAT32)
+    cdef np.ndarray dils = normalise_sequence(dilations, 3, np.NPY_FLOAT32)
     cdef float *_dils = <float *>np.PyArray_DATA(dils)
 
     if profile not in profile_scheme:
@@ -702,76 +833,6 @@ def refine_pattern(np.ndarray inp not None, object lines not None, float dilatio
     free(_lptrs); free(_ldims)
 
     return line_dict
-
-def project_effs(np.ndarray inp not None, np.ndarray mask not None, np.ndarray effs not None,
-                 int num_threads=1):
-    inp = check_array(inp, np.NPY_FLOAT32)
-    mask = check_array(mask, np.NPY_BOOL)
-    effs = check_array(effs, np.NPY_FLOAT32)
-
-    cdef int i, j, k, ii, n
-    cdef double w1, w0, slope, intercept
-
-    cdef np.ndarray out = <np.ndarray>np.PyArray_ZEROS(inp.ndim, inp.shape, np.NPY_FLOAT32, 0)
-
-    cdef np.float32_t[:, :, ::1] _inp = inp
-    cdef np.npy_bool[:, :, ::1] _mask = mask
-    cdef np.float32_t[:, :, ::1] _effs = effs
-    cdef np.float32_t[:, :, ::1] _out = out
-
-    cdef int n_frames = _inp.shape[0]
-    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
-    for i in prange(n_frames, schedule='guided', nogil=True):
-        for ii in range(_effs.shape[0]):
-            w1 = 0.0; w0 = 0.0
-            for j in range(_inp.shape[1]):
-                for k in range(_inp.shape[2]):
-                    if _mask[i, j, k]:
-                        w1 = w1 + _inp[i, j, k] * _effs[ii, j, k]
-                        w0 = w0 + _effs[ii, j, k] * _effs[ii, j, k]
-            slope = w1 / w0 if w0 > 0.0 else 1.0
-            intercept = 0.0; n = 0
-            for j in range(_inp.shape[1]):
-                for k in range(_inp.shape[2]):
-                    if _mask[i, j, k]:
-                        intercept = intercept + _inp[i, j, k] - slope * _effs[ii, j, k]
-                        n = n + 1
-            intercept = intercept / n
-            for j in range(_inp.shape[1]):
-                for k in range(_inp.shape[2]):
-                    if _effs[ii, j, k]:
-                        _out[i, j, k] = _effs[ii, j, k] * slope + intercept
-
-    return out
-
-def subtract_background(np.ndarray inp not None, np.ndarray mask not None, np.ndarray bgd not None,
-                        int num_threads=1):
-    inp = check_array(inp, np.NPY_UINT32)
-    mask = check_array(mask, np.NPY_BOOL)
-    bgd = check_array(bgd, np.NPY_FLOAT32)
-
-    cdef int i, j, k
-    cdef float res, w0, w1
-
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(inp.ndim, inp.shape, np.NPY_FLOAT32)
-
-    cdef np.uint32_t[:, :, ::1] _inp = inp
-    cdef np.npy_bool[:, :, ::1] _mask = mask
-    cdef np.float32_t[:, :, ::1] _out = out
-    cdef np.float32_t[:, :, ::1] _bgd = bgd
-
-    cdef int n_frames = _inp.shape[0]
-    num_threads = n_frames if <int>num_threads > n_frames else <int>num_threads
-
-    for i in prange(n_frames, schedule='guided', num_threads=num_threads, nogil=True):
-        for j in range(_inp.shape[1]):
-            for k in range(_inp.shape[2]):
-                if _mask[i, j, k]:
-                    _out[i, j, k] = <float>_inp[i, j, k] - _bgd[i, j, k]
-                else:
-                    _out[i, j, k] = 0.0
-
-    return out
 
 def ce_criterion(np.ndarray ij not None, np.ndarray p not None, np.ndarray fidxs not None, object shape not None,
                  object lines not None, double dilation=0.0, double epsilon=1e-12, str profile='gauss',

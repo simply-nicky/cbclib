@@ -6,17 +6,17 @@ typedef float (*line_profile)(float err, float wd);
 
 static inline float tophat_profile(float err, float wd)
 {
-    return fminf(fmaxf(wd - fabsf(err), 0.0f), 1.0f);
+    return fminf(fmaxf(wd - err, 0.0f), 1.0f);
 }
 
 static inline float linear_profile(float err, float wd)
 {
-    return fmaxf(1.0f - fabsf(err) / wd, 0.0f);
+    return fmaxf(1.0f - err / wd, 0.0f);
 }
 
 static inline float quad_profile(float err, float wd)
 {
-    return fmaxf(1.0f - powf(fabsf(err) / wd, 2.0f), 0.0f);
+    return fmaxf(1.0f - SQ(err / wd), 0.0f);
 }
 
 #define GS_MIN 0.01831563888873418
@@ -85,9 +85,6 @@ int normalise_line(float *out, float *data, const size_t *dims, float *lines, co
 
 int refine_line(float *out, float *data, const size_t *dims, float *lines, const size_t *ldims,
                 float dilation, line_profile profile);
-
-int count_outliers(unsigned *outs, unsigned *cnts, size_t osize, unsigned *data, float *bgd, unsigned *hkl_idxs,
-                   unsigned *iidxs, size_t isize, float alpha, unsigned threads);
 
 /*---------------------------------------------------------------------------
                         Model refinement criterion

@@ -12,7 +12,7 @@ dependencies:
   - pandas
   - pygmo
   - pytables
-  - python=3.7
+  - python>=3.7
   - scipy
   - scikit-learn
   - tqdm

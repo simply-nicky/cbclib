@@ -17,6 +17,7 @@ array new_array(int ndim, const size_t *dims, size_t item_size, void *data);
 void free_array(array arr);
 
 #define GET(_arr, _type, _idx) ((_type *)(_arr)->data)[(_idx)]
+#define GETP(_arr, _stride, _idx) ((_arr)->data + (_idx) * (_arr)->item_size * (_stride))
 
 #define UNRAVEL_INDEX(_coord, _idx, _arr)               \
     do {int _i = *(_idx), _n;                           \
@@ -131,6 +132,14 @@ int indirect_compare_float(const void *a, const void *b, void *data);
 int indirect_search_double(const void *key, const void *base, void *data);
 int indirect_search_float(const void *key, const void *base, void *data);
 
+/*---------------------------------------------------------------------------
+    Getter functions
+----------------------------------------------------------------------------*/
+static inline float get_double(const void *a) {return *(double *)a;}
+static inline float get_float(const void *a) {return *(float *)a;}
+static inline float get_int(const void *a) {return *(int *)a;}
+static inline float get_uint(const void *a) {return *(unsigned *)a;}
+static inline float get_ulong(const void *a) {return *(unsigned long *)a;}
 
 /*---------------------------------------------------------------------------
     Binary search
