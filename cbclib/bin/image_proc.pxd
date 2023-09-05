@@ -3,7 +3,7 @@ from libc.string cimport memcmp, memcpy
 from libc.stdlib cimport malloc, free
 
 cdef extern from "Python.h":
-    int Py_AtExit(void(*func)())
+    int Py_AtExit(void (*func)())
 
 ctypedef int (*rconvolve_func)(double*, double*, int, unsigned long*, double*,
                                unsigned long, int, int, double, unsigned)

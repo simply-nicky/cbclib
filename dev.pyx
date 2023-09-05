@@ -34,10 +34,10 @@ def det_to_k(np.ndarray x not None, np.ndarray y not None, np.ndarray src not No
         idxs = np.PyArray_ZEROS(1, [_ksize,], np.NPY_UINT32, 0)
     if idxs is None:
         raise ValueError('idxs is not provided')
-    if idxs[idxs.size - 1] + 1 > _ssize:
+    if idxs[idxs.size - 1] + 1 >  _ssize:
         raise ValueError('src is incompatible with idxs')
     
-    if _ksize != y.size or _ksize != idxs.size:
+    if <np.npy_intp>_ksize != y.size or  <np.npy_intp>_ksize != idxs.size:
         raise ValueError('x, y, and idxs have incompatible shapes')
 
     x = check_array(x, np.NPY_FLOAT32)
@@ -83,7 +83,7 @@ def det_to_k_vjp(np.ndarray vec not None, np.ndarray x not None, np.ndarray y no
     if idxs[idxs.size - 1] + 1 > _ssize:
         raise ValueError('src is incompatible with idxs')
     
-    if _ksize != y.size or _ksize != idxs.size or <int>_ksize != vec.shape[0]:
+    if  <np.npy_intp>_ksize != y.size or  <np.npy_intp>_ksize != idxs.size or  <np.npy_intp>_ksize != vec.shape[0]:
         raise ValueError('x, y, vec, and idxs have incompatible shapes')
 
     vec = check_array(vec, np.NPY_FLOAT32)
@@ -130,7 +130,7 @@ def k_to_det(np.ndarray karr not None, np.ndarray src not None, np.ndarray idxs=
     if idxs[idxs.size - 1] + 1 > _ssize:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size:
+    if  <np.npy_intp>_ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
     karr = check_array(karr, np.NPY_FLOAT32)
@@ -171,7 +171,7 @@ def k_to_det_vjp(np.ndarray xvec not None, np.ndarray yvec not None, np.ndarray 
     if idxs[idxs.size - 1] + 1 > _ssize:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size or _ksize != xvec.size or _ksize != yvec.size:
+    if  <np.npy_intp>_ksize != idxs.size or  <np.npy_intp>_ksize != xvec.size or  <np.npy_intp>_ksize != yvec.size:
         raise ValueError('xvec, yvec, karr, and idxs have incompatible shapes')
 
     xvec = check_array(xvec, np.NPY_FLOAT32)
@@ -216,7 +216,7 @@ def k_to_smp(np.ndarray karr not None, np.ndarray z not None, np.ndarray src not
     if idxs[idxs.size - 1] + 1 > z.size:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size:
+    if  <np.npy_intp>_ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
     karr = check_array(karr, np.NPY_FLOAT32)
@@ -256,7 +256,7 @@ def k_to_smp_vjp(np.ndarray vec not None, np.ndarray karr not None, np.ndarray z
     if idxs[idxs.size - 1] + 1 > z.size:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size or <int>_ksize != vec.shape[0]:
+    if  <np.npy_intp>_ksize != idxs.size or  <np.npy_intp>_ksize != vec.shape[0]:
         raise ValueError('vec, karr, and idxs have incompatible shapes')
 
     vec = check_array(vec, np.NPY_FLOAT32)

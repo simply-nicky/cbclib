@@ -285,7 +285,7 @@ int det2k(float *karr, float *x, float *y, unsigned *idxs, size_t ksize, float *
     {
         dist = sqrtf(SQ(x[i] - src[3 * idxs[i]]) + SQ(y[i] - src[3 * idxs[i] + 1]) + SQ(src[3 * idxs[i] + 2]));
         karr[3 * i + 0] = (x[i] - src[3 * idxs[i]]) / dist;
-        karr[3 * i + 1] = (y[i] - src[3 * idxs[i]]) / dist;
+        karr[3 * i + 1] = (y[i] - src[3 * idxs[i] + 1]) / dist;
         karr[3 * i + 2] = -src[3 * idxs[i] + 2] / dist;
     }
 
@@ -549,9 +549,9 @@ int find_kins(float *out, unsigned char *mask, size_t N, int *hkl, unsigned *hid
     float earr[8] = {0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f};
     float sarr[8] = {pupil[0], 0.0f, 0.0f, pupil[1], 0.0f, pupil[3], pupil[2], 0.0f};
     float lims[8] = {earr[0] * pupil[0] + earr[1] * pupil[1], earr[0] * pupil[2] + earr[1] * pupil[3],
-                      earr[2] * pupil[0] + earr[3] * pupil[1], earr[2] * pupil[2] + earr[3] * pupil[3],
-                      earr[4] * pupil[0] + earr[5] * pupil[1], earr[4] * pupil[2] + earr[5] * pupil[3],
-                      earr[6] * pupil[0] + earr[7] * pupil[1], earr[6] * pupil[2] + earr[7] * pupil[3]};
+                     earr[2] * pupil[0] + earr[3] * pupil[1], earr[2] * pupil[2] + earr[3] * pupil[3],
+                     earr[4] * pupil[0] + earr[5] * pupil[1], earr[4] * pupil[2] + earr[5] * pupil[3],
+                     earr[6] * pupil[0] + earr[7] * pupil[1], earr[6] * pupil[2] + earr[7] * pupil[3]};
     float NA = sqrtf(SQ(pupil[2]) + SQ(pupil[3]));
 
     #pragma omp parallel num_threads(threads)

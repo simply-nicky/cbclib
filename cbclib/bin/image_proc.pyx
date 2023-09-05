@@ -13,7 +13,7 @@ cdef dict profile_scheme
 profile_scheme = {'linear': 0, 'quad': 1, 'tophat': 2, 'gauss': 3}
 
 # Set the cleanup routine
-cdef void _cleanup():
+cdef void _cleanup() noexcept:
     fftw_cleanup()
     fftw_cleanup_threads()
 

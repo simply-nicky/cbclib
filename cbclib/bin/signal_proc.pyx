@@ -207,7 +207,7 @@ def poisson_criterion(np.ndarray x not None, object shape not None, np.ndarray i
     hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
 
     cdef unsigned long _isize = idxs[idxs.size - 1] + 1
-    if x.size < _isize or hkl_idxs.size != _isize:
+    if x.size < <np.npy_intp>_isize or hkl_idxs.size != <np.npy_intp>_isize:
         raise ValueError("idxs is incompatible with x and hkl_idxs")
     cdef unsigned long _hkl_size = x.size - _isize
 
@@ -324,7 +324,7 @@ def unmerge_signal(np.ndarray x not None, object shape not None, np.ndarray ij n
     hkl_idxs = check_array(hkl_idxs, np.NPY_UINT32)
 
     cdef unsigned long _isize = idxs[idxs.size - 1] + 1
-    if x.size < _isize or hkl_idxs.size != _isize:
+    if x.size < <np.npy_intp>_isize or hkl_idxs.size != <np.npy_intp>_isize:
         raise ValueError("idxs is incompatible with x and hkl_idxs")
     cdef unsigned long _hkl_size = x.size - _isize
 

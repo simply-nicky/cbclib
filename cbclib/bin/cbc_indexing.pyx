@@ -164,7 +164,7 @@ def det_to_k(np.ndarray x not None, np.ndarray y not None, np.ndarray src not No
     if idxs[idxs.size - 1] + 1 > _ssize:
         raise ValueError('src is incompatible with idxs')
     
-    if _ksize != y.size or _ksize != idxs.size:
+    if <np.npy_intp>_ksize != y.size or <np.npy_intp>_ksize != idxs.size:
         raise ValueError('x, y, and idxs have incompatible shapes')
 
     x = check_array(x, np.NPY_FLOAT32)
@@ -208,10 +208,10 @@ def k_to_det(np.ndarray karr not None, np.ndarray src not None, np.ndarray idxs=
         idxs = np.PyArray_ZEROS(1, [_ksize,], np.NPY_UINT32, 0)
     if idxs is None:
         raise ValueError('idxs is not provided')
-    if idxs[idxs.size - 1] + 1 > _ssize:
+    if idxs[idxs.size - 1] + 1 > <np.npy_intp>_ssize:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size:
+    if <np.npy_intp>_ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
     karr = check_array(karr, np.NPY_FLOAT32)
@@ -251,7 +251,7 @@ def k_to_smp(np.ndarray karr not None, np.ndarray z not None, np.ndarray src not
     if idxs[idxs.size - 1] + 1 > z.size:
         raise ValueError('src is incompatible with idxs')
 
-    if _ksize != idxs.size:
+    if <np.npy_intp>_ksize != idxs.size:
         raise ValueError('karr and idxs have incompatible shapes')
 
     karr = check_array(karr, np.NPY_FLOAT32)

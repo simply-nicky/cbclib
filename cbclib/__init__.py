@@ -12,3 +12,4 @@ from .log_protocol import LogProtocol, LogContainer
 from .data_container import Transform, Crop, Downscale, Mirror, ComposeTransforms
 from .data_processing import CrystData, LSDetector, ModelDetector
 from . import bin
+from . import src
