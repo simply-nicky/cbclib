@@ -1,7 +1,6 @@
 #ifndef GEOMETRY_
 #define GEOMETRY_
 #include "include.hpp"
-#include "kd_tree.hpp"
 
 namespace cbclib {
 

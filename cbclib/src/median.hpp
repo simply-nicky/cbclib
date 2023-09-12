@@ -25,7 +25,7 @@ struct footprint
                 std::vector<long> coord;
                 fmask.unravel_index(std::back_inserter(coord), std::distance(fmask.begin(), fiter));
                 auto & offset = this->offsets.emplace_back();
-                std::transform(coord.begin(), coord.end(), fmask.dims.begin(), std::back_inserter(offset),
+                std::transform(coord.begin(), coord.end(), fmask.shape.begin(), std::back_inserter(offset),
                                [](long crd, size_t dim){return crd - dim / 2;});
             }
         }
@@ -36,7 +36,7 @@ struct footprint
     }
 
     template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, long>>>
-    footprint & update(const Container & coord, const array<T> & arr, const array<bool> & mask, EXTEND_MODE mode, const T & cval)
+    footprint & update(const Container & coord, const array<T> & arr, const array<bool> & mask, extend mode, const T & cval)
     {
         this->data.clear();
 
@@ -47,7 +47,7 @@ struct footprint
             for (size_t n = 0; n < this->ndim; n++)
             {
                 this->coords[i][n] = coord[n] + this->offsets[i][n];
-                extend |= (this->coords[i][n] >= static_cast<long>(arr.dims[n])) || (this->coords[i][n] < 0);
+                extend |= (this->coords[i][n] >= static_cast<long>(arr.shape[n])) || (this->coords[i][n] < 0);
             }
 
             if (extend)

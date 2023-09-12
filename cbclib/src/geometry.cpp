@@ -591,45 +591,45 @@ py::array_t<F> rotate_vec(py::array_t<F, py::array::c_style | py::array::forceca
     return out;
 }
 
-template<typename F, size_t ndim>
-void test_tree(size_t npts, F range)
-{
-    std::random_device rnd_device;
-    std::mt19937 mersenne_engine {rnd_device()};
-    std::uniform_real_distribution<F> dist {0.0, 100.0};
+// template<typename F, size_t ndim>
+// void test_tree(size_t npts, F range)
+// {
+//     std::random_device rnd_device;
+//     std::mt19937 mersenne_engine {rnd_device()};
+//     std::uniform_real_distribution<F> dist {0.0, 100.0};
 
-    auto gen = [&dist, &mersenne_engine](){return dist(mersenne_engine);};
-    auto gen_array = [&gen]()
-    {
-        std::array<F, ndim> arr;
-        std::generate(arr.begin(), arr.end(), gen);
-        return arr;
-    };
+//     auto gen = [&dist, &mersenne_engine](){return dist(mersenne_engine);};
+//     auto gen_array = [&gen]()
+//     {
+//         std::array<F, ndim> arr;
+//         std::generate(arr.begin(), arr.end(), gen);
+//         return arr;
+//     };
 
-    std::vector<std::array<F, ndim>> points;
-    std::generate_n(std::back_inserter(points), npts, gen_array);
+//     std::vector<std::array<F, ndim>> points;
+//     std::generate_n(std::back_inserter(points), npts, gen_array);
 
-    std::cout << "Points in the tree:\n";
-    for (auto point : points)
-    {
-        std::cout << "(";
-        std::copy(point.begin(), point.end(), std::experimental::make_ostream_joiner(std::cout, ", "));
-        std::cout << ") ";
-    }
-    std::cout << std::endl;
+//     std::cout << "Points in the tree:\n";
+//     for (auto point : points)
+//     {
+//         std::cout << "(";
+//         std::copy(point.begin(), point.end(), std::experimental::make_ostream_joiner(std::cout, ", "));
+//         std::cout << ") ";
+//     }
+//     std::cout << std::endl;
 
-    auto tree = KDTree<F>(points, ndim);
-    auto stack = tree.find_range(std::vector<F>(ndim, F(50.0)), range);
+//     auto tree = KDTree<F>(points, ndim);
+//     auto stack = tree.find_range(std::vector<F>(ndim, F(50.0)), range);
 
-    std::cout << "Found points in vicinity:\n";
-    for (auto query : stack)
-    {
-        auto point = std::get<0>(query)->point;
-        std::cout << "(";
-        std::copy(point.begin(), point.end(), std::experimental::make_ostream_joiner(std::cout, ", "));
-        std::cout << "), dist = " << std::get<1>(query) << std::endl;
-    }
-}
+//     std::cout << "Found points in vicinity:\n";
+//     for (auto query : stack)
+//     {
+//         auto point = std::get<0>(query)->point;
+//         std::cout << "(";
+//         std::copy(point.begin(), point.end(), std::experimental::make_ostream_joiner(std::cout, ", "));
+//         std::cout << "), dist = " << std::get<1>(query) << std::endl;
+//     }
+// }
 
 }
 
@@ -682,8 +682,6 @@ PYBIND11_MODULE(geometry, m)
     m.def("rotate", &rotate_vec<double, size_t>, py::arg("vecs"), py::arg("rmats"), py::arg("idxs") = nullptr, py::arg("num_threads") = 1);
     m.def("rotate", &rotate_vec<float, long>, py::arg("vecs"), py::arg("rmats"), py::arg("idxs") = nullptr, py::arg("num_threads") = 1);
     m.def("rotate", &rotate_vec<double, long>, py::arg("vecs"), py::arg("rmats"), py::arg("idxs") = nullptr, py::arg("num_threads") = 1);
-
-    m.def("test_tree", &test_tree<double, 3>, py::arg("npts") = 100, py::arg("range") = 20.0);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);

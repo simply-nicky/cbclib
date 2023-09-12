@@ -2,10 +2,9 @@
 
 namespace cbclib {
 
-template <typename T, typename U>
-auto axis_preprocessor(py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
-                       std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask,
-                       U axis) -> std::tuple<std::vector<py::ssize_t>, std::vector<py::ssize_t>>
+template <typename T>
+void check_mask(const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
+                std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask)
 {
     py::buffer_info ibuf = inp.request();
     if (!mask)
@@ -16,45 +15,6 @@ auto axis_preprocessor(py::array_t<T, py::array::c_style | py::array::forcecast>
     py::buffer_info mbuf = mask.value().request();
     if (!std::equal(mbuf.shape.begin(), mbuf.shape.end(), ibuf.shape.begin()))
         throw std::invalid_argument("mask and inp arrays must have identical shapes");
-
-    sequence<long> seq (axis);
-    for (size_t i = 0; i < seq.size(); i++)
-    {
-        seq[i] = (seq[i] >= 0) ? seq[i] : ibuf.ndim + seq[i];
-        if (seq[i] >= ibuf.ndim)
-            throw std::invalid_argument("axis is out of bounds");
-    }
-
-    size_t repeats = 1, ndim = 0;
-    for (py::ssize_t i = 0; i < ibuf.ndim; i++)
-    {
-        size_t j = 0;
-        while ((j < seq.size()) && (seq[j] != i)) j++;
-
-        if (j == seq.size())
-        {
-            auto obj = reinterpret_cast<PyArrayObject *>(inp.release().ptr());
-            inp = py::reinterpret_steal<py::array_t<T>>(PyArray_SwapAxes(obj, ndim, i));
-
-            auto mobj = reinterpret_cast<PyArrayObject *>(mask.value().release().ptr());
-            mask = py::reinterpret_steal<py::array_t<bool>>(PyArray_SwapAxes(mobj, ndim, i));
-
-            repeats *= inp.shape()[ndim++];
-        }
-    }
-
-    ibuf = inp.request();
-    std::vector<py::ssize_t> new_shape;
-    new_shape.reserve(ndim + 1);
-    auto iter = ibuf.shape.begin();
-    std::copy_n(iter, ndim, std::back_inserter(new_shape));
-    new_shape.push_back(ibuf.size / repeats);
-
-    std::vector<py::ssize_t> out_shape;
-    out_shape.reserve(ndim);
-    std::copy_n(ibuf.shape.begin(), ndim, std::back_inserter(out_shape));
-
-    return std::tuple(new_shape, out_shape);
 }
 
 template <typename T, typename U>
@@ -64,27 +24,35 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
 {
     assert(PyArray_API);
 
-    auto [new_shape, out_shape] = axis_preprocessor<T, U>(inp, mask, axis);
+    check_mask(inp, mask);
 
+    sequence<long> seq (axis);
+    seq = seq.unwrap(inp.ndim());
+    inp = seq.swap_axes(inp);
+    mask = seq.swap_axes(mask.value());
+
+    auto ibuf = inp.request();
+    auto ax = ibuf.ndim - seq.size();
+    auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
+    auto out = py::array_t<T>(out_shape);
+
+    auto new_shape = out_shape;
+    new_shape.push_back(ibuf.size / out.size());
     inp = inp.reshape(new_shape);
     mask = mask.value().reshape(new_shape);
-    auto out = py::array_t<T>(out_shape);
 
     auto oarr = array<T>(out.request());
     auto iarr = array<T>(inp.request());
     auto marr = array<bool>(mask.value().request());
 
-    iarr.line_begin(0, 0);
-
     py::gil_scoped_release release;
 
-    size_t ax = iarr.ndim - 1;
     threads = (threads > oarr.size) ? oarr.size : threads;
 
     #pragma omp parallel num_threads(threads)
     {
         std::vector<T> buffer;
-        std::vector<size_t> idxs (iarr.dims[ax], 0);
+        std::vector<size_t> idxs (iarr.shape[ax], 0);
         std::iota(idxs.begin(), idxs.end(), 0);
 
         #pragma omp for
@@ -112,21 +80,13 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask,
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & inp_mask)
 {
-    py::buffer_info ibuf = inp.request();
-    if (!mask)
-    {
-        mask = py::array_t<bool>(ibuf.shape);
-        PyArray_FILLWBYTE(mask.value().ptr(), 1);
-    }
-    py::buffer_info mbuf = mask.value().request();
-    if (!std::equal(mbuf.shape.begin(), mbuf.shape.end(), ibuf.shape.begin()))
-        throw std::invalid_argument("mask and inp arrays must have identical shapes");
-
+    check_mask(inp, mask);
     if (!inp_mask) inp_mask = mask.value();
 
     if (!size && !fprint)
         throw std::invalid_argument("size or fprint must be provided");
 
+    auto ibuf = inp.request();
     if (!fprint)
     {
         sequence<size_t> seq (size.value(), ibuf.ndim);
@@ -154,7 +114,7 @@ py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forc
         throw std::invalid_argument("invalid mode argument");
     auto m = it->second;
 
-    auto out = filter_preprocessor<T, U>(inp, size, fprint, mask, inp_mask);
+    auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
 
     auto oarr = array<T>(out.request());
     auto iarr = array<T>(inp.request());
@@ -202,7 +162,7 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
         throw std::invalid_argument("invalid mode argument");
     auto m = it->second;
 
-    auto out = filter_preprocessor<T, U>(inp, size, fprint, mask, inp_mask);
+    auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
 
     auto oarr = array<T>(out.request());
     auto iarr = array<T>(inp.request());
@@ -244,11 +204,22 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    auto [new_shape, out_shape] = axis_preprocessor<T, U>(inp, mask, axis);
+    check_mask(inp, mask);
 
+    sequence<long> seq (axis);
+    seq = seq.unwrap(inp.ndim());
+    inp = seq.swap_axes(inp);
+    mask = seq.swap_axes(mask.value());
+
+    auto ibuf = inp.request();
+    auto ax = ibuf.ndim - seq.size();
+    auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
+    auto out = py::array_t<D>(out_shape);
+
+    auto new_shape = out_shape;
+    new_shape.push_back(ibuf.size / out.size());
     inp = inp.reshape(new_shape);
     mask = mask.value().reshape(new_shape);
-    auto out = py::array_t<D>(out_shape);
 
     auto oarr = array<D>(out.request());
     auto iarr = array<T>(inp.request());
@@ -256,21 +227,19 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
 
     py::gil_scoped_release release;
 
-    int ax = iarr.ndim - 1;
-    size_t repeats = iarr.size / iarr.dims[ax];
-    threads = (threads > repeats) ? repeats : threads;
+    threads = (threads > oarr.size) ? oarr.size : threads;
 
     #pragma omp parallel num_threads(threads)
     {
         std::vector<T> buffer;
-        std::vector<D> err (iarr.dims[ax]);
-        std::vector<size_t> idxs (iarr.dims[ax]);
+        std::vector<D> err (iarr.shape[ax]);
+        std::vector<size_t> idxs (iarr.shape[ax]);
 
-        size_t j0 = r0 * iarr.dims[ax], j1 = r1 * iarr.dims[ax];
+        size_t j0 = r0 * iarr.shape[ax], j1 = r1 * iarr.shape[ax];
         D mean;
 
         #pragma omp for
-        for (size_t i = 0; i < repeats; i++)
+        for (size_t i = 0; i < oarr.size; i++)
         {
             auto iiter = iarr.line_begin(ax, i);
             auto miter = marr.line_begin(ax, i);
@@ -324,22 +293,33 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    auto [new_shape, out_shape] = axis_preprocessor<T, U>(y, mask, axis);
+    check_mask(y, mask);
 
-    int ax = new_shape.size() - 1;
+    sequence<long> seq (axis);
+    seq = seq.unwrap(y.ndim());
+    y = seq.swap_axes(y);
+    mask = seq.swap_axes(mask.value());
+
     py::buffer_info Wbuf = W.request();
     py::buffer_info ybuf = y.request();
+    auto ax = ybuf.ndim - seq.size();
     if (!std::equal(std::make_reverse_iterator(ybuf.shape.end()),
                     std::make_reverse_iterator(ybuf.shape.begin() + ax),
                     std::make_reverse_iterator(Wbuf.shape.end())))
         throw std::invalid_argument("W and y arrays have incompatible shapes");
 
-    auto nf = Wbuf.size / new_shape[ax];
-    W = W.reshape({nf, new_shape[ax]});
-    out_shape.push_back(nf);
+    auto new_shape = std::vector<py::ssize_t>(ybuf.shape.begin(), std::next(ybuf.shape.begin(), ax));
+    auto repeats = get_size(new_shape.begin(), new_shape.end());
+    new_shape.push_back(ybuf.size / repeats);
 
     y = y.reshape(new_shape);
     mask = mask.value().reshape(new_shape);
+
+    auto nf = Wbuf.size / new_shape[ax];
+    W = W.reshape({nf, new_shape[ax]});
+
+    auto out_shape = std::vector<py::ssize_t>(new_shape.begin(), std::prev(new_shape.end()));
+    out_shape.push_back(nf);
     auto out = py::array_t<D>(out_shape);
 
     auto oarr = array<D>(out.request());
@@ -349,7 +329,6 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
 
     py::gil_scoped_release release;
 
-    size_t repeats = yarr.size / yarr.dims[ax];
     threads = (threads > repeats) ? repeats : threads;
 
     auto get_x = [](std::pair<T, T> p) -> D {return (p.second > T()) ? static_cast<D>(p.first) / p.second : D();};
@@ -357,12 +336,12 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
 
     #pragma omp parallel num_threads(threads)
     {
-        std::vector<std::pair<T, T>> sums (oarr.dims[ax]);
+        std::vector<std::pair<T, T>> sums (oarr.shape[ax]);
 
-        std::vector<D> err (yarr.dims[ax]);
-        std::vector<size_t> idxs (yarr.dims[ax]);
+        std::vector<D> err (yarr.shape[ax]);
+        std::vector<size_t> idxs (yarr.shape[ax]);
 
-        size_t j0 = r0 * yarr.dims[ax], j1 = r1 * yarr.dims[ax];
+        size_t j0 = r0 * yarr.shape[ax], j1 = r1 * yarr.shape[ax];
 
         #pragma omp for
         for (size_t i = 0; i < repeats; i++)

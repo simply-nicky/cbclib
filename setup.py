@@ -70,6 +70,11 @@ extensions += [Pybind11Extension("cbclib.src.geometry",
                Pybind11Extension("cbclib.src.median",
                                  sources=["cbclib/src/median.cpp"],
                                  define_macros = [('VERSION_INFO', __version__)],
+                                 **extension_args),
+               Pybind11Extension("cbclib.src.fft_functions",
+                                 sources=["cbclib/src/fft_functions.cpp"],
+                                 define_macros = [('VERSION_INFO', __version__)],
+                                 libraries = ['fftw3', 'fftw3f', 'fftw3l', 'fftw3_omp', 'fftw3f_omp', 'fftw3l_omp'],
                                  **extension_args)]
 
 with open('README.md', 'r') as readme:
