@@ -12,77 +12,79 @@ size_t get_size(InputIt first, InputIt last)
 
 namespace detail{
 
+template <typename T, typename U>
+constexpr auto modulo(T a, U b) -> decltype(a % b)
+{
+    return (a % b + b) % b;
+}
+
+template <typename T, typename U>
+constexpr auto remainder(T a, U b) -> decltype(modulo(a, b))
+{
+    return (a - modulo(a, b)) / b;
+}
+
+template <typename T, typename U, typename V>
+constexpr std::make_signed_t<T> mirror(T a, U min, V max)
+{
+    using F = std::make_signed_t<T>;
+    F val = std::minus<F>()(a, min);
+    F period = std::minus<F>()(max, min) - 1;
+    if (modulo(remainder(val, period), 2)) return period - modulo(val, period) + min;
+    else return modulo(val, period) + min;
+}
+
+template <typename T, typename U, typename V>
+constexpr std::make_signed_t<T> reflect(T a, U min, V max)
+{
+    using F = std::make_signed_t<T>;
+    F val = std::minus<F>()(a, min);
+    F period = std::minus<F>()(max, min);
+    if (modulo(remainder(val, period), 2)) return period - 1 - modulo(val, period) + min;
+    else return modulo(val, period) + min;
+}
+
+template <typename T, typename U, typename V>
+constexpr std::make_signed_t<T> wrap(T a, U min, V max)
+{
+    using F = std::make_signed_t<T>;
+    F val = std::minus<F>()(a, min);
+    F period = std::minus<F>()(max, min);
+    return modulo(val, period) + min;
+}
+
 template <typename InputIt1, typename InputIt2>
 typename InputIt1::value_type ravel_index_impl(InputIt1 cfirst, InputIt1 clast, InputIt2 sfirst)
 {
     using value_t = typename InputIt1::value_type;
     value_t index = value_t();
-    for(; cfirst != clast; cfirst++, sfirst++) index += *cfirst * static_cast<value_t>(*sfirst);
+    for(; cfirst != clast; cfirst++, ++sfirst) index += *cfirst * *sfirst;
     return index;
 }
 
 template <typename InputIt, typename OutputIt, typename T>
 OutputIt unravel_index_impl(InputIt sfirst, InputIt slast, T index, OutputIt cfirst)
 {
-    using value_t = typename InputIt::value_type;
-    for(; sfirst != slast; sfirst++)
+    for(; sfirst != slast; ++sfirst)
     {
-        value_t stride = index / *sfirst;
+        auto stride = index / *sfirst;
         index -= stride * *sfirst;
         *cfirst++ = stride;
     }
     return cfirst;
 }
 
-template <typename T, typename = void>
-struct is_input_iterator : std::false_type {};
-
-template <typename T>
-struct is_input_iterator<T,
-    std::void_t<decltype(*std::declval<T &>()), decltype(++std::declval<T &>())>
-> : std::true_type {};
-
-template <typename T>
-class any_container
-{
-    std::vector<T> vec;
-
-public:
-    any_container() = default;
-
-    template <typename It, typename = std::enable_if_t<is_input_iterator<It>::value>>
-    any_container(It first, It last) : vec(first, last) {}
-
-    template <typename Container,
-        typename = std::enable_if_t<
-            std::is_convertible_v<decltype(*std::begin(std::declval<const Container &>())), T>
-        >
-    >
-    any_container(const Container & c) : any_container(std::begin(c), std::end(c)) {}
-
-    template <typename TIn, typename = std::enable_if_t<std::is_convertible_v<TIn, T>>>
-    any_container(const std::initializer_list<TIn> & c) : any_container(c.begin(), c.end()) {}
-
-    any_container(std::vector<T> && v) : vec(std::move(v)) {}
-
-    operator std::vector<T> && () && { return std::move(this->vec); }
-
-    std::vector<T> & operator*() {return this->vec;}
-    const std::vector<T> & operator*() const {return this->vec;}
-
-    std::vector<T> * operator->() {return &(this->vec);}
-    const std::vector<T> * operator->() const {return &(this->vec);}
-};
-
 class shape_handler
 {
 public:
     size_t ndim;
     size_t size;
+    std::vector<size_t> shape;
 
     using ShapeContainer = detail::any_container<size_t>;
 
-    shape_handler(size_t ndim, size_t size, ShapeContainer strides) : ndim(ndim), size(size), strides(std::move(strides)) {}
+    shape_handler(size_t ndim, size_t size, ShapeContainer shape, ShapeContainer strides)
+        : ndim(ndim), size(size), shape(std::move(shape)), strides(std::move(strides)) {}
 
     shape_handler(ShapeContainer shape) : ndim(std::distance(shape->begin(), shape->end()))
     {
@@ -92,11 +94,23 @@ public:
         {
             stride /= length;
             this->strides.push_back(stride);
+            this->shape.push_back(length);
         }
     }
 
     template <typename CoordIter, typename = std::enable_if_t<std::is_integral_v<typename CoordIter::value_type>>>
-    size_t ravel_index(CoordIter first, CoordIter last) const
+    bool is_inbound(CoordIter first, CoordIter last) const
+    {
+        bool flag = true;
+        for (size_t i = 0; first != last; ++first, ++i)
+        {
+            flag &= *first >= 0 && *first < static_cast<typename CoordIter::value_type>(this->shape[i]);
+        }
+        return flag;
+    }
+
+    template <typename CoordIter, typename = std::enable_if_t<std::is_integral_v<typename CoordIter::value_type>>>
+    typename CoordIter::value_type ravel_index(CoordIter first, CoordIter last) const
     {
         return ravel_index_impl(first, last, this->strides.begin());
     }
@@ -159,7 +173,7 @@ public:
         return strided_iterator<T>(this->ptr - step * this->stride, this->stride);
     }
 
-    difference_type operator-(const strided_iterator<T> & iter) const {return std::distance(iter, *this);}
+    difference_type operator-(const strided_iterator<T> & iter) const {return (this->ptr - iter.ptr) / this->stride;}
 
     T & operator[] (size_t index) const {return this->ptr[index * this->stride];}
     T & operator*() const {return *(this->ptr);}
@@ -174,20 +188,17 @@ template <typename T>
 class array : public detail::shape_handler
 {
 public:
-    std::vector<size_t> shape;     // Shape of the array
     T * ptr;
 
     using iterator = T *;
     using const_iterator = const T *;
 
-    array(size_t ndim, size_t size, ShapeContainer strides, ShapeContainer shape, T * ptr)
-        : shape_handler(ndim, size, std::move(strides)), shape(std::move(shape)), ptr(ptr) {}
+    array(size_t ndim, size_t size, ShapeContainer shape, ShapeContainer strides, T * ptr)
+        : shape_handler(ndim, size, std::move(shape), std::move(strides)), ptr(ptr) {}
 
-    array(shape_handler handler, std::vector<size_t> shape, T * ptr)
-        : shape_handler(std::move(handler)), shape(std::move(shape)), ptr(ptr) {}
+    array(shape_handler handler, T * ptr) : shape_handler(std::move(handler)), ptr(ptr) {}
 
-    array(ShapeContainer shape, T * ptr)
-        : shape_handler(shape), shape(std::move(shape)), ptr(ptr) {}
+    array(ShapeContainer shape, T * ptr) : shape_handler(std::move(shape)), ptr(ptr) {}
 
     array(const py::buffer_info & buf) : array(buf.shape, static_cast<T *>(buf.ptr)) {}
 
@@ -216,8 +227,10 @@ public:
 
         index = this->ravel_index(coord.begin(), coord.end());
 
-        return array<T>(shape.size(), get_size(shape.begin(), shape.end()),
-                        std::move(strides), std::move(shape), this->ptr + index);
+        auto ndim = shape.size();
+        auto size = get_size(shape.begin(), shape.end());
+
+        return array<T>(ndim, size, std::move(shape), std::move(strides), this->ptr + index);
     }
 
     strided_iterator<T> line_begin(size_t axis, size_t index)
@@ -268,9 +281,7 @@ private:
     std::vector<T> buffer;
 
 public:
-    using ShapeContainer = detail::any_container<size_t>;
-
-    vector_array(ShapeContainer shape) : array<T>(std::move(shape), nullptr)
+    vector_array(typename array<T>::ShapeContainer shape) : array<T>(std::move(shape), nullptr)
     {
         this->buffer = std::vector<T>(this->size, T());
         this->ptr = this->buffer.data();
@@ -309,278 +320,6 @@ public:
 
     bool is_end() const {return this->index >= this->size; }
 };
-
-/*----------------------------------------------------------------------------*/
-/*--------------------------- Extend line modes ------------------------------*/
-/*----------------------------------------------------------------------------*/
-/*
-    constant: kkkkkkkk|abcd|kkkkkkkk
-    nearest:  aaaaaaaa|abcd|dddddddd
-    mirror:   cbabcdcb|abcd|cbabcdcb
-    reflect:  abcddcba|abcd|dcbaabcd
-    wrap:     abcdabcd|abcd|abcdabcd
-*/
-enum class extend
-{
-    constant = 0,
-    nearest = 1,
-    mirror = 2,
-    reflect = 3,
-    wrap = 4
-};
-
-static std::unordered_map<std::string, extend> const modes = {{"constant", extend::constant},
-                                                              {"nearest", extend::nearest},
-                                                              {"mirror", extend::mirror},
-                                                              {"reflect", extend::reflect},
-                                                              {"wrap", extend::wrap}};
-
-template <class BidirIt>
-class mirror_generator
-{
-public:
-    mirror_generator(BidirIt first, BidirIt last, BidirIt iter)
-        : first(first), last(last), iter(iter) {}
-
-    BidirIt operator()()
-    {
-        auto tmp = this->iter;
-        this->iter++;
-        if (this->iter == this->last) {this->iter = tmp; this = this->reverse();}
-        return this->iter;
-    }
-
-    mirror_generator<BidirIt> & reverse() const
-    {
-        return mirror_generator<BidirIt>(std::reverse_iterator<BidirIt>(this->last),
-                                        std::reverse_iterator<BidirIt>(this->first),
-                                        std::reverse_iterator<BidirIt>(this->iter));
-    }
-
-private:
-    BidirIt iter;
-    BidirIt first;
-    BidirIt last;
-};
-
-template <class BidirIt>
-class reflect_generator
-{
-public:
-    reflect_generator(BidirIt first, BidirIt last, BidirIt iter)
-        : first(first), last(last), iter(iter) {}
-
-    BidirIt operator()()
-    {
-        auto tmp = this->iter;
-        this->iter++;
-        if (this->iter == this->last) this = this->reverse();
-        return tmp;
-    }
-
-    reflect_generator<BidirIt> & reverse() const
-    {
-        return reflect_generator<BidirIt>(std::reverse_iterator<BidirIt>(this->last),
-                                        std::reverse_iterator<BidirIt>(this->first),
-                                        std::reverse_iterator<BidirIt>(this->iter));
-    }
-
-private:
-    BidirIt iter;
-    BidirIt first;
-    BidirIt last;
-};
-
-template <class BidirIt>
-class wrap_generator
-{
-public:
-    wrap_generator(BidirIt first, BidirIt last, BidirIt iter)
-        : first(first), last(last), iter(iter) {}
-
-    BidirIt operator()()
-    {
-        this->iter++;
-        if (this->iter == this->last) this->iter = this->first;
-        return this->iter;
-    }
-
-    wrap_generator<BidirIt> & reverse() const
-    {
-        return wrap_generator<BidirIt>(std::reverse_iterator<BidirIt>(this->last),
-                                    std::reverse_iterator<BidirIt>(this->first),
-                                    std::reverse_iterator<BidirIt>(this->iter));
-    }
-
-private:
-    BidirIt iter;
-    BidirIt first;
-    BidirIt last;
-};
-
-template <class InputIt, class OutputIt, typename T>
-void extend_line(InputIt first, InputIt last, OutputIt ofirst, OutputIt olast, extend mode, const T & cval)
-{
-    auto isize = std::distance(first, last);
-    auto osize = std::distance(ofirst, olast);
-    auto dsize = osize - isize;
-    auto size_before = dsize - dsize / 2;
-    auto size_after = dsize - size_before;
-
-    std::copy(first, last, std::next(ofirst, size_before));
-
-    switch (mode)
-    {
-        /* kkkkkkkk|abcd|kkkkkkkk */
-        case extend::constant:
-
-            std::fill_n(ofirst, size_before, cval);
-            std::fill_n(std::next(ofirst, osize - size_after), size_after, cval);
-            break;
-
-        /* aaaaaaaa|abcd|dddddddd */
-        case extend::nearest:
-
-            std::fill_n(ofirst, size_before, *first);
-            std::fill_n(std::next(ofirst, osize - size_after), *std::prev(last));
-            break;
-
-        /* cbabcdcb|abcd|cbabcdcb */
-        case extend::mirror:
-
-            std::generate_n(std::reverse_iterator<OutputIt>(std::next(ofirst, size_before)), size_before,
-                            mirror_generator<InputIt>(first, last, first));
-            std::generate_n(std::next(ofirst, osize - size_after), size_after,
-                            mirror_generator<InputIt>(first, last, last).reverse());
-            break;
-
-        /* abcddcba|abcd|dcbaabcd */
-        case extend::reflect:
-            
-            std::generate_n(std::reverse_iterator<OutputIt>(std::next(ofirst, size_before)), size_before,
-                            reflect_generator<InputIt>(first, last, first));
-            std::generate_n(std::next(ofirst, osize - size_after), size_after,
-                            reflect_generator<InputIt>(first, last, last).reverse());
-            break;
-
-        /* abcdabcd|abcd|abcdabcd */
-        case extend::wrap:
-
-            std::generate_n(std::reverse_iterator<OutputIt>(std::next(ofirst, size_before)), size_before,
-                            wrap_generator<InputIt>(first, last, last).reverse());
-            std::generate_n(std::next(ofirst, osize - size_after), size_after,
-                            wrap_generator<InputIt>(first, last, first));
-            break;
-
-        default:
-            throw std::invalid_argument("extend_line: invalid extend argument");
-    }
-}
-
-template <typename Container, typename T, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
-std::optional<T> extend_point(const Container & coord, const array<T> & arr, const array<bool> & mask, extend mode, const T & cval)
-{
-    using I = typename Container::value_type;
-
-    /* kkkkkkkk|abcd|kkkkkkkk */
-    if (mode == extend::constant) return std::optional<T>(cval);
-
-    std::vector<I> close (arr.ndim, I());
-    size_t dist;
-
-    switch (mode)
-    {
-        /* aaaaaaaa|abcd|dddddddd */
-        case extend::nearest:
-
-            for (size_t n = 0; n < arr.ndim; n++)
-            {
-                if (coord[n] >= static_cast<I>(arr.shape[n])) close[n] = arr.shape[n] - 1;
-                else if (coord[n] < 0) close[n] = 0;
-                else close[n] = coord[n];
-            }
-
-            break;
-
-        /* cbabcdcb|abcd|cbabcdcb */
-        case extend::mirror:
-
-            for (size_t n = 0; n < arr.ndim; n++)
-            {
-                if (coord[n] >= static_cast<I>(arr.shape[n]))
-                {
-                    close[n] = arr.shape[n] - 1;
-                    dist = coord[n] - arr.shape[n] + 1;
-
-                    while (dist-- && close[n] >= 0) close[n]--;
-                }
-                else if (coord[n] < 0)
-                {
-                    close[n] = 0; dist = -coord[n];
-
-                    while (dist-- && close[n] < static_cast<I>(arr.shape[n])) close[n]++;
-                }
-                else close[n] = coord[n];
-            }
-
-            break;
-
-        /* abcddcba|abcd|dcbaabcd */
-        case extend::reflect:
-
-            for (size_t n = 0; n < arr.ndim; n++)
-            {
-                if (coord[n] >= static_cast<I>(arr.shape[n]))
-                {
-                    close[n] = arr.shape[n] - 1;
-                    dist = coord[n] - arr.shape[n];
-
-                    while (dist-- && close[n] >= 0) close[n]--;
-                }
-                else if (coord[n] < 0)
-                {
-                    close[n] = 0; dist = -coord[n] - 1;
-
-                    while (dist-- && close[n] < static_cast<I>(arr.shape[n])) close[n]++;
-                }
-                else close[n] = coord[n];
-            }
-
-            break;
-
-        /* abcdabcd|abcd|abcdabcd */
-        case extend::wrap:
-
-            for (size_t n = 0; n < arr.ndim; n++)
-            {
-                if (coord[n] >= static_cast<I>(arr.shape[n]))
-                {
-                    close[n] = 0;
-                    dist = coord[n] - arr.shape[n];
-
-                    while (dist-- && close[n] < static_cast<I>(arr.shape[n])) close[n]++;
-                }
-                else if (coord[n] < 0)
-                {
-                    close[n] = arr.shape[n] - 1;
-                    dist = -coord[n] - 1;
-
-                    while (dist-- && close[n] >= 0) close[n]--;
-                }
-                else close[n] = coord[n];
-            }
-
-            break;
-
-        default:
-            throw std::invalid_argument("extend_point: invalid extend argument.");
-    }
-
-    size_t index = arr.ravel_index(close.begin(), close.end());
-
-    if (mask[index]) return std::optional<T>(arr[index]);
-    else return std::nullopt;
-}
 
 /*----------------------------------------------------------------------------*/
 /*------------------------------ Binary search -------------------------------*/
@@ -666,6 +405,31 @@ RandomIt wirthmedian(RandomIt first, RandomIt last, Compare comp)
     auto n = std::distance(first, last);
     return wirthselect(first, last, (n & 1) ? n / 2 : n / 2 - 1, comp);
 }
+
+/*----------------------------------------------------------------------------*/
+/*--------------------------- Extend line modes ------------------------------*/
+/*----------------------------------------------------------------------------*/
+/*
+    constant: kkkkkkkk|abcd|kkkkkkkk
+    nearest:  aaaaaaaa|abcd|dddddddd
+    mirror:   cbabcdcb|abcd|cbabcdcb
+    reflect:  abcddcba|abcd|dcbaabcd
+    wrap:     abcdabcd|abcd|abcdabcd
+*/
+enum class extend
+{
+    constant = 0,
+    nearest = 1,
+    mirror = 2,
+    reflect = 3,
+    wrap = 4
+};
+
+static std::unordered_map<std::string, extend> const modes = {{"constant", extend::constant},
+                                                              {"nearest", extend::nearest},
+                                                              {"mirror", extend::mirror},
+                                                              {"reflect", extend::reflect},
+                                                              {"wrap", extend::wrap}};
 
 }
 

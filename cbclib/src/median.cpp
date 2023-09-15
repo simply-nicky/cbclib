@@ -89,8 +89,7 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
     auto ibuf = inp.request();
     if (!fprint)
     {
-        sequence<size_t> seq (size.value(), ibuf.ndim);
-        fprint = py::array_t<bool>(seq.data);
+        fprint = py::array_t<bool>(sequence<size_t>(size.value(), ibuf.ndim));
         PyArray_FILLWBYTE(fprint.value().ptr(), 1);
     }
     py::buffer_info fbuf = fprint.value().request();

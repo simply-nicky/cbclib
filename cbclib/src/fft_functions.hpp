@@ -251,17 +251,59 @@ size_t find_match(size_t target, size_t p7_11_13)
     return match;
 }
 
-std::vector<size_t> fftw_buffer_shape(const std::vector<size_t> & shape, std::true_type)
+std::vector<size_t> fftw_buffer_shape(std::vector<size_t> && shape, std::true_type)
 {
-    return shape;
+    return std::move(shape);
 }
 
-std::vector<size_t> fftw_buffer_shape(const std::vector<size_t> & shape, std::false_type)
+std::vector<size_t> fftw_buffer_shape(std::vector<size_t> && shape, std::false_type)
 {
-    std::vector<size_t> new_shape;
-    std::copy_n(shape.begin(), shape.size() - 1, std::back_inserter(new_shape));
-    new_shape.push_back(2 * (shape[shape.size() - 1] / 2 + 1));
-    return new_shape;
+    shape[shape.size() - 1] = 2 * (shape[shape.size() - 1] / 2 + 1);
+    return std::move(shape);
+}
+
+template <typename OutputIt, typename T>
+OutputIt gaussian_zero(OutputIt first, size_t size, T sigma)
+{
+    auto radius = (size - 1) / 2;
+    for (size_t i = 0; i < size; ++i, ++first)
+    {
+        *first = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+    }
+
+    return first;
+}
+
+template <typename OutputIt, typename T>
+OutputIt gaussian_order(OutputIt first, size_t size, T sigma, unsigned order)
+{
+    std::vector<T> q0 (order + 1, T());
+    std::vector<T> q1 (order + 1, T());
+    for (size_t k = 0; k < order; k++)
+    {
+        for (size_t i = 0; i <= order; i++)
+        {
+            T qval = T();
+            for (size_t j = 0; j <= order; j++)
+            {
+                auto idx = j + (order + 1) * i;
+                if ((idx % (order + 2)) == 1) qval += q0[j] * (idx / (order + 2) + 1);
+                if ((idx % (order + 2)) == (order + 1)) qval -= q0[j] / (sigma * sigma); 
+            }
+            q1[i] = qval;
+        }
+        std::copy(q0.begin(), q0.end(), q1.begin());
+    }
+
+    auto radius = (size - 1) / 2;
+    for (size_t i = 0; i < size; ++i, ++first)
+    {
+        T factor = T();
+        for (size_t j = 0; j < order; j++) factor += std::pow(i - radius, j) * q0[j];
+        *first = factor * std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+    }
+
+    return first;
 }
 
 }
@@ -319,50 +361,141 @@ void fftw_execute(Plan & plan, From * inp, To * out)
 }
 
 template <typename T>
-std::vector<size_t> fftw_buffer_shape(const std::vector<size_t> & shape)
+std::vector<size_t> fftw_buffer_shape(typename detail::any_container<size_t> shape)
 {
-    return detail::fftw_buffer_shape(shape, typename is_complex<T>::type ());
+    return detail::fftw_buffer_shape(std::move(shape), typename is_complex<T>::type ());
 }
 
-template <typename T, class Container>
-void write_buffer(array<T> & buffer, const Container & fshape, array<T> data)
+template <typename T, typename U, class Container>
+void write_buffer(array<T> & buffer, const Container & fshape, array<U> data)
 {
-    std::fill(buffer.begin(), buffer.end(), T());
-    std::vector<size_t> origin;
-    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin),
-                   [](size_t flen, size_t n){return (flen - n) - (flen - n) / 2;});
-    std::vector<size_t> coord (buffer.ndim, 0);
-    for (auto riter = rect_iterator(data.shape); !riter.is_end(); ++riter)
+    auto find_origin = [](size_t flen, size_t n)
     {
-        std::transform(origin.begin(), origin.end(), riter.coord.begin(), coord.begin(),
-                       std::plus<size_t>());
-        auto index = buffer.ravel_index(coord.begin(), coord.end());
-        buffer[index] = data[riter.index];
+        return std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;
+    };
+
+    std::vector<long> origin;
+    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin), find_origin);
+
+    std::vector<long> coord (buffer.ndim, 0);
+    for (auto riter = rect_iterator(fshape); !riter.is_end(); ++riter)
+    {
+        std::transform(riter.coord.begin(), riter.coord.end(), origin.begin(), coord.begin(), std::minus<long>());
+        auto bindex = buffer.ravel_index(riter.coord.begin(), riter.coord.end());
+
+        if (data.is_inbound(coord.begin(), coord.end()))
+        {
+            auto index = data.ravel_index(coord.begin(), coord.end());
+            buffer[bindex] = data[index];
+        }
+        else buffer[bindex] = T();
     }
 }
 
-template <typename T, class Container>
-void read_buffer(const array<T> & buffer, const Container & fshape, array<T> data)
+template <typename T, typename U, class Container>
+void read_buffer(const array<T> & buffer, const Container & fshape, array<U> data)
 {
-    std::vector<size_t> origin;
-    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin),
-                   [](size_t flen, size_t n){return flen - n / 2;});
-    std::vector<size_t> coord (buffer.ndim, 0);
+    auto find_origin = [](size_t flen, size_t n){return std::minus<long>()(flen, n / 2);};
+    std::vector<long> origin;
+    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin), find_origin);
 
+    std::vector<long> coord (buffer.ndim, 0);
     for (auto riter = rect_iterator(data.shape); !riter.is_end(); ++riter)
     {
-        std::transform(origin.begin(), origin.end(), riter.coord.begin(), coord.begin(),
-                       std::plus<size_t>());
-        std::transform(coord.begin(), coord.end(), fshape.begin(), coord.begin(), [](size_t n, size_t flen){return n % flen;});
+        std::transform(origin.begin(), origin.end(), riter.coord.begin(), coord.begin(), std::plus<long>());
+        std::transform(coord.begin(), coord.end(), fshape.begin(), coord.begin(), detail::modulo<long, size_t>);
+
         auto index = buffer.ravel_index(coord.begin(), coord.end());
         data[riter.index] = buffer[index];
     }
 }
 
+template <typename T>
+std::vector<T> gauss_kernel(size_t size, T sigma, unsigned order)
+{
+    std::vector<T> gauss;
+    if (order) detail::gaussian_order(std::back_inserter(gauss), size, sigma, order);
+    else detail::gaussian_zero(std::back_inserter(gauss), size, sigma);
+
+    auto sum = std::reduce(gauss.begin(), gauss.end(), T(), std::plus<T>());
+    std::transform(gauss.begin(), gauss.end(), gauss.begin(), [sum](T val){return val / sum;});
+
+    return gauss;
+}
+
+template <typename T, typename InputIt>
+void write_line(std::vector<T> & buffer, size_t flen, InputIt first, InputIt last, extend mode)
+{
+    auto n = std::distance(first, last);
+    auto origin = std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;
+
+    for (size_t i = 0; i < buffer.size(); ++i)
+    {
+        auto idx = std::minus<long>()(i, origin);
+        if (idx < 0 || idx >= n)
+        {
+            switch (mode)
+            {
+                case extend::constant:
+
+                    buffer[i] = T();
+                    break;
+                
+                case extend::nearest:
+
+                    buffer[i] = (idx < 0) ? *first : *std::prev(last);
+                    break;
+
+                case extend::mirror:
+
+                    buffer[i] = *std::next(first, detail::mirror(idx, 0, n));
+                    break;
+
+                case extend::reflect:
+
+                    buffer[i] = *std::next(first, detail::reflect(idx, 0, n));
+                    break;
+
+                case extend::wrap:
+
+                    buffer[i] = *std::next(first, detail::wrap(idx, 0, n));
+                    break;
+
+                default:
+                    throw std::invalid_argument("Invalid extend argument");
+            }
+        }
+        else
+        {
+            buffer[i] = *std::next(first, idx);
+        }
+    }
+}
+
+template <typename T, typename OutputIt>
+void read_line(const std::vector<T> & buffer, size_t flen, OutputIt first, OutputIt last)
+{
+    auto n = std::distance(first, last);
+    auto origin = std::minus<long>()(flen, n / 2);
+    for (size_t i = 0; first != last; ++first, ++i)
+    {
+        *first = buffer[detail::modulo(std::plus<long>()(i, origin), flen)];
+    }
+}
+
 size_t next_fast_len(size_t target);
 
+template <typename Inp, typename Krn, typename Seq>
+auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<Seq> axis, unsigned threads);
+
+template <typename T>
+py::array_t<T> gaussian_kernel(T sigma, unsigned order, T truncate);
+
 template <typename T, typename U>
-py::array_t<T> fft_convolve(py::array_t<T> inp, py::array_t<T> kernel, std::optional<U> axis, unsigned threads);
+py::array_t<T> gaussian_kernel_vec(std::vector<T> sigma, U order, T truncate);
+
+template <typename T, typename U, typename V>
+py::array_t<T> gaussian_filter(py::array_t<T> inp, U sigma, V order, remove_complex_t<T> truncate, std::string mode, unsigned threads);
 
 }
 

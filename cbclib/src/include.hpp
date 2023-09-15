@@ -27,38 +27,79 @@ namespace cbclib {
 
 namespace py = pybind11;
 
-template <typename T>
-struct sequence
-{
-    std::vector<T> data;
+namespace detail {
 
+template <typename T, typename = void>
+struct is_input_iterator : std::false_type {};
+
+template <typename T>
+struct is_input_iterator<T,
+    std::void_t<decltype(*std::declval<T &>()), decltype(++std::declval<T &>())>
+> : std::true_type {};
+
+template <typename T>
+class any_container
+{
+protected:
+    std::vector<T> vec;
+
+public:
+    any_container() = default;
+
+    template <typename It, typename = std::enable_if_t<is_input_iterator<It>::value>>
+    any_container(It first, It last) : vec(first, last) {}
+
+    template <typename Container,
+        typename = std::enable_if_t<
+            std::is_convertible_v<decltype(*std::begin(std::declval<const Container &>())), T>
+        >
+    >
+    any_container(const Container & c) : any_container(std::begin(c), std::end(c)) {}
+
+    template <typename TIn, typename = std::enable_if_t<std::is_convertible_v<TIn, T>>>
+    any_container(const std::initializer_list<TIn> & c) : any_container(c.begin(), c.end()) {}
+
+    any_container(std::vector<T> && v) : vec(std::move(v)) {}
+
+    operator std::vector<T> && () && { return std::move(this->vec); }
+
+    std::vector<T> & operator*() {return this->vec;}
+    const std::vector<T> & operator*() const {return this->vec;}
+
+    std::vector<T> * operator->() {return &(this->vec);}
+    const std::vector<T> * operator->() const {return &(this->vec);}
+};
+
+}
+
+template <typename T>
+class sequence : public detail::any_container<T>
+{
+public:
     using iterator = typename std::vector<T>::iterator;
     using const_iterator = typename std::vector<T>::const_iterator;
-
-    sequence(std::vector<T> vec = std::vector<T>()) : data(std::move(vec)) {}
-
-    template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, T>>>
-    sequence(const Container & vec) : data(vec.begin(), vec.end()) {}
+    using detail::any_container<T>::any_container;
 
     template <typename U, typename = std::enable_if_t<std::is_convertible_v<U, T>>>
     sequence(U value, size_t length = 1)
     {
-        std::fill_n(std::back_inserter(this->data), length, value);
+        std::fill_n(std::back_inserter(this->vec), length, value);
     }
 
     template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, T>>>
     sequence(const Container & vec, size_t length)
     {
-        std::copy_n(vec.begin(), length, std::back_inserter(this->data));
+        if (vec.size() < length) throw std::invalid_argument("rank of vector is less than the required length");
+        std::copy_n(vec.begin(), length, std::back_inserter(this->vec));
     }
 
-    size_t size() const {return this->data.size();}
+    size_t size() const {return this->vec.size();}
     sequence & unwrap(T max)
     {
         for (size_t i = 0; i < this->size(); i++)
         {
-            this->data[i] = (this->data[i] >= 0) ? this->data[i] : max + this->data[i];
-            if (this->data[i] >= max)
+            this->vec[i] = (this->vec[i] >= 0) ? this->vec[i] : max + this->vec[i];
+            if (this->vec[i] >= max)
                 throw std::invalid_argument("axis is out of bounds");
         }
         return *this;
@@ -70,7 +111,7 @@ struct sequence
         size_t counter = 0;
         for (py::ssize_t i = 0; i < arr.ndim(); i++)
         {
-            if (std::find(this->data.begin(), this->data.end(), i) == this->data.end())
+            if (std::find(this->vec.begin(), this->vec.end(), i) == this->vec.end())
             {
                 auto obj = reinterpret_cast<PyArrayObject *>(arr.release().ptr());
                 arr = py::reinterpret_steal<std::decay_t<Array>>(PyArray_SwapAxes(obj, counter++, i));
@@ -85,7 +126,7 @@ struct sequence
         size_t counter = arr.ndim() - this->size();
         for (py::ssize_t i = arr.ndim() - 1; i >= 0; i--)
         {
-            if (std::find(this->data.begin(), this->data.end(), i) == this->data.end())
+            if (std::find(this->vec.begin(), this->vec.end(), i) == this->vec.end())
             {
                 auto obj = reinterpret_cast<PyArrayObject *>(arr.release().ptr());
                 arr = py::reinterpret_steal<std::decay_t<Array>>(PyArray_SwapAxes(obj, --counter, i));
@@ -94,13 +135,13 @@ struct sequence
         return std::forward<Array>(arr);
     }
 
-    T & operator[] (size_t index) {return this->data[index];}
-    const T & operator[] (size_t index) const {return this->data[index];}
+    T & operator[] (size_t index) {return this->vec[index];}
+    const T & operator[] (size_t index) const {return this->vec[index];}
 
-    iterator begin() {return this->data.begin();}
-    const_iterator begin() const {return this->data.begin();}
-    iterator end() {return this->data.end();}
-    const_iterator end() const {return this->data.end();}
+    iterator begin() {return this->vec.begin();}
+    const_iterator begin() const {return this->vec.begin();}
+    iterator end() {return this->vec.end();}
+    const_iterator end() const {return this->vec.end();}
 };
 
 template <typename F, typename = std::enable_if_t<std::is_floating_point<F>::value>>

@@ -4,6 +4,96 @@
 
 namespace cbclib {
 
+namespace detail{
+
+template <typename InputIt1, typename InputIt2, typename InputIt3, typename OutputIt>
+OutputIt mirror(InputIt1 first, InputIt1 last, OutputIt d_first, InputIt2 min, InputIt3 max)
+{
+    for (; first != last; ++first, ++d_first, ++min, ++max)
+    {
+        *d_first = mirror(*first, *min, *max);
+    }
+    return d_first;
+}
+
+template <typename InputIt1, typename InputIt2, typename InputIt3, typename OutputIt>
+OutputIt reflect(InputIt1 first, InputIt1 last, OutputIt d_first, InputIt2 min, InputIt3 max)
+{
+    for (; first != last; ++first, ++d_first, ++min, ++max)
+    {
+        *d_first = reflect(*first, *min, *max);
+    }
+    return d_first;
+}
+
+template <typename InputIt1, typename InputIt2, typename InputIt3, typename OutputIt>
+OutputIt wrap(InputIt1 first, InputIt1 last, OutputIt d_first, InputIt2 min, InputIt3 max)
+{
+    for (; first != last; ++first, ++d_first, ++min, ++max)
+    {
+        *d_first = wrap(*first, *min, *max);
+    }
+    return d_first;
+}
+
+}
+
+template <typename Container, typename T, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+std::optional<T> extend_point(const Container & coord, const array<T> & arr, const array<bool> & mask, extend mode, const T & cval)
+{
+    using I = typename Container::value_type;
+
+    /* kkkkkkkk|abcd|kkkkkkkk */
+    if (mode == extend::constant) return std::optional<T>(cval);
+
+    std::vector<I> close;
+    std::vector<I> min (arr.ndim, I());
+
+    switch (mode)
+    {
+        /* aaaaaaaa|abcd|dddddddd */
+        case extend::nearest:
+
+            for (size_t n = 0; n < arr.ndim; n++)
+            {
+                if (coord[n] >= static_cast<I>(arr.shape[n])) close.push_back(arr.shape[n] - 1);
+                else if (coord[n] < I()) close.push_back(I());
+                else close.push_back(coord[n]);
+            }
+
+            break;
+
+        /* cbabcdcb|abcd|cbabcdcb */
+        case extend::mirror:
+
+            detail::mirror(coord.begin(), coord.end(), std::back_inserter(close), min.begin(), arr.shape.begin());
+
+            break;
+
+        /* abcddcba|abcd|dcbaabcd */
+        case extend::reflect:
+
+            detail::reflect(coord.begin(), coord.end(), std::back_inserter(close), min.begin(), arr.shape.begin());
+
+            break;
+
+        /* abcdabcd|abcd|abcdabcd */
+        case extend::wrap:
+
+            detail::wrap(coord.begin(), coord.end(), std::back_inserter(close), min.begin(), arr.shape.begin());
+
+            break;
+
+        default:
+            throw std::invalid_argument("Invalid extend argument");
+    }
+
+    size_t index = arr.ravel_index(close.begin(), close.end());
+
+    if (mask[index]) return std::optional<T>(arr[index]);
+    else return std::nullopt;
+}
+
 template <typename T>
 struct footprint
 {
@@ -18,12 +108,13 @@ struct footprint
 
     footprint(const array<bool> & fmask) : ndim(fmask.ndim)
     {
-        for (auto fiter = fmask.begin(); fiter != fmask.end(); fiter++)
+        auto fiter = fmask.begin();
+        for (size_t i = 0; fiter != fmask.end(); ++fiter, ++i)
         {
             if (*fiter)
             {
                 std::vector<long> coord;
-                fmask.unravel_index(std::back_inserter(coord), std::distance(fmask.begin(), fiter));
+                fmask.unravel_index(std::back_inserter(coord), i);
                 auto & offset = this->offsets.emplace_back();
                 std::transform(coord.begin(), coord.end(), fmask.shape.begin(), std::back_inserter(offset),
                                [](long crd, size_t dim){return crd - dim / 2;});
