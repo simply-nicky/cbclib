@@ -85,7 +85,7 @@ std::optional<T> extend_point(const Container & coord, const array<T> & arr, con
             break;
 
         default:
-            throw std::invalid_argument("Invalid extend argument");
+            throw std::invalid_argument("Invalid extend argument: " + std::to_string(static_cast<int>(mode)));
     }
 
     size_t index = arr.ravel_index(close.begin(), close.end());

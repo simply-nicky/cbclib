@@ -14,7 +14,13 @@ void check_mask(const py::array_t<T, py::array::c_style | py::array::forcecast> 
     }
     py::buffer_info mbuf = mask.value().request();
     if (!std::equal(mbuf.shape.begin(), mbuf.shape.end(), ibuf.shape.begin()))
-        throw std::invalid_argument("mask and inp arrays must have identical shapes");
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(mbuf.shape.begin(), mbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument("mask and inp arrays must have identical shapes: {" + oss1.str() +
+                                    "}, {" + oss2.str() + "}");
+    }
 }
 
 template <typename T, typename U>
@@ -45,6 +51,8 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
     auto iarr = array<T>(inp.request());
     auto marr = array<bool>(mask.value().request());
 
+    thread_exception e;
+
     py::gil_scoped_release release;
 
     threads = (threads > oarr.size) ? oarr.size : threads;
@@ -58,18 +66,23 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
         #pragma omp for
         for (size_t i = 0; i < oarr.size; i++)
         {
-            buffer.clear();
-            auto miter = marr.line_begin(ax, i);
-            auto iiter = iarr.line_begin(ax, i);
+            e.run([&]
+            {
+                buffer.clear();
+                auto miter = marr.line_begin(ax, i);
+                auto iiter = iarr.line_begin(ax, i);
 
-            for (auto idx : idxs) if (miter[idx]) buffer.push_back(iiter[idx]);
+                for (auto idx : idxs) if (miter[idx]) buffer.push_back(iiter[idx]);
 
-            if (buffer.size()) oarr[i] = *wirthmedian(buffer.begin(), buffer.end(), std::less<T>());
-            else oarr[i] = T();
+                if (buffer.size()) oarr[i] = *wirthmedian(buffer.begin(), buffer.end(), std::less<T>());
+                else oarr[i] = T();
+            });
         }
     }
 
     py::gil_scoped_acquire acquire;
+
+    e.rethrow();
 
     return out;
 }
@@ -94,7 +107,8 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
     }
     py::buffer_info fbuf = fprint.value().request();
     if (fbuf.ndim != ibuf.ndim)
-        throw std::invalid_argument("fprint must have the same number of dimensions as the input");
+        throw std::invalid_argument("fprint must have the same number of dimensions (" + std::to_string(fbuf.ndim) + 
+                                    ") as the input (" + std::to_string(ibuf.ndim) + ")");
 
     return py::array_t<T>(ibuf.shape);
 }
@@ -110,7 +124,7 @@ py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forc
 
     auto it = modes.find(mode);
     if (it == modes.end())
-        throw std::invalid_argument("invalid mode argument");
+        throw std::invalid_argument("invalid mode argument: " + mode);
     auto m = it->second;
 
     auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
@@ -120,6 +134,8 @@ py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forc
     auto marr = array<bool>(mask.value().request());
     auto imarr = array<bool>(inp_mask.value().request());
     auto farr = array<bool>(fprint.value().request());
+
+    thread_exception e;
 
     py::gil_scoped_release release;
 
@@ -131,18 +147,23 @@ py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forc
         #pragma omp for schedule(guided)
         for (size_t i = 0; i < iarr.size; i++)
         {
-            if (marr[i])
+            e.run([&]
             {
-                iarr.unravel_index(coord.begin(), i);
-                fpt.update(coord, iarr, imarr, m, cval);
+                if (marr[i])
+                {
+                    iarr.unravel_index(coord.begin(), i);
+                    fpt.update(coord, iarr, imarr, m, cval);
 
-                if (fpt.data.size()) oarr[i] = *wirthmedian(fpt.data.begin(), fpt.data.end(), std::less<T>());
-            }
-            else oarr[i] = T();
+                    if (fpt.data.size()) oarr[i] = *wirthmedian(fpt.data.begin(), fpt.data.end(), std::less<T>());
+                }
+                else oarr[i] = T();
+            });
         }
     }
 
     py::gil_scoped_acquire acquire;
+
+    e.rethrow();
 
     return out;
 }
@@ -158,7 +179,7 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
 
     auto it = modes.find(mode);
     if (it == modes.end())
-        throw std::invalid_argument("invalid mode argument");
+        throw std::invalid_argument("invalid mode argument: " + mode);
     auto m = it->second;
 
     auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
@@ -168,6 +189,8 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
     auto marr = array<bool>(mask.value().request());
     auto imarr = array<bool>(inp_mask.value().request());
     auto farr = array<bool>(fprint.value().request());
+
+    thread_exception e;
 
     py::gil_scoped_release release;
 
@@ -179,18 +202,23 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
         #pragma omp for schedule(guided)
         for (size_t i = 0; i < iarr.size; i++)
         {
-            if (marr[i])
+            e.run([&]
             {
-                iarr.unravel_index(coord.begin(), i);
-                fpt.update(coord, iarr, imarr, m, cval);
+                if (marr[i])
+                {
+                    iarr.unravel_index(coord.begin(), i);
+                    fpt.update(coord, iarr, imarr, m, cval);
 
-                if (fpt.data.size()) oarr[i] = *wirthselect(fpt.data.begin(), fpt.data.end(), fpt.data.size() - 1, std::less<T>());
-            }
-            else oarr[i] = T();
+                    if (fpt.data.size()) oarr[i] = *wirthselect(fpt.data.begin(), fpt.data.end(), fpt.data.size() - 1, std::less<T>());
+                }
+                else oarr[i] = T();
+            });
         }
     }
 
     py::gil_scoped_acquire acquire;
+
+    e.rethrow();
 
     return out;
 }
@@ -224,6 +252,8 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     auto iarr = array<T>(inp.request());
     auto marr = array<bool>(mask.value().request());
 
+    thread_exception e;
+
     py::gil_scoped_release release;
 
     threads = (threads > oarr.size) ? oarr.size : threads;
@@ -240,45 +270,50 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
         #pragma omp for
         for (size_t i = 0; i < oarr.size; i++)
         {
-            auto iiter = iarr.line_begin(ax, i);
-            auto miter = marr.line_begin(ax, i);
-
-            auto get_err = [=, &mean](size_t idx){return miter[idx] * (iiter[idx] - mean) * (iiter[idx] - mean);};
-
-            buffer.clear();
-            std::iota(idxs.begin(), idxs.end(), 0);
-            for (auto idx : idxs) if (miter[idx]) buffer.push_back(iiter[idx]);
-
-            if (buffer.size()) mean = *wirthmedian(buffer.begin(), buffer.end(), std::less<T>());
-            else mean = D();
-
-
-            for (int n = 0; n < n_iter; n++)
+            e.run([&]
             {
+                auto iiter = iarr.line_begin(ax, i);
+                auto miter = marr.line_begin(ax, i);
+
+                auto get_err = [=, &mean](size_t idx){return miter[idx] * (iiter[idx] - mean) * (iiter[idx] - mean);};
+
+                buffer.clear();
+                std::iota(idxs.begin(), idxs.end(), 0);
+                for (auto idx : idxs) if (miter[idx]) buffer.push_back(iiter[idx]);
+
+                if (buffer.size()) mean = *wirthmedian(buffer.begin(), buffer.end(), std::less<T>());
+                else mean = D();
+
+
+                for (int n = 0; n < n_iter; n++)
+                {
+                    std::iota(idxs.begin(), idxs.end(), 0);
+                    std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
+                    std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
+
+                    mean = std::transform_reduce(idxs.begin() + j0, idxs.begin() + j1, D(), std::plus<D>(),
+                                                [=](size_t idx){return miter[idx] * iiter[idx];}) / (j1 - j0);
+                }
+
                 std::iota(idxs.begin(), idxs.end(), 0);
                 std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
                 std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
 
-                mean = std::transform_reduce(idxs.begin() + j0, idxs.begin() + j1, D(), std::plus<D>(),
-                                             [=](size_t idx){return miter[idx] * iiter[idx];}) / (j1 - j0);
-            }
-
-            std::iota(idxs.begin(), idxs.end(), 0);
-            std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
-            std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
-
-            D cumsum = D(); mean = D(); int count = 0;
-            for (size_t j = 0; j < idxs.size(); j++)
-            {
-                if (lm * cumsum > j * err[idxs[j]]) {mean += miter[idxs[j]] * iiter[idxs[j]]; count ++;}
-                cumsum += err[idxs[j]];
-            }
-            if (count) oarr[i] = mean / count;
-            else oarr[i] = D();
+                D cumsum = D(); mean = D(); int count = 0;
+                for (size_t j = 0; j < idxs.size(); j++)
+                {
+                    if (lm * cumsum > j * err[idxs[j]]) {mean += miter[idxs[j]] * iiter[idxs[j]]; count ++;}
+                    cumsum += err[idxs[j]];
+                }
+                if (count) oarr[i] = mean / count;
+                else oarr[i] = D();
+            });
         }
     }
 
     py::gil_scoped_acquire acquire;
+
+    e.rethrow();
 
     return out;
 }
@@ -326,6 +361,8 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     auto yarr = array<T>(y.request());
     auto marr = array<bool>(mask.value().request());
 
+    thread_exception e;
+
     py::gil_scoped_release release;
 
     threads = (threads > repeats) ? repeats : threads;
@@ -345,65 +382,68 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
         #pragma omp for
         for (size_t i = 0; i < repeats; i++)
         {
-            auto yiter = yarr.line_begin(ax, i);
-            auto miter = marr.line_begin(ax, i);
+            e.run([&]
+            {
+                auto yiter = yarr.line_begin(ax, i);
+                auto miter = marr.line_begin(ax, i);
 
-            auto get_err = [=, &sums, &Warr](size_t idx) -> D
-            {
-                D err = miter[idx] * yiter[idx];
-                auto Witer = Warr.line_begin(0, idx);
-                for (size_t k = 0; k < sums.size(); k++) err -= Witer[k] * get_x(sums[k]);
-                return miter[idx] * err * err;
-            };
-            auto get_pair = [=, &Warr](size_t k)
-            {
-                auto Witer = Warr.line_begin(Warr.ndim - 1, k);
-                auto f = [=](size_t idx)
+                auto get_err = [=, &sums, &Warr](size_t idx) -> D
                 {
-                    return std::make_pair(miter[idx] * yiter[idx] * Witer[idx], Witer[idx] * Witer[idx]);
+                    D err = miter[idx] * yiter[idx];
+                    auto Witer = Warr.line_begin(0, idx);
+                    for (size_t k = 0; k < sums.size(); k++) err -= Witer[k] * get_x(sums[k]);
+                    return miter[idx] * err * err;
                 };
-                return f;
-            };
+                auto get_pair = [=, &Warr](size_t k)
+                {
+                    auto Witer = Warr.line_begin(Warr.ndim - 1, k);
+                    auto f = [=](size_t idx)
+                    {
+                        return std::make_pair(miter[idx] * yiter[idx] * Witer[idx], Witer[idx] * Witer[idx]);
+                    };
+                    return f;
+                };
 
-            std::iota(idxs.begin(), idxs.end(), 0);
-            for (size_t k = 0; k < sums.size(); k++)
-            {
-                sums[k] = std::transform_reduce(idxs.begin(), idxs.end(), std::pair<T, T>(), sum_pairs, get_pair(k));
-            }
+                std::iota(idxs.begin(), idxs.end(), 0);
+                for (size_t k = 0; k < sums.size(); k++)
+                {
+                    sums[k] = std::transform_reduce(idxs.begin(), idxs.end(), std::pair<T, T>(), sum_pairs, get_pair(k));
+                }
 
-            for (int n = 0; n < n_iter; n++)
-            {
+                for (int n = 0; n < n_iter; n++)
+                {
+                    std::iota(idxs.begin(), idxs.end(), 0);
+                    std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
+                    std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
+
+                    for (size_t k = 0; k < sums.size(); k++)
+                    {
+                        sums[k] = std::transform_reduce(idxs.begin() + j0, idxs.begin() + j1, std::pair<T, T>(), sum_pairs, get_pair(k));
+                    }
+                }
+
                 std::iota(idxs.begin(), idxs.end(), 0);
                 std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
                 std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
 
-                for (size_t k = 0; k < sums.size(); k++)
+                D cumsum = D();
+                std::fill(sums.begin(), sums.end(), std::pair<T, T>());
+                for (size_t j = 0; j < idxs.size(); j++)
                 {
-                    sums[k] = std::transform_reduce(idxs.begin() + j0, idxs.begin() + j1, std::pair<T, T>(), sum_pairs, get_pair(k));
-                }
-            }
-
-            std::iota(idxs.begin(), idxs.end(), 0);
-            std::transform(idxs.begin(), idxs.end(), err.begin(), get_err);
-            std::sort(idxs.begin(), idxs.end(), [&err](size_t i1, size_t i2){return err[i1] < err[i2];});
-
-            D cumsum = D();
-            std::fill(sums.begin(), sums.end(), std::pair<T, T>());
-            for (size_t j = 0; j < idxs.size(); j++)
-            {
-                if (lm * cumsum > j * err[idxs[j]])
-                {
-                    auto Witer = Warr.line_begin(0, idxs[j]);
-                    for (size_t k = 0; k < sums.size(); k++)
+                    if (lm * cumsum > j * err[idxs[j]])
                     {
-                        sums[k].first += miter[idxs[j]] * yiter[idxs[j]] * Witer[k];
-                        sums[k].second += Witer[k] * Witer[k];
+                        auto Witer = Warr.line_begin(0, idxs[j]);
+                        for (size_t k = 0; k < sums.size(); k++)
+                        {
+                            sums[k].first += miter[idxs[j]] * yiter[idxs[j]] * Witer[k];
+                            sums[k].second += Witer[k] * Witer[k];
+                        }
                     }
+                    cumsum += err[idxs[j]];
                 }
-                cumsum += err[idxs[j]];
-            }
-            
-            std::transform(sums.begin(), sums.end(), oarr.line_begin(ax, i), get_x);
+                
+                std::transform(sums.begin(), sums.end(), oarr.line_begin(ax, i), get_x);
+            });
         }
     }
 
@@ -423,7 +463,7 @@ PYBIND11_MODULE(median, m)
     {
         import_numpy();
     }
-    catch(const py::error_already_set & e)
+    catch (const py::error_already_set & e)
     {
         return;
     }

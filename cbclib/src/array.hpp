@@ -54,9 +54,9 @@ constexpr std::make_signed_t<T> wrap(T a, U min, V max)
 }
 
 template <typename InputIt1, typename InputIt2>
-typename InputIt1::value_type ravel_index_impl(InputIt1 cfirst, InputIt1 clast, InputIt2 sfirst)
+auto ravel_index_impl(InputIt1 cfirst, InputIt1 clast, InputIt2 sfirst)
 {
-    using value_t = typename InputIt1::value_type;
+    using value_t = decltype(+*std::declval<InputIt1 &>());
     value_t index = value_t();
     for(; cfirst != clast; cfirst++, ++sfirst) index += *cfirst * *sfirst;
     return index;
@@ -98,21 +98,45 @@ public:
         }
     }
 
-    template <typename CoordIter, typename = std::enable_if_t<std::is_integral_v<typename CoordIter::value_type>>>
+    template <typename CoordIter, typename = std::enable_if_t<is_input_iterator<CoordIter>::value>>
     bool is_inbound(CoordIter first, CoordIter last) const
     {
         bool flag = true;
         for (size_t i = 0; first != last; ++first, ++i)
         {
-            flag &= *first >= 0 && *first < static_cast<typename CoordIter::value_type>(this->shape[i]);
+            flag &= *first >= 0 && *first < static_cast<decltype(+*std::declval<CoordIter &>())>(this->shape[i]);
         }
         return flag;
     }
 
-    template <typename CoordIter, typename = std::enable_if_t<std::is_integral_v<typename CoordIter::value_type>>>
-    typename CoordIter::value_type ravel_index(CoordIter first, CoordIter last) const
+    template <typename Container>
+    bool is_inbound(const Container & coord) const
+    {
+        return is_inbound(coord.begin(), coord.end());
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    bool is_inbound(const std::initializer_list<T> & coord) const
+    {
+        return is_inbound(coord.begin(), coord.end());
+    }
+
+    template <typename CoordIter, typename = std::enable_if_t<is_input_iterator<CoordIter>::value>>
+    auto ravel_index(CoordIter first, CoordIter last) const
     {
         return ravel_index_impl(first, last, this->strides.begin());
+    }
+
+    template <typename Container>
+    auto ravel_index(const Container & coord) const
+    {
+        return ravel_index_impl(coord.begin(), coord.end(), this->strides.begin());
+    }
+
+    template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
+    auto ravel_index(const std::initializer_list<T> & coord) const
+    {
+        return ravel_index_impl(coord.begin(), coord.end(), this->strides.begin());
     }
 
     template <
@@ -266,7 +290,7 @@ public:
     }
 
 protected:
-    void check_index(size_t axis, size_t index)
+    void check_index(size_t axis, size_t index) const
     {
         if (axis >= this->ndim || index >= (this->size / this->shape[axis]))
             throw std::out_of_range("index " + std::to_string(index) + " is out of bound for axis "

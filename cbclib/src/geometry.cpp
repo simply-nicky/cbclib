@@ -10,7 +10,11 @@ py::array_t<F> euler_angles(py::array_t<F, py::array::c_style | py::array::force
 
     auto rbuf = rmats.request();
     if (rbuf.ndim < 2 || rbuf.shape[rbuf.ndim - 2] != 3 || rbuf.shape[rbuf.ndim - 1] != 3)
-        throw std::invalid_argument("rmats has incompatible shape");
+    {
+        std::ostringstream oss;
+        std::copy(rbuf.shape.begin(), rbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("rmats has incompatible shape: {" + oss.str() + "}");
+    }
     auto rsize = rbuf.size / 9;
 
     std::vector<py::ssize_t> ashape;
@@ -57,7 +61,11 @@ py::array_t<F> euler_matrix(py::array_t<F, py::array::c_style | py::array::force
 
     auto abuf = angles.request();
     if (abuf.shape[abuf.ndim - 1] != 3)
-        throw std::invalid_argument("angles has incompatible shape");
+    {
+        std::ostringstream oss;
+        std::copy(abuf.shape.begin(), abuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("angles has incompatible shape {" + oss.str() + "}");
+    }
     auto asize = abuf.size / 3;
 
     std::vector<py::ssize_t> rshape;
@@ -190,7 +198,11 @@ py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast
     auto size = xbuf.size;
 
     if (sbuf.shape[sbuf.ndim - 1] != 3)
-        throw std::invalid_argument("src has invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(sbuf.shape.begin(), sbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("src has invalid shape: {" + oss.str() + "}");
+    }
     auto ssize = sbuf.size / sbuf.shape[sbuf.ndim - 1];
 
     if (!idxs)
@@ -206,9 +218,16 @@ py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast
 
     py::buffer_info ibuf = idxs.value().request();
     if (size != ybuf.size || size != ibuf.size)
-        throw std::invalid_argument("x, y, and idxs have incompatible shapes");
+    {
+        std::ostringstream oss1, oss2, oss3;
+        std::copy(xbuf.shape.begin(), xbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(ybuf.shape.begin(), ybuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss3, ", "));
+        throw std::invalid_argument("x, y, and idxs have incompatible shapes: {" + oss1.str() + 
+                                    "}, {" + oss2.str() + "}, and {" + oss3.str() + "}");
+    }
     if (idxs.value().data()[ibuf.size - 1] + 1 > static_cast<I>(ssize))
-        throw std::invalid_argument("src and idxs have incompatible shapes");
+        throw std::invalid_argument("invalid idxs value: " + std::to_string(idxs.value().data()[ibuf.size - 1]));
 
     std::vector<py::ssize_t> out_shape;
     std::copy(xbuf.shape.begin(), xbuf.shape.end(), std::back_inserter(out_shape));
@@ -251,7 +270,11 @@ auto k_to_det(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
     py::buffer_info kbuf = karr.request(), sbuf = src.request();
 
     if (kbuf.shape[kbuf.ndim - 1] != 3)
-        throw std::invalid_argument("karr has an invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("karr has an invalid shape: {" + oss.str() + "}");
+    }
     auto size = kbuf.size / kbuf.shape[kbuf.ndim - 1];
 
     if (sbuf.shape[sbuf.ndim - 1] != 3)
@@ -271,9 +294,14 @@ auto k_to_det(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
 
     py::buffer_info ibuf = idxs.value().request();
     if (size != ibuf.size)
-        throw std::invalid_argument("karr and idxs have incompatible shapes");
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument("karr and idxs have incompatible shapes: {" + oss1.str() + "}, {" + oss2.str() + "}");
+    }
     if (idxs.value().data()[ibuf.size - 1] + 1 > static_cast<I>(ssize))
-        throw std::invalid_argument("src and idxs have incompatible shapes");
+        throw std::invalid_argument("invalid idxs value: " + std::to_string(idxs.value().data()[ibuf.size - 1]));
 
     std::vector<py::ssize_t> out_shape;
     std::copy_n(kbuf.shape.begin(), kbuf.ndim - 1, std::back_inserter(out_shape));
@@ -312,7 +340,11 @@ py::array_t<F> k_to_smp(py::array_t<F, py::array::c_style | py::array::forcecast
     py::buffer_info kbuf = karr.request(), zbuf = z.request();
 
     if (kbuf.shape[kbuf.ndim - 1] != 3)
-        throw std::invalid_argument("karr has an invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("karr has an invalid shape: {" + oss.str() + "}");
+    }
     auto size = kbuf.size / kbuf.shape[kbuf.ndim - 1];
 
     if (!idxs)
@@ -328,9 +360,14 @@ py::array_t<F> k_to_smp(py::array_t<F, py::array::c_style | py::array::forcecast
 
     py::buffer_info ibuf = idxs.value().request();
     if (size != ibuf.size)
-        throw std::invalid_argument("karr and idxs have incompatible shapes");
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument("karr and idxs have incompatible shapes: {" + oss1.str() + "}, {" + oss2.str() + "}");
+    }
     if (idxs.value().data()[ibuf.size - 1] + 1 > static_cast<I>(zbuf.size))
-        throw std::invalid_argument("idxs and z have incompatible shapes");
+        throw std::invalid_argument("invalid idxs value: " + std::to_string(idxs.value().data()[ibuf.size - 1]));
 
     std::vector<py::ssize_t> out_shape;
     std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::back_inserter(out_shape));
@@ -418,11 +455,19 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
     py::buffer_info hbuf = hkl.request(), bbuf = basis.request();
 
     if (hbuf.shape[hbuf.ndim - 1] != 3)
-        throw std::invalid_argument("hkl has an invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(hbuf.shape.begin(), hbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("hkl has an invalid shape: {" + oss.str() + "}");
+    }
     auto hsize = hbuf.size / hbuf.shape[hbuf.ndim - 1];
     
     if (bbuf.ndim < 2 || bbuf.shape[bbuf.ndim - 1] != 3 || bbuf.shape[bbuf.ndim - 2] != 3)
-        throw std::invalid_argument("basis has an invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(bbuf.shape.begin(), bbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("basis has an invalid shape: {" + oss.str() + "}");
+    }
     auto bsize = bbuf.size / (bbuf.shape[bbuf.ndim - 1] * bbuf.shape[bbuf.ndim - 2]);
 
     if (!hidxs && !bidxs)
@@ -460,7 +505,12 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
 
     auto hibuf = hidxs.value().request(), bibuf = bidxs.value().request();
     if (!std::equal(hibuf.shape.begin(), hibuf.shape.end(), bibuf.shape.begin()))
-        throw std::invalid_argument("hidxs and bidxs have incompatible shapes");
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(hibuf.shape.begin(), hibuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(bibuf.shape.begin(), bibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument("hidxs and bidxs have incompatible shapes: {" + oss1.str() + "}, {" + oss2.str() + "}");
+    }
 
     std::vector<py::ssize_t> out_shape;
     std::copy(hibuf.shape.begin(), hibuf.shape.end(), std::back_inserter(out_shape));
@@ -476,6 +526,8 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
     auto bptr = static_cast<F *>(bbuf.ptr);
     auto biptr = static_cast<I *>(bibuf.ptr);
 
+    thread_exception e;
+
     py::gil_scoped_release release;
 
     auto NA = sqrt(kmax[0] * kmax[0] + kmax[1] * kmax[1]);
@@ -488,49 +540,54 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
         #pragma omp for
         for (py::ssize_t n = 0; n < hsize * bsize; n++)
         {
-            q[0] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n]    ]
-                 + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 3]
-                 + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 6];
-            q[1] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n] + 1]
-                 + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 4]
-                 + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 7];
-            q[2] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n] + 2]
-                 + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 5]
-                 + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 8];
-
-            auto q_sq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
-            auto q_rho = q[2] * sqrt(1 / q_sq - 0.25) + sqrt(q[0] * q[0] + q[1] * q[1]) / 2;
-
-            if (q_sq < 4 && abs(q_rho) < NA)
+            e.run([&]
             {
-                solutions[0] = find_intersection(q, {0, 1}, {kmin[0], 0}, {kmin[1], kmax[1]});
-                solutions[1] = find_intersection(q, {1, 0}, {0, kmin[1]}, {kmin[0], kmax[0]});
-                solutions[2] = find_intersection(q, {0, 1}, {kmax[0], 0}, {kmin[1], kmax[1]});
-                solutions[3] = find_intersection(q, {1, 0}, {0, kmax[1]}, {kmin[0], kmax[0]});
+                q[0] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n]    ]
+                     + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 3]
+                     + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 6];
+                q[1] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n] + 1]
+                     + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 4]
+                     + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 7];
+                q[2] = hptr[3 * hiptr[n]    ] * bptr[9 * biptr[n] + 2]
+                     + hptr[3 * hiptr[n] + 1] * bptr[9 * biptr[n] + 5]
+                     + hptr[3 * hiptr[n] + 2] * bptr[9 * biptr[n] + 8];
 
-                if (std::transform_reduce(solutions.begin(), solutions.end(), 0, std::plus<int>(),
-                                          [](std::optional<std::array<F, 3>> sol){return int(bool(sol));}) == 2)
+                auto q_sq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
+                auto q_rho = q[2] * sqrt(1 / q_sq - 0.25) + sqrt(q[0] * q[0] + q[1] * q[1]) / 2;
+
+                if (q_sq < 4 && abs(q_rho) < NA)
                 {
-                    auto oiter = optr + 6 * n;
-                    for (auto sol: solutions)
+                    solutions[0] = find_intersection(q, {0, 1}, {kmin[0], 0}, {kmin[1], kmax[1]});
+                    solutions[1] = find_intersection(q, {1, 0}, {0, kmin[1]}, {kmin[0], kmax[0]});
+                    solutions[2] = find_intersection(q, {0, 1}, {kmax[0], 0}, {kmin[1], kmax[1]});
+                    solutions[3] = find_intersection(q, {1, 0}, {0, kmax[1]}, {kmin[0], kmax[0]});
+
+                    if (std::transform_reduce(solutions.begin(), solutions.end(), 0, std::plus<int>(),
+                                            [](std::optional<std::array<F, 3>> sol){return int(bool(sol));}) == 2)
                     {
-                        if (sol) {std::copy(sol.value().begin(), sol.value().end(), oiter); oiter += sol.value().size();}
+                        auto oiter = optr + 6 * n;
+                        for (auto sol: solutions)
+                        {
+                            if (sol) {std::copy(sol.value().begin(), sol.value().end(), oiter); oiter += sol.value().size();}
+                        }
+                        mptr[n] = true;
                     }
-                    mptr[n] = true;
+                    else
+                    {
+                        std::fill_n(optr + 6 * n, 6, F()); mptr[n] = false;
+                    }
                 }
                 else
                 {
                     std::fill_n(optr + 6 * n, 6, F()); mptr[n] = false;
                 }
-            }
-            else
-            {
-                std::fill_n(optr + 6 * n, 6, F()); mptr[n] = false;
-            }
+            });
         }
     }
 
     py::gil_scoped_acquire acquire;
+
+    e.rethrow();
 
     return std::tuple(out, mask);
 }
@@ -546,11 +603,19 @@ py::array_t<F> rotate_vec(py::array_t<F, py::array::c_style | py::array::forceca
     py::buffer_info vbuf = vecs.request(), rbuf = rmats.request();
 
     if (vbuf.shape[vbuf.ndim - 1] != 3)
-        throw std::invalid_argument("vecs has an invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(vbuf.shape.begin(), vbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("vecs has an invalid shape: {" + oss.str() + "}");
+    }
     auto vsize = vbuf.size / vbuf.shape[vbuf.ndim - 1];
 
     if (rbuf.shape[rbuf.ndim - 1] != 3 || rbuf.shape[rbuf.ndim - 2] != 3)
-        throw std::invalid_argument("rmats has invalid shape");
+    {
+        std::ostringstream oss;
+        std::copy(rbuf.shape.begin(), rbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("rmats has an invalid shape: {" + oss.str() + "}");
+    }
     auto rsize = rbuf.size / (rbuf.shape[rbuf.ndim - 1] * rbuf.shape[rbuf.ndim - 2]);
 
     if (!idxs)
@@ -566,7 +631,7 @@ py::array_t<F> rotate_vec(py::array_t<F, py::array::c_style | py::array::forceca
 
     py::buffer_info ibuf = idxs.value().request();
     if (idxs.value().data()[ibuf.size - 1] + 1 > static_cast<I>(rsize))
-        throw std::invalid_argument("vecs and idxs have incompatible shapes");
+        throw std::invalid_argument("invalid idxs value: " + std::to_string(idxs.value().data()[ibuf.size - 1]));
 
     auto out = py::array_t<F>(vbuf.shape);
     py::buffer_info obuf = out.request();
@@ -641,7 +706,7 @@ PYBIND11_MODULE(geometry, m)
     {
         import_numpy();
     }
-    catch(const py::error_already_set & e)
+    catch (const py::error_already_set & e)
     {
         return;
     }

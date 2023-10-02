@@ -265,10 +265,18 @@ std::vector<size_t> fftw_buffer_shape(std::vector<size_t> && shape, std::false_t
 template <typename OutputIt, typename T>
 OutputIt gaussian_zero(OutputIt first, size_t size, T sigma)
 {
+    T sum = T();
     auto radius = (size - 1) / 2;
+    for (size_t i = 0; i < size; ++i)
+    {
+        auto gauss = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+        sum += gauss;
+    }
+
     for (size_t i = 0; i < size; ++i, ++first)
     {
-        *first = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+        auto gauss = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+        *first = gauss / sum;
     }
 
     return first;
@@ -278,7 +286,9 @@ template <typename OutputIt, typename T>
 OutputIt gaussian_order(OutputIt first, size_t size, T sigma, unsigned order)
 {
     std::vector<T> q0 (order + 1, T());
+    q0[0] = T(1.0);
     std::vector<T> q1 (order + 1, T());
+
     for (size_t k = 0; k < order; k++)
     {
         for (size_t i = 0; i <= order; i++)
@@ -292,15 +302,23 @@ OutputIt gaussian_order(OutputIt first, size_t size, T sigma, unsigned order)
             }
             q1[i] = qval;
         }
-        std::copy(q0.begin(), q0.end(), q1.begin());
+        std::copy(q1.begin(), q1.end(), q0.begin());
     }
 
+    T sum = T();
     auto radius = (size - 1) / 2;
+    for (size_t i = 0; i < size; ++i)
+    {
+        sum += std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+    }
+
     for (size_t i = 0; i < size; ++i, ++first)
     {
+        auto gauss = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+
         T factor = T();
-        for (size_t j = 0; j < order; j++) factor += std::pow(i - radius, j) * q0[j];
-        *first = factor * std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
+        for (size_t j = 0; j <= order; j++) factor += std::pow(std::minus<long>()(i, radius), j) * q1[j];
+        *first = factor * gauss / sum;
     }
 
     return first;
@@ -410,17 +428,11 @@ void read_buffer(const array<T> & buffer, const Container & fshape, array<U> dat
     }
 }
 
-template <typename T>
-std::vector<T> gauss_kernel(size_t size, T sigma, unsigned order)
+template <class OutputIt, typename T>
+OutputIt gauss_kernel(OutputIt first, size_t size, T sigma, unsigned order)
 {
-    std::vector<T> gauss;
-    if (order) detail::gaussian_order(std::back_inserter(gauss), size, sigma, order);
-    else detail::gaussian_zero(std::back_inserter(gauss), size, sigma);
-
-    auto sum = std::reduce(gauss.begin(), gauss.end(), T(), std::plus<T>());
-    std::transform(gauss.begin(), gauss.end(), gauss.begin(), [sum](T val){return val / sum;});
-
-    return gauss;
+    if (order) return detail::gaussian_order(first, size, sigma, order);
+    return detail::gaussian_zero(first, size, sigma);
 }
 
 template <typename T, typename InputIt>
@@ -462,7 +474,7 @@ void write_line(std::vector<T> & buffer, size_t flen, InputIt first, InputIt las
                     break;
 
                 default:
-                    throw std::invalid_argument("Invalid extend argument");
+                    throw std::invalid_argument("Invalid extend argument: " + std::to_string(static_cast<int>(mode)));
             }
         }
         else
@@ -496,6 +508,9 @@ py::array_t<T> gaussian_kernel_vec(std::vector<T> sigma, U order, T truncate);
 
 template <typename T, typename U, typename V>
 py::array_t<T> gaussian_filter(py::array_t<T> inp, U sigma, V order, remove_complex_t<T> truncate, std::string mode, unsigned threads);
+
+template <typename T, typename U>
+py::array_t<T> gaussian_gradient_magnitude(py::array_t<T> inp, U sigma, std::string mode, remove_complex_t<T> truncate, unsigned threads);
 
 }
 

@@ -242,7 +242,7 @@ static void plot_line_width(void *out, const size_t *dims, float *line, float wi
 }
 
 int draw_line_int(unsigned *out, const size_t *dims, unsigned max_val, float *lines, const size_t *ldims,
-                 float dilation, line_profile profile)
+                  float dilation, line_profile profile)
 {
     /* check parameters */
     if (!out || !lines || !profile) {ERROR("draw_line_int: one of the arguments is NULL."); return -1;}

@@ -9,6 +9,7 @@
 #include <optional>
 #include <random>
 #include <vector>
+#include <mutex>
 #include <math.h>
 #include <omp.h>
 #include <Python.h>
@@ -26,6 +27,23 @@
 namespace cbclib {
 
 namespace py = pybind11;
+
+template <typename Container, typename = std::enable_if_t<std::is_rvalue_reference_v<Container &&>>>
+inline py::array_t<typename Container::value_type> as_pyarray(Container && seq)
+{
+    Container * seq_ptr = new Container(std::move(seq));
+    auto capsule = py::capsule(seq_ptr, [](void * p) {delete reinterpret_cast<Container *>(p);});
+    return py::array(seq_ptr->size(),  // shape of array
+                     seq_ptr->data(),  // c-style contiguous strides for Container
+                     capsule           // numpy array references this parent
+    );
+}
+
+template <typename Container>
+inline py::array_t<typename Container::value_type> to_pyarray(const Container & seq)
+{
+    return py::array(seq.size(), seq.data());
+}
 
 namespace detail {
 
@@ -89,7 +107,9 @@ public:
     template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, T>>>
     sequence(const Container & vec, size_t length)
     {
-        if (vec.size() < length) throw std::invalid_argument("rank of vector is less than the required length");
+        if (vec.size() < length)
+            throw std::invalid_argument("rank of vector (" + std::to_string(vec.size()) +
+                                        ") is less than the required length (" + std::to_string(length) + ")");
         std::copy_n(vec.begin(), length, std::back_inserter(this->vec));
     }
 
@@ -100,7 +120,8 @@ public:
         {
             this->vec[i] = (this->vec[i] >= 0) ? this->vec[i] : max + this->vec[i];
             if (this->vec[i] >= max)
-                throw std::invalid_argument("axis is out of bounds");
+                throw std::invalid_argument("axis " + std::to_string(this->vec[i]) +
+                                            " is out of bounds (" + std::to_string(max) + ")");
         }
         return *this;
     }
@@ -152,6 +173,40 @@ bool isclose(F a, F b, F atol = F(1e-8), F rtol = F(1e-5))
 }
 
 inline void * import_numpy() {import_array(); return NULL;}
+
+class thread_exception
+{
+    std::exception_ptr ptr;
+    std::mutex lock;
+
+public:
+
+    thread_exception() : ptr(nullptr) {}
+
+    void rethrow()
+    {
+        if (this->ptr) std::rethrow_exception(this->ptr);
+    }
+
+    void capture_exception()
+    { 
+        std::unique_lock<std::mutex> guard(this->lock);
+        this->ptr = std::current_exception(); 
+    }   
+
+    template <typename Function, typename... Args>
+    void run(Function && f, Args &&... params)
+    {
+        try 
+        {
+            std::forward<Function>(f)(std::forward<Args>(params)...);
+        }
+        catch (...)
+        {
+            capture_exception();
+        }
+    }
+};
 
 }
 
