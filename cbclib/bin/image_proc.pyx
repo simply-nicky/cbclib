@@ -259,18 +259,21 @@ def median(np.ndarray inp not None, np.ndarray mask=None, object axis=0,
     for i in range(ndim):
         new_dims[i] = inp.shape[i]
         odims[i] = inp.shape[i]
+    cdef int type_num = np.PyArray_TYPE(inp)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, type_num)
+    if not out.size:
+        return out
+
     new_dims[ndim] = inp.size / repeats
     new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
     new_shape[0].ptr = new_dims; new_shape[0].len = ndim + 1
 
-    cdef int type_num = np.PyArray_TYPE(inp)
     inp = np.PyArray_Newshape(inp, new_shape, np.NPY_CORDER)
     if not np.PyArray_IS_C_CONTIGUOUS(inp):
         inp = np.PyArray_GETCONTIGUOUS(inp)
     mask = np.PyArray_Newshape(mask, new_shape, np.NPY_CORDER)
     if not np.PyArray_IS_C_CONTIGUOUS(mask):
         mask = np.PyArray_GETCONTIGUOUS(mask)
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, type_num)
     free(odims); free(new_dims); free(new_shape)
 
     cdef void *_out = <void *>np.PyArray_DATA(out)
@@ -340,6 +343,10 @@ def median_filter(np.ndarray inp not None, object size=None, np.ndarray footprin
     cdef unsigned long *_dims = <unsigned long *>dims
     cdef int type_num = np.PyArray_TYPE(inp)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+
+    if not out.size:
+        return out
+
     cdef void *_out = <void *>np.PyArray_DATA(out)
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
@@ -409,6 +416,10 @@ def maximum_filter(np.ndarray inp not None, object size=None, np.ndarray footpri
     cdef unsigned long *_dims = <unsigned long *>dims
     cdef int type_num = np.PyArray_TYPE(inp)
     cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, dims, type_num)
+
+    if not out.size:
+        return out
+
     cdef void *_out = <void *>np.PyArray_DATA(out)
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned char *_mask = <unsigned char *>np.PyArray_DATA(mask)
@@ -456,6 +467,11 @@ def robust_mean(np.ndarray inp not None, object axis=0, double r0=0.0, double r1
     for i in range(ndim):
         new_dims[i] = inp.shape[i]
         odims[i] = inp.shape[i]
+    cdef int type_num = np.PyArray_TYPE(inp)
+    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, np.NPY_FLOAT32)
+    if not out.size:
+        return out
+
     new_dims[ndim] = inp.size / repeats
     new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
     new_shape[0].ptr = new_dims; new_shape[0].len = ndim + 1
@@ -463,10 +479,8 @@ def robust_mean(np.ndarray inp not None, object axis=0, double r0=0.0, double r1
     inp = np.PyArray_Newshape(inp, new_shape, np.NPY_CORDER)
     if not np.PyArray_IS_C_CONTIGUOUS(inp):
         inp = np.PyArray_GETCONTIGUOUS(inp)
-    cdef np.ndarray out = <np.ndarray>np.PyArray_SimpleNew(ndim, odims, np.NPY_FLOAT32)
     free(odims); free(new_dims); free(new_shape)
 
-    cdef int type_num = np.PyArray_TYPE(inp)
     cdef float *_out = <float *>np.PyArray_DATA(out)
     cdef void *_inp = <void *>np.PyArray_DATA(inp)
     cdef unsigned long *_dims = <unsigned long *>inp.shape
@@ -504,6 +518,9 @@ def robust_lsq(np.ndarray W not None, np.ndarray y not None, object axis=-1, dou
         axarr[i] = axarr[i] if axarr[i] >= 0 else y.ndim + axarr[i]
         if axarr[i] >= y.ndim:
             raise ValueError(f'Axis {axarr[i]:d} is out of bounds')
+
+    if not W.size or not y.size:
+        raise ValueError("W and y must have a positive size")
 
     for i in range(y.ndim):
         j = 0

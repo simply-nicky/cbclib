@@ -90,6 +90,33 @@ public:
 
 }
 
+template <typename Container>
+void check_dimensions(std::string name, ssize_t axis, const Container & shape) {}
+
+template <typename Container, typename... Ix>
+void check_dimensions(std::string name, ssize_t axis, const Container & shape, ssize_t i, Ix... index)
+{
+    if (axis < 0)
+    {
+        auto text = name + "has the wrong number of dimensions: " + std::to_string(shape.size()) +
+                    " < " + std::to_string(shape.size() - axis);
+        throw std::invalid_argument(text);
+    }
+    if (axis >= static_cast<ssize_t>(shape.size()))
+    {
+        auto text = name + "has the wrong number of dimensions: " + std::to_string(shape.size()) +
+                    " < " + std::to_string(axis + 1);
+        throw std::invalid_argument(text);
+    }
+    if (i != static_cast<ssize_t>(shape[axis]))
+    {
+        auto text = name + " has an incompatible shape at axis " + std::to_string(i) + ": " +
+                    std::to_string(shape[axis]) + " != " + std::to_string(i);
+        throw std::invalid_argument(text);
+    }
+    check_dimensions(name, axis + 1, shape, index...);
+}
+
 template <typename T>
 class sequence : public detail::any_container<T>
 {

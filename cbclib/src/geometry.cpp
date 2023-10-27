@@ -9,12 +9,7 @@ py::array_t<F> euler_angles(py::array_t<F, py::array::c_style | py::array::force
     assert(PyArray_API);
 
     auto rbuf = rmats.request();
-    if (rbuf.ndim < 2 || rbuf.shape[rbuf.ndim - 2] != 3 || rbuf.shape[rbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(rbuf.shape.begin(), rbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("rmats has incompatible shape: {" + oss.str() + "}");
-    }
+    check_dimensions("rmats", rbuf.ndim - 2, rbuf.shape, 3, 3);
     auto rsize = rbuf.size / 9;
 
     std::vector<py::ssize_t> ashape;
@@ -60,12 +55,7 @@ py::array_t<F> euler_matrix(py::array_t<F, py::array::c_style | py::array::force
     assert(PyArray_API);
 
     auto abuf = angles.request();
-    if (abuf.shape[abuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(abuf.shape.begin(), abuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("angles has incompatible shape {" + oss.str() + "}");
-    }
+    check_dimensions("angles", abuf.ndim - 1, abuf.shape, 3);
     auto asize = abuf.size / 3;
 
     std::vector<py::ssize_t> rshape;
@@ -107,8 +97,7 @@ py::array_t<F> tilt_angles(py::array_t<F, py::array::c_style | py::array::forcec
     assert(PyArray_API);
 
     auto rbuf = rmats.request();
-    if (rbuf.ndim < 2 || rbuf.shape[rbuf.ndim - 2] != 3 || rbuf.shape[rbuf.ndim - 1] != 3)
-        throw std::invalid_argument("rmats has incompatible shape");
+    check_dimensions("rmats", rbuf.ndim - 2, rbuf.shape, 3, 3);
     auto rsize = rbuf.size / 9;
 
     std::vector<py::ssize_t> ashape;
@@ -146,8 +135,7 @@ py::array_t<F> tilt_matrix(py::array_t<F, py::array::c_style | py::array::forcec
     assert(PyArray_API);
 
     auto abuf = angles.request();
-    if (abuf.shape[abuf.ndim - 1] != 3)
-        throw std::invalid_argument("angles has incompatible shape");
+    check_dimensions("angles", abuf.ndim - 1, abuf.shape, 3);
     auto asize = abuf.size / 3;
 
     std::vector<py::ssize_t> rshape;
@@ -197,12 +185,7 @@ py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast
     py::buffer_info xbuf = x.request(), ybuf = y.request(), sbuf = src.request();
     auto size = xbuf.size;
 
-    if (sbuf.shape[sbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(sbuf.shape.begin(), sbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("src has invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("src", sbuf.ndim - 1, sbuf.shape, 3);
     auto ssize = sbuf.size / sbuf.shape[sbuf.ndim - 1];
 
     if (!idxs)
@@ -246,9 +229,9 @@ py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast
     #pragma omp parallel for num_threads(threads)
     for (py::ssize_t i = 0; i < size; i++)
     {
-        auto dist = sqrt(std::pow(xptr[i] - sptr[3 * iptr[i]], 2)
-                         + std::pow(yptr[i] - sptr[3 * iptr[i] + 1], 2)
-                         + std::pow(sptr[3 * iptr[i] + 2], 2));
+        auto dist = sqrt(std::pow(xptr[i] - sptr[3 * iptr[i]], 2) + 
+                         std::pow(yptr[i] - sptr[3 * iptr[i] + 1], 2) + 
+                         std::pow(sptr[3 * iptr[i] + 2], 2));
         optr[3 * i    ] = (xptr[i] - sptr[3 * iptr[i]]) / dist;
         optr[3 * i + 1] = (yptr[i] - sptr[3 * iptr[i] + 1]) / dist;
         optr[3 * i + 2] = -sptr[3 * iptr[i] + 2] / dist;
@@ -269,16 +252,10 @@ auto k_to_det(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
 
     py::buffer_info kbuf = karr.request(), sbuf = src.request();
 
-    if (kbuf.shape[kbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("karr has an invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("karr", kbuf.ndim - 1, kbuf.shape, 3);
     auto size = kbuf.size / kbuf.shape[kbuf.ndim - 1];
 
-    if (sbuf.shape[sbuf.ndim - 1] != 3)
-        throw std::invalid_argument("src has invalid shape");
+    check_dimensions("src", sbuf.ndim - 1, sbuf.shape, 3);
     auto ssize = sbuf.size / sbuf.shape[sbuf.ndim - 1];
 
     if (!idxs)
@@ -339,12 +316,7 @@ py::array_t<F> k_to_smp(py::array_t<F, py::array::c_style | py::array::forcecast
 
     py::buffer_info kbuf = karr.request(), zbuf = z.request();
 
-    if (kbuf.shape[kbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(kbuf.shape.begin(), kbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("karr has an invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("karr", kbuf.ndim - 1, kbuf.shape, 3);
     auto size = kbuf.size / kbuf.shape[kbuf.ndim - 1];
 
     if (!idxs)
@@ -454,20 +426,10 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
 
     py::buffer_info hbuf = hkl.request(), bbuf = basis.request();
 
-    if (hbuf.shape[hbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(hbuf.shape.begin(), hbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("hkl has an invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("hkl", hbuf.ndim - 1, hbuf.shape, 3);
     auto hsize = hbuf.size / hbuf.shape[hbuf.ndim - 1];
-    
-    if (bbuf.ndim < 2 || bbuf.shape[bbuf.ndim - 1] != 3 || bbuf.shape[bbuf.ndim - 2] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(bbuf.shape.begin(), bbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("basis has an invalid shape: {" + oss.str() + "}");
-    }
+
+    check_dimensions("basis", bbuf.ndim - 2, bbuf.shape, 3, 3);
     auto bsize = bbuf.size / (bbuf.shape[bbuf.ndim - 1] * bbuf.shape[bbuf.ndim - 2]);
 
     if (!hidxs && !bidxs)
@@ -602,20 +564,10 @@ py::array_t<F> rotate_vec(py::array_t<F, py::array::c_style | py::array::forceca
 
     py::buffer_info vbuf = vecs.request(), rbuf = rmats.request();
 
-    if (vbuf.shape[vbuf.ndim - 1] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(vbuf.shape.begin(), vbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("vecs has an invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("vecs", vbuf.ndim - 1, vbuf.shape, 3);
     auto vsize = vbuf.size / vbuf.shape[vbuf.ndim - 1];
 
-    if (rbuf.shape[rbuf.ndim - 1] != 3 || rbuf.shape[rbuf.ndim - 2] != 3)
-    {
-        std::ostringstream oss;
-        std::copy(rbuf.shape.begin(), rbuf.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("rmats has an invalid shape: {" + oss.str() + "}");
-    }
+    check_dimensions("rmats", rbuf.ndim - 2, rbuf.shape, 3, 3);
     auto rsize = rbuf.size / (rbuf.shape[rbuf.ndim - 1] * rbuf.shape[rbuf.ndim - 2]);
 
     if (!idxs)

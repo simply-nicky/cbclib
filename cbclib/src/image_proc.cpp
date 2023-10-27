@@ -3,14 +3,10 @@
 namespace cbclib {
 
 template <typename T>
-void check_lines(const array<T> & lines)
+void check_lines(array<T> & lines)
 {
-    if (lines.ndim != 2 || lines.shape[1] < 5)
-    {
-        std::ostringstream oss;
-        std::copy(lines.shape.begin(), lines.shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("lines array has an incompatible shape: {" + oss.str() + "}");
-    }
+    if (lines.ndim == 1 && lines.size == 5) lines.shape = {1, 5};
+    check_dimensions("lines", lines.ndim - 2, lines.shape, lines.size / 5, 5);
 }
 
 template <typename Function>

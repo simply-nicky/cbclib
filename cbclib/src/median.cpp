@@ -42,6 +42,8 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
     auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
     auto out = py::array_t<T>(out_shape);
 
+    if (!out.size()) return out;
+
     auto new_shape = out_shape;
     new_shape.push_back(ibuf.size / out.size());
     inp = inp.reshape(new_shape);
@@ -129,6 +131,8 @@ py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forc
 
     auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
 
+    if (!out.size()) return out;
+
     auto oarr = array<T>(out.request());
     auto iarr = array<T>(inp.request());
     auto marr = array<bool>(mask.value().request());
@@ -183,6 +187,8 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
     auto m = it->second;
 
     auto out = filter_preprocessor(inp, size, fprint, mask, inp_mask);
+
+    if (!out.size()) return out;
 
     auto oarr = array<T>(out.request());
     auto iarr = array<T>(inp.request());
@@ -243,6 +249,8 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
     auto out = py::array_t<D>(out_shape);
 
+    if (!out.size()) return out;
+
     auto new_shape = out_shape;
     new_shape.push_back(ibuf.size / out.size());
     inp = inp.reshape(new_shape);
@@ -302,7 +310,7 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
                 D cumsum = D(); mean = D(); int count = 0;
                 for (size_t j = 0; j < idxs.size(); j++)
                 {
-                    if (lm * cumsum > j * err[idxs[j]]) {mean += miter[idxs[j]] * iiter[idxs[j]]; count ++;}
+                    if (lm * cumsum > j * err[idxs[j]]) {mean += miter[idxs[j]] * iiter[idxs[j]]; count++;}
                     cumsum += err[idxs[j]];
                 }
                 if (count) oarr[i] = mean / count;
@@ -340,7 +348,16 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     if (!std::equal(std::make_reverse_iterator(ybuf.shape.end()),
                     std::make_reverse_iterator(ybuf.shape.begin() + ax),
                     std::make_reverse_iterator(Wbuf.shape.end())))
-        throw std::invalid_argument("W and y arrays have incompatible shapes");
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(ybuf.shape.begin(), ybuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(Wbuf.shape.begin(), Wbuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument("W and y arrays have incompatible shapes: {" + oss1.str() + 
+                                    "}, {" + oss2.str() + "}");
+    }
+
+    if (!ybuf.size || !Wbuf.size)
+        throw std::invalid_argument("W and y must have a positive size");
 
     auto new_shape = std::vector<py::ssize_t>(ybuf.shape.begin(), std::next(ybuf.shape.begin(), ax));
     auto repeats = get_size(new_shape.begin(), new_shape.end());
