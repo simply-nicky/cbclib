@@ -2,27 +2,6 @@
 
 namespace cbclib {
 
-template <typename T>
-void check_mask(const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
-                std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask)
-{
-    py::buffer_info ibuf = inp.request();
-    if (!mask)
-    {
-        mask = py::array_t<bool>(ibuf.shape);
-        PyArray_FILLWBYTE(mask.value().ptr(), 1);
-    }
-    py::buffer_info mbuf = mask.value().request();
-    if (!std::equal(mbuf.shape.begin(), mbuf.shape.end(), ibuf.shape.begin()))
-    {
-        std::ostringstream oss1, oss2;
-        std::copy(mbuf.shape.begin(), mbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
-        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
-        throw std::invalid_argument("mask and inp arrays must have identical shapes: {" + oss1.str() +
-                                    "}, {" + oss2.str() + "}");
-    }
-}
-
 template <typename T, typename U>
 py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
                       std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
@@ -30,7 +9,7 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
 {
     assert(PyArray_API);
 
-    check_mask(inp, mask);
+    check_optional("mask", inp, mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(inp.ndim());
@@ -95,7 +74,7 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask,
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & inp_mask)
 {
-    check_mask(inp, mask);
+    check_optional("mask", inp, mask, true);
     if (!inp_mask) inp_mask = mask.value();
 
     if (!size && !fprint)
@@ -237,7 +216,7 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    check_mask(inp, mask);
+    check_optional("mask", inp, mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(inp.ndim());
@@ -335,7 +314,7 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    check_mask(y, mask);
+    check_optional("mask", y, mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(y.ndim());

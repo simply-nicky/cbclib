@@ -190,16 +190,20 @@ void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<
 }
 
 template <typename T, typename Out>
-py::array_t<Out> draw_line(py::array_t<T> lines, std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
+                           std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
 
 template <typename T, typename Out>
-py::array_t<Out> draw_line_vec(std::vector<py::array_t<T>> lines, std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
+                               std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
 
 template <typename T, typename Out>
-auto draw_line_table(py::array_t<T> lines, std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> lines, std::optional<std::vector<size_t>> shape,
+                     Out max_val, T dilation, std::string prof, unsigned threads);
 
 template <typename T, typename Out>
-auto draw_line_table_vec(std::vector<py::array_t<T>> lines, std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
+                         std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads);
 
 }
 

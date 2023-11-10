@@ -98,13 +98,13 @@ void check_dimensions(std::string name, ssize_t axis, const Container & shape, s
 {
     if (axis < 0)
     {
-        auto text = name + "has the wrong number of dimensions: " + std::to_string(shape.size()) +
+        auto text = name + " has the wrong number of dimensions: " + std::to_string(shape.size()) +
                     " < " + std::to_string(shape.size() - axis);
         throw std::invalid_argument(text);
     }
     if (axis >= static_cast<ssize_t>(shape.size()))
     {
-        auto text = name + "has the wrong number of dimensions: " + std::to_string(shape.size()) +
+        auto text = name + " has the wrong number of dimensions: " + std::to_string(shape.size()) +
                     " < " + std::to_string(axis + 1);
         throw std::invalid_argument(text);
     }
@@ -115,6 +115,30 @@ void check_dimensions(std::string name, ssize_t axis, const Container & shape, s
         throw std::invalid_argument(text);
     }
     check_dimensions(name, axis + 1, shape, index...);
+}
+
+template <typename T, typename V>
+void check_optional(std::string name, const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
+                    std::optional<py::array_t<V, py::array::c_style | py::array::forcecast>> & opt, V fill_value)
+{
+    py::buffer_info ibuf = inp.request();
+    if (!opt)
+    {
+        opt = py::array_t<V>(ibuf.shape);
+        auto fill = py::array_t<V>(py::ssize_t(1));
+        fill.mutable_at(0) = fill_value;
+        PyArray_CopyInto(reinterpret_cast<PyArrayObject *>(opt.value().ptr()),
+                         reinterpret_cast<PyArrayObject *>(fill.ptr()));
+    }
+    py::buffer_info obuf = opt.value().request();
+    if (!std::equal(obuf.shape.begin(), obuf.shape.end(), ibuf.shape.begin()))
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(obuf.shape.begin(), obuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument(name + " and inp arrays must have identical shapes: {" + oss1.str() +
+                                    "}, {" + oss2.str() + "}");
+    }
 }
 
 template <typename T>

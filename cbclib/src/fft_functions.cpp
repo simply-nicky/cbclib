@@ -131,6 +131,7 @@ py::array_t<T> gaussian_kernel_vec(std::vector<T> sigma, U order, T truncate)
         auto & gauss = gaussians.emplace_back();
         auto size = 2 * size_t(sigma[i] * truncate) + 1;
         gauss_kernel(std::back_inserter(gauss), size, sigma[i], orders[i]);
+        shape.push_back(size);
     }
 
     auto out = py::array_t<T>(shape);

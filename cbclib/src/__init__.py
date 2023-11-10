@@ -4,3 +4,4 @@ from .geometry import (euler_angles, euler_matrix, tilt_angles, tilt_matrix, det
                        k_to_det, k_to_smp, rotate, source_lines)
 from .image_proc import draw_line_mask, draw_line_image, draw_line_table
 from .median import median, median_filter, maximum_filter, robust_mean, robust_lsq
+from .signal_proc import binterpolate

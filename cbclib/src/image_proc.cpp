@@ -5,7 +5,7 @@ namespace cbclib {
 template <typename T>
 void check_lines(array<T> & lines)
 {
-    if (lines.ndim == 1 && lines.size == 5) lines.shape = {1, 5};
+    if (lines.ndim == 1 && lines.size == 5) lines = array<T>({1, 5}, lines.ptr);
     check_dimensions("lines", lines.ndim - 2, lines.shape, lines.size / 5, 5);
 }
 
@@ -21,7 +21,8 @@ void check_shape(const std::vector<size_t> & shape, Function && func)
 }
 
 template <typename T, typename Out>
-py::array_t<Out> draw_line(py::array_t<T> lines, std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads)
+py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
+                           std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads)
 {
     assert(PyArray_API);
 
@@ -59,7 +60,8 @@ py::array_t<Out> draw_line(py::array_t<T> lines, std::vector<size_t> shape, Out 
 }
 
 template <typename T, typename Out>
-py::array_t<Out> draw_line_vec(std::vector<py::array_t<T>> lines, std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads)
+py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
+                               std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads)
 {
     assert(PyArray_API);
 
@@ -110,7 +112,8 @@ py::array_t<Out> draw_line_vec(std::vector<py::array_t<T>> lines, std::vector<si
 }
 
 template <typename T, typename Out>
-auto draw_line_table(py::array_t<T> lines, std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads)
+auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> lines, std::optional<std::vector<size_t>> shape,
+                     Out max_val, T dilation, std::string prof, unsigned threads)
 {
     assert(PyArray_API);
 
@@ -149,7 +152,8 @@ auto draw_line_table(py::array_t<T> lines, std::optional<std::vector<size_t>> sh
 }
 
 template <typename T, typename Out>
-auto draw_line_table_vec(std::vector<py::array_t<T>> lines, std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads)
+auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
+                         std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads)
 {
     assert(PyArray_API);
 

@@ -75,12 +75,12 @@ static float bilinearf(array obj, float **grid, float *crd)
             if ((i >> n) & 1)
             {
                 pt[obj->ndim - 1 - n] = pt1[obj->ndim - 1 - n];
-                cf *= 1.0f - dx[n];
+                cf *= dx[n];
             }
             else
             {
                 pt[obj->ndim - 1 - n] = pt0[obj->ndim - 1 - n];
-                cf *= dx[n];
+                cf *= 1.0f - dx[n];
             }
         }
         RAVEL_INDEX(pt, &idx, obj);
