@@ -28,6 +28,12 @@ namespace cbclib {
 
 namespace py = pybind11;
 
+struct Constants
+{
+    // 1 / sqrt(2 * pi)
+    static constexpr double M_1_SQRT2PI = 0.3989422804014327; 
+};
+
 template <typename Container, typename = std::enable_if_t<std::is_rvalue_reference_v<Container &&>>>
 inline py::array_t<typename Container::value_type> as_pyarray(Container && seq)
 {

@@ -32,6 +32,8 @@ py::array_t<T> binterpolate(py::array_t<T, py::array::c_style | py::array::force
 
     py::gil_scoped_release release;
 
+    threads = (threads > carr.shape[0]) ? carr.shape[0] : threads;
+
     #pragma omp parallel for num_threads(threads)
     for (size_t i = 0; i < carr.shape[0]; i++)
     {
@@ -51,10 +53,103 @@ py::array_t<T> binterpolate(py::array_t<T, py::array::c_style | py::array::force
 template <typename T>
 py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forcecast> y,
                           py::array_t<T, py::array::c_style | py::array::forcecast> x,
-                          py::array_t<T, py::array::c_style | py::array::forcecast> x_hat, T sigma,
+                          py::array_t<T, py::array::c_style | py::array::forcecast> x_hat, T sigma, std::string kernel,
                           std::optional<py::array_t<T, py::array::c_style | py::array::forcecast>> w, unsigned threads)
 {
-    check_optional("w", y, w, 1.0);
+    check_optional("w", y, w, T(1));
+
+    auto [krn, truncate] = kernels<T>::get_kernel(kernel);
+
+    auto ybuf = y.request(), xbuf = x.request(), xhbuf = x_hat.request();
+    auto ndim = xbuf.shape[xbuf.ndim - 1], npts = xbuf.size / ndim;
+    check_dimensions("x_hat", xhbuf.ndim - 1, xhbuf.shape, ndim);
+
+    if (ybuf.size != npts)
+        throw std::invalid_argument("Number of x points (" + std::to_string(npts) + ") doesn't match to " + 
+                                    "the number of y points (" + std::to_string(ybuf.size) + ")");
+
+    auto xarr = array<T>(xbuf);
+    auto yarr = array<T>(ybuf);
+    auto warr = array<T>(w.value().request());
+    auto xharr = array<T>(xhbuf);
+
+    auto out_shape = std::vector<py::ssize_t>(xharr.shape.begin(), std::prev(xharr.shape.end()));
+    auto out = py::array_t<T>(out_shape);
+
+    auto oarr = array<T>(out.request());
+
+    thread_exception e;
+
+    py::gil_scoped_release release;
+
+    threads = (threads > oarr.size) ? oarr.size : threads;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        std::vector<size_t> idxs (npts);
+        std::iota(idxs.begin(), idxs.end(), 0);
+        std::sort(idxs.begin(), idxs.end(), [&xarr, ndim](size_t i1, size_t i2){return xarr[i1 * ndim] < xarr[i2 * ndim];});
+
+        #pragma omp for
+        for (size_t i = 0; i < oarr.size; i++)
+        {
+            e.run([&]
+            {
+                auto xh_vec = std::vector<T>(xharr.line_begin(xharr.ndim - 1, i), xharr.line_end(xharr.ndim - 1, i));
+
+                auto window = idxs;
+
+                for (size_t axis = 0; axis < static_cast<size_t>(ndim); axis++)
+                {
+                    auto comp_lb = [&xarr, axis, ndim](size_t index, T val){return xarr[index * ndim + axis] < val;};
+                    auto comp_ub = [&xarr, axis, ndim](T val, size_t index){return val < xarr[index * ndim + axis];};
+
+                    // begin is LESS OR EQUAL than val
+                    auto begin = std::upper_bound(window.begin(), window.end(), xh_vec[axis] - truncate * sigma, comp_ub);
+                    if (begin != window.begin()) begin = std::prev(begin);
+
+                    // end is GREATER than val
+                    auto end = std::lower_bound(window.begin(), window.end(), xh_vec[axis] + truncate * sigma, comp_lb);
+                    if (end != window.end()) end = std::next(end);
+
+                    if (begin >= end)
+                    {
+                        window.clear(); break;
+                    }
+                    else
+                    {
+                        window = std::vector<size_t>(begin, end);
+                        if (axis + 1 < static_cast<size_t>(ndim))
+                        {
+                            auto less = [&xarr, axis, ndim](size_t i1, size_t i2){return xarr[i1 * ndim + axis + 1] < xarr[i2 * ndim + axis + 1];};
+                            std::sort(window.begin(), window.end(), less);
+                        }
+                    }
+                }
+
+                if (window.size())
+                {
+                    T Y = T(), W = T();
+                    for (auto index : window)
+                    {
+                        T dist = T();
+                        for (size_t axis = 0; axis < static_cast<size_t>(ndim); axis++) dist += std::pow(xarr[index * ndim + axis] - xh_vec[axis], 2);
+                        T rbf = krn(std::sqrt(dist), sigma);
+                        Y += yarr[index] * warr[index] * rbf;
+                        W += warr[index] * warr[index] * rbf;
+                    }
+                    oarr[i] = (W > T()) ? Y / W : T();
+                }
+                else oarr[i] = T();
+            });
+        }
+    }
+
+    py::gil_scoped_acquire acquire;
+
+    e.rethrow();
+
+    return out;
 }
 
 PYBIND11_MODULE(signal_proc, m)
@@ -70,8 +165,11 @@ PYBIND11_MODULE(signal_proc, m)
         return;
     }
 
-    m.def("binterpolate", &binterpolate<double>, py::arg("inp"), py::arg("grid"), py::arg("coords"), py::arg("num_threads") = 1);
     m.def("binterpolate", &binterpolate<float>, py::arg("inp"), py::arg("grid"), py::arg("coords"), py::arg("num_threads") = 1);
+    m.def("binterpolate", &binterpolate<double>, py::arg("inp"), py::arg("grid"), py::arg("coords"), py::arg("num_threads") = 1);
+
+    m.def("kr_predict", &kr_predict<float>, py::arg("y"), py::arg("x"), py::arg("x_hat"), py::arg("sigma"), py::arg("kernel") = "gaussian", py::arg("w") = nullptr, py::arg("num_threads") = 1);
+    m.def("kr_predict", &kr_predict<double>, py::arg("y"), py::arg("x"), py::arg("x_hat"), py::arg("sigma"), py::arg("kernel") = "gaussian", py::arg("w") = nullptr, py::arg("num_threads") = 1);
 
 }
 

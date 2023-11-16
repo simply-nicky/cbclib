@@ -57,17 +57,16 @@ T gauss_profile(T err, T width)
 }
 
 template <typename T>
-using profile = T (*) (T, T);
-
-template <typename T>
 struct profiles
 {
-    static inline std::map<std::string, profile<T>> registered_profiles = {{"tophat", detail::tophat_profile<T>},
-                                                                           {"linear", detail::line_profile<T>},
-                                                                           {"quad"  , detail::quad_profile<T>},
-                                                                           {"gauss" , detail::gauss_profile<T>}};
+    using profile = T (*) (T, T);
 
-    static profile<T> get_profile(std::string name, bool throw_if_missing = true)
+    static inline std::map<std::string, profile> registered_profiles = {{"tophat", detail::tophat_profile<T>},
+                                                                        {"linear", detail::line_profile<T>},
+                                                                        {"quad"  , detail::quad_profile<T>},
+                                                                        {"gauss" , detail::gauss_profile<T>}};
+
+    static profile get_profile(std::string name, bool throw_if_missing = true)
     {
         auto it = registered_profiles.find(name);
         if (it != registered_profiles.end()) return it->second;
@@ -78,7 +77,7 @@ struct profiles
 };
 
 template <typename Data, typename T, typename Out>
-void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<T, 4> & line, T width, Out max_val, profile<T> prof)
+void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<T, 4> & line, T width, Out max_val, typename profiles<T>::profile prof)
 {
     /* create a volatile copy of the input line */
     /* the points are given by [j0, i0, j1, i1] */

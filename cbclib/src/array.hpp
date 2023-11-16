@@ -58,14 +58,14 @@ auto ravel_index_impl(InputIt1 cfirst, InputIt1 clast, InputIt2 sfirst)
 {
     using value_t = decltype(+*std::declval<InputIt1 &>());
     value_t index = value_t();
-    for(; cfirst != clast; cfirst++, ++sfirst) index += *cfirst * *sfirst;
+    for (; cfirst != clast; cfirst++, ++sfirst) index += *cfirst * *sfirst;
     return index;
 }
 
 template <typename InputIt, typename OutputIt, typename T>
 OutputIt unravel_index_impl(InputIt sfirst, InputIt slast, T index, OutputIt cfirst)
 {
-    for(; sfirst != slast; ++sfirst)
+    for (; sfirst != slast; ++sfirst)
     {
         auto stride = index / *sfirst;
         index -= stride * *sfirst;

@@ -6,9 +6,9 @@
 static size_t search_lbound(const void *key, const void *base, size_t npts, size_t size,
                             int (*compar)(const void *, const void *))
 {
-    if (compar(key, base) <= 0) return 0;
-    if (compar(key, base + (npts - 1) * size) >= 0) return npts - 1;
-    return searchsorted(key, base, npts, size, SEARCH_RIGHT, compar) - 1;
+    size_t idx = searchsorted(key, base, npts, size, SEARCH_RIGHT, compar);
+    if (idx) return idx - 1;
+    return 0;
 }
 
 /* find idx \el [0, npts - 1], so that base[idx - 1] < key <= base[idx] */
@@ -16,25 +16,25 @@ static size_t search_lbound(const void *key, const void *base, size_t npts, size
 static size_t search_rbound(const void *key, const void *base, size_t npts, size_t size,
                             int (*compar)(const void *, const void *))
 {
-    if (compar(key, base) <= 0) return 0;
-    if (compar(key, base + (npts - 1) * size) >= 0) return npts - 1;
-    return searchsorted(key, base, npts, size, SEARCH_RIGHT, compar);
+    size_t idx = searchsorted(key, base, npts, size, SEARCH_RIGHT, compar);
+    if (idx == npts) return npts ? npts - 1 : 0;
+    return idx;
 }
 
 static size_t search_lbound_r(const void *key, const void *base, size_t npts, size_t size,
                               int (*compar)(const void *, const void *, void *), void *arg)
 {
-    if (compar(key, base, arg) <= 0) return 0;
-    if (compar(key, base + (npts - 1) * size, arg) >= 0) return npts - 1;
-    return searchsorted_r(key, base, npts, size, SEARCH_RIGHT, compar, arg) - 1;
+    size_t idx = searchsorted_r(key, base, npts, size, SEARCH_RIGHT, compar, arg);
+    if (idx) return idx - 1;
+    return 0;
 }
 
 static size_t search_rbound_r(const void *key, const void *base, size_t npts, size_t size,
                               int (*compar)(const void *, const void *, void *), void *arg)
 {
-    if (compar(key, base, arg) <= 0) return 0;
-    if (compar(key, base + (npts - 1) * size, arg) >= 0) return npts - 1;
-    return searchsorted_r(key, base, npts, size, SEARCH_RIGHT, compar, arg);
+    size_t idx = searchsorted_r(key, base, npts, size, SEARCH_RIGHT, compar, arg);
+    if (idx == npts) return npts ? npts - 1 : 0;
+    return idx;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -116,23 +116,25 @@ int interp_bi(float *out, float *data, int ndim, const size_t *dims, float **gri
 /*---------------------------- Kernel regression -----------------------------*/
 /*----------------------------------------------------------------------------*/
 
-#define CUTOFF 4.0
+#define CUTOFF 3.0
 
 static void update_window(float *x, size_t *window, size_t *wsize, float x_left, float x_right)
 {
     size_t left_end = search_lbound_r(&x_left, window, *wsize, sizeof(size_t), indirect_search_float, x);
-    size_t right_end = search_rbound_r(&x_right, window, *wsize, sizeof(size_t), SEARCH_LEFT, x) + 1;
-    if (right_end > left_end)
+    size_t right_end = search_rbound_r(&x_right, window, *wsize, sizeof(size_t), indirect_search_float, x);
+    if (right_end != (*wsize)) right_end++;
+
+    *wsize = right_end - left_end;
+    if (*wsize)
     {
-        *wsize = right_end - left_end;
         memmove(window, window + left_end, *wsize * sizeof(size_t));
         window = REALLOC(window, size_t, *wsize);
     }
-    else {DEALLOC(window); *wsize = 0; }
+    else DEALLOC(window);
 }
 
 static float calculate_weights(size_t *window, size_t wsize, size_t ndim, float *y, float *w, float *x, float *xval,
-                                kernel krn, float sigma)
+                               kernel krn, float sigma)
 {
     int i, j;
     float dist, rbf, Y = 0.0, W = 0.0;
@@ -184,16 +186,15 @@ int predict_kerreg(float *y, float *w, float *x, size_t npts, size_t ndim, float
             x_left = GET(xval, float, axis) - CUTOFF * sigma;
             x_right = GET(xval, float, axis) + CUTOFF * sigma;
             size_t left_end = search_lbound_r(&x_left, idxs, npts, sizeof(size_t), indirect_search_float, x);
-            size_t right_end = search_rbound_r(&x_right, idxs, npts, sizeof(size_t), indirect_search_float, x) + 1;
+            size_t right_end = search_rbound_r(&x_right, idxs, npts, sizeof(size_t), indirect_search_float, x);
+            if (right_end != npts) right_end++;
 
-            if (right_end > left_end)
+            wsize = right_end - left_end;
+            if (wsize)
             {
-                wsize = right_end - left_end;
                 window = MALLOC(size_t, wsize);
                 memmove(window, idxs + left_end, wsize * sizeof(size_t));
             }
-
-            y_hat[i] = 0.0;
 
             while (wsize && (++axis < (int)ndim))
             {
@@ -209,7 +210,7 @@ int predict_kerreg(float *y, float *w, float *x, size_t npts, size_t ndim, float
                 for (j = 0; j < (int)wsize; j++) window[j] -= ndim - 1;
                 y_hat[i] = calculate_weights(window, wsize, ndim, y, w, x, xval->data, krn, sigma);
 
-                DEALLOC(window); wsize = 0;
+                DEALLOC(window);
             }
             else y_hat[i] = 0.0;
         }
