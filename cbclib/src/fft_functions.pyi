@@ -24,7 +24,7 @@ def next_fast_len(target: int) -> int:
     """
     ...
 
-def fft_convolve(array: np.ndarray, kernel: np.ndarray, axis: Optional[IntArray] = None,
+def fft_convolve(array: np.ndarray, kernel: np.ndarray, axis: Optional[IntArray]=None,
                  num_threads: int=1) -> np.ndarray:
     """Convolve a multi-dimensional `array` with one-dimensional `kernel` along the
     `axis` by means of FFT. Output has the same size as `array`.

@@ -152,6 +152,103 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
     return out;
 }
 
+template <typename T, typename U>
+py::array_t<T> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads)
+{
+    using iterator = typename array<T>::iterator;
+    auto ibuf = inp.request();
+
+    sequence<long> seq (axis);
+    seq.unwrap(ibuf.ndim);
+
+    for (auto ax : seq)
+    {
+        if (ibuf.shape[ax] < 3)
+            throw std::invalid_argument("The shape along axis " + std::to_string(ax) + "is below 3 (" +
+                                        std::to_string(ibuf.shape[ax]) + ")");
+    }
+
+    auto iarr = array<T>(ibuf);
+    size_t repeats = iarr.size / iarr.shape[seq[0]];
+    
+    std::vector<T> peaks;
+
+    thread_exception e;
+
+    py::gil_scoped_release release;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        std::vector<size_t> buffer;
+
+        #pragma omp for schedule(static) nowait
+        for (size_t i = 0; i < repeats; i++)
+        {
+            e.run([&]
+            {
+                // First element can't be a maximum
+                auto iter = std::next(iarr.line_begin(seq[0], i));
+                auto last = std::prev(iarr.line_end(seq[0], i));
+                while (iter != last)
+                {
+                    if (*std::prev(iter) < *iter)
+                    {
+                        // ahead can be last
+                        auto ahead = std::next(iter);
+
+                        while (ahead != last && *ahead == *iter) ++ahead;
+
+                        if (*ahead < *iter)
+                        {
+                            std::vector<size_t> peak;
+                            auto index = std::distance(iarr.begin(), static_cast<iterator>(iter));
+                            iarr.unravel_index(std::back_inserter(peak), index);
+
+                            size_t n = 1;
+                            for (; n < seq.size(); n++)
+                            {
+                                if (peak[seq[n]] > 1 && peak[seq[n]] < iarr.shape[seq[n]] - 1)
+                                {
+                                    if (iarr[index - iarr.stride(seq[n])] < *iter && iarr[index + iarr.stride(seq[n])] < *iter)
+                                    {
+                                        continue;
+                                    }
+                                }
+
+                                break;
+                            }
+
+                            if (n == seq.size()) buffer.insert(buffer.end(), std::make_move_iterator(peak.begin()), std::make_move_iterator(peak.end()));
+
+                            // Skip samples that can't be maximum, check if it's not last
+                            if (ahead != last) iter = ahead;
+                        }
+                    }
+
+                    iter = std::next(iter);
+                }
+            });
+        }
+
+        #pragma omp for schedule(static) ordered
+        for (unsigned i = 0; i < threads; i++)
+        {
+            #pragma omp ordered
+            peaks.insert(peaks.end(), std::make_move_iterator(buffer.begin()), std::make_move_iterator(buffer.end()));
+        }
+    }
+
+    py::gil_scoped_acquire acquire;
+
+    e.rethrow();
+
+    if (peaks.size() % iarr.ndim)
+        throw std::runtime_error("peaks have invalid size of " + std::to_string(peaks.size()));
+
+    std::array<size_t, 2> out_shape = {peaks.size() / iarr.ndim, iarr.ndim};
+    return as_pyarray(std::move(peaks)).reshape(out_shape);
+}
+
 PYBIND11_MODULE(signal_proc, m)
 {
     using namespace cbclib;
@@ -170,6 +267,19 @@ PYBIND11_MODULE(signal_proc, m)
 
     m.def("kr_predict", &kr_predict<float>, py::arg("y"), py::arg("x"), py::arg("x_hat"), py::arg("sigma"), py::arg("kernel") = "gaussian", py::arg("w") = nullptr, py::arg("num_threads") = 1);
     m.def("kr_predict", &kr_predict<double>, py::arg("y"), py::arg("x"), py::arg("x_hat"), py::arg("sigma"), py::arg("kernel") = "gaussian", py::arg("w") = nullptr, py::arg("num_threads") = 1);
+
+    m.def("local_maxima", &local_maxima<int, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<int, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<long, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<long, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<unsigned, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<unsigned, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<size_t, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<size_t, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<float, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<float, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<double, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<double, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
 
 }
 

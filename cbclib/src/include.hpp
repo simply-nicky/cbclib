@@ -6,10 +6,10 @@
 #include <experimental/iterator>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <vector>
-#include <mutex>
 #include <math.h>
 #include <omp.h>
 #include <Python.h>
@@ -97,10 +97,10 @@ public:
 }
 
 template <typename Container>
-void check_dimensions(std::string name, ssize_t axis, const Container & shape) {}
+void check_dimensions(const std::string & name, ssize_t axis, const Container & shape) {}
 
 template <typename Container, typename... Ix>
-void check_dimensions(std::string name, ssize_t axis, const Container & shape, ssize_t i, Ix... index)
+void check_dimensions(const std::string & name, ssize_t axis, const Container & shape, ssize_t i, Ix... index)
 {
     if (axis < 0)
     {
@@ -124,7 +124,7 @@ void check_dimensions(std::string name, ssize_t axis, const Container & shape, s
 }
 
 template <typename T, typename V>
-void check_optional(std::string name, const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
+void check_optional(const std::string & name, const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
                     std::optional<py::array_t<V, py::array::c_style | py::array::forcecast>> & opt, V fill_value)
 {
     py::buffer_info ibuf = inp.request();
@@ -178,7 +178,7 @@ public:
             this->vec[i] = (this->vec[i] >= 0) ? this->vec[i] : max + this->vec[i];
             if (this->vec[i] >= max)
                 throw std::invalid_argument("axis " + std::to_string(this->vec[i]) +
-                                            " is out of bounds (" + std::to_string(max) + ")");
+                                            " is out of bounds (ndim = " + std::to_string(max) + ")");
         }
         return *this;
     }

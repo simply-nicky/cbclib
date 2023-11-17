@@ -122,6 +122,9 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                           py::array_t<T, py::array::c_style | py::array::forcecast> x_hat, T sigma, std::string kernel,
                           std::optional<py::array_t<T, py::array::c_style | py::array::forcecast>> w, unsigned threads);
 
+template <typename T, typename U>
+py::array_t<T> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads);
+
 }
 
 #endif

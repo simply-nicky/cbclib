@@ -98,6 +98,12 @@ public:
         }
     }
 
+    ssize_t stride(size_t dim) const
+    {
+        if (dim >= this->ndim) fail_dim_check(dim, "invalid axis");
+        return this->strides[dim];
+    }
+
     template <typename CoordIter, typename = std::enable_if_t<is_input_iterator<CoordIter>::value>>
     bool is_inbound(CoordIter first, CoordIter last) const
     {
@@ -153,6 +159,12 @@ public:
 
 protected:
     std::vector<size_t> strides;
+
+
+    void fail_dim_check(size_t dim, const std::string & msg) const
+    {
+        throw std::out_of_range(msg + ": " + std::to_string(dim) + " (ndim = " + std::to_string(this->ndim) + ')');
+    }
 };
 
 }
@@ -174,6 +186,8 @@ public:
         if (this->ptr) return true;
         return false;
     }
+
+    explicit operator T*() const {return this->ptr;}
 
     bool operator==(const strided_iterator<T> & iter) const {return this->ptr == iter.ptr;}
     bool operator!=(const strided_iterator<T> & iter) const {return this->ptr != iter.ptr;}

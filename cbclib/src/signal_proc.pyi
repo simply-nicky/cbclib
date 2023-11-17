@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 import numpy as np
 
 def binterpolate(inp: np.ndarray, grid: Tuple[np.ndarray, ...], coords: np.ndarray, num_threads: int=1) -> np.ndarray:
@@ -44,3 +44,22 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
             141-142 (1964).
     """
     ...
+
+def local_maxima(inp: np.ndarray, axis: Union[int, Tuple[int, ...]], num_threads: int=1) -> np.ndarray:
+    """
+    Find local maxima in a multidimensional array along a set of axes. This function returns
+    the indices of the maxima.
+
+    Args:
+        x : The array to search for local maxima.
+        axis : Choose an axis along which the maxima are sought for.
+
+    Returns:
+
+
+    Notes:
+        - Compared to `scipy.signal.argrelmax` this function is significantly faster and can
+          detect maxima that are more than one sample wide.
+        - A maxima is defined as one or more samples of equal value that are
+          surrounded on both sides by at least one smaller sample.
+    """
