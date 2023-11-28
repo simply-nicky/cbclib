@@ -58,7 +58,7 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
 {
     check_optional("w", y, w, T(1));
 
-    auto [krn, truncate] = kernels<T>::get_kernel(kernel);
+    auto krn = kernels<T>::get_kernel(kernel);
 
     auto ybuf = y.request(), xbuf = x.request(), xhbuf = x_hat.request();
     auto ndim = xbuf.shape[xbuf.ndim - 1], npts = xbuf.size / ndim;
@@ -105,11 +105,11 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                     auto comp_ub = [&xarr, axis, ndim](T val, size_t index){return val < xarr[index * ndim + axis];};
 
                     // begin is LESS OR EQUAL than val
-                    auto begin = std::upper_bound(window.begin(), window.end(), xh_vec[axis] - truncate * sigma, comp_ub);
+                    auto begin = std::upper_bound(window.begin(), window.end(), xh_vec[axis] - sigma, comp_ub);
                     if (begin != window.begin()) begin = std::prev(begin);
 
                     // end is GREATER than val
-                    auto end = std::lower_bound(window.begin(), window.end(), xh_vec[axis] + truncate * sigma, comp_lb);
+                    auto end = std::lower_bound(window.begin(), window.end(), xh_vec[axis] + sigma, comp_lb);
                     if (end != window.end()) end = std::next(end);
 
                     if (begin >= end)
@@ -153,7 +153,7 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
 }
 
 template <typename T, typename U>
-py::array_t<T> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads)
+py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads)
 {
     using iterator = typename array<T>::iterator;
     auto ibuf = inp.request();
@@ -171,7 +171,7 @@ py::array_t<T> local_maxima(py::array_t<T, py::array::c_style | py::array::force
     auto iarr = array<T>(ibuf);
     size_t repeats = iarr.size / iarr.shape[seq[0]];
     
-    std::vector<T> peaks;
+    std::vector<size_t> peaks;
 
     thread_exception e;
 
@@ -271,14 +271,14 @@ PYBIND11_MODULE(signal_proc, m)
     m.def("local_maxima", &local_maxima<int, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<int, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<long, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
-    m.def("local_maxima", &local_maxima<long, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<long, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<unsigned, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<unsigned, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
-    m.def("local_maxima", &local_maxima<unsigned, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<size_t, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<size_t, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
-    m.def("local_maxima", &local_maxima<size_t, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<float, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<float, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
-    m.def("local_maxima", &local_maxima<float, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
-    m.def("local_maxima", &local_maxima<double, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
+    m.def("local_maxima", &local_maxima<double, int>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
     m.def("local_maxima", &local_maxima<double, std::vector<int>>, py::arg("inp"), py::arg("axis"), py::arg("num_threads") = 1);
 
 }

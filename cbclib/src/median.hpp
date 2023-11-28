@@ -179,7 +179,7 @@ py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::for
 template <typename T, typename U>
 auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
                  std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                 U axis, double r0, double r1, int n_iter, double lm, unsigned threads) -> py::array_t<std::common_type_t<T, float>>;
+                 U axis, double r0, double r1, int n_iter, double lm, bool return_std, unsigned threads) -> py::array_t<std::common_type_t<T, float>>;
 
 template <typename T, typename U>
 auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,

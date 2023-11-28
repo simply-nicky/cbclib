@@ -29,6 +29,15 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
         x : Coordinates array.
         x_hat : Set of coordinates where the fit is to be calculated.
         sigma : Kernel bandwidth.
+        kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+            are available:
+
+            * 'biweigth' : Quartic (biweight) kernel.
+            * 'gaussian' : Gaussian kernel.
+            * 'parabolic' : Epanechnikov (parabolic) kernel.
+            * 'rectangular' : Uniform (rectangular) kernel.
+            * 'triangular' : Triangular kernel.
+
         w : A set of weights, unitary weights are assumed if it's not provided.
         num_threads : Number of threads used in the calculations.
 
@@ -42,6 +51,7 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
     References:
         .. [KerReg] E. A. Nadaraya, “On estimating regression,” Theory Probab. & Its Appl. 9,
             141-142 (1964).
+        .. [Krn]    Kernel (statictics), https://en.wikipedia.org/wiki/Kernel_(statistics).
     """
     ...
 
@@ -63,3 +73,4 @@ def local_maxima(inp: np.ndarray, axis: Union[int, Tuple[int, ...]], num_threads
         - A maxima is defined as one or more samples of equal value that are
           surrounded on both sides by at least one smaller sample.
     """
+    ...

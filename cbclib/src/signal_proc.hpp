@@ -79,43 +79,6 @@ py::array_t<T> binterpolate(py::array_t<T, py::array::c_style | py::array::force
 /*---------------------------- Kernel regression -----------------------------*/
 /*----------------------------------------------------------------------------*/
 
-namespace detail {
-
-template <typename T>
-T gaussian(T x, T sigma) {return exp(-std::pow(x / sigma, 2) / 2) / Constants::M_1_SQRT2PI;}
-
-template <typename T>
-T triangular(T x, T sigma) {return std::max(1 - std::abs(x / sigma), T());}
-
-template <typename T>
-T parabolic(T x, T sigma) {return T(0.75) * std::max<T>(1 - std::pow(x / sigma, 2), T());}
-
-template <typename T>
-T biweight(T x, T sigma) {return 15 / 16 * std::max<T>(std::pow(1 - std::pow(x / sigma, 2), 2), T());}
-
-}
-
-template <typename T>
-struct kernels
-{
-    using kernel = T (*)(T, T);
-    using kernel_info = std::tuple<kernel, T>;
-
-    static inline std::map<std::string, kernel_info> registered_kernels = {{"gaussian",   std::make_tuple(detail::gaussian<T>, 3)},
-                                                                           {"triangular", std::make_tuple(detail::triangular<T>, 1)},
-                                                                           {"parabolic",  std::make_tuple(detail::parabolic<T>, 1)},
-                                                                           {"biweight",   std::make_tuple(detail::biweight<T>, 1)}};
-
-    static kernel_info get_kernel(std::string name, bool throw_if_missing = true)
-    {
-        auto it = registered_kernels.find(name);
-        if (it != registered_kernels.end()) return it->second;
-        if (throw_if_missing)
-            throw std::invalid_argument("kernel is missing for " + name);
-        return std::make_tuple(nullptr, T());
-    }
-};
-
 template <typename T>
 py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forcecast> y,
                           py::array_t<T, py::array::c_style | py::array::forcecast> x,
@@ -123,7 +86,7 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                           std::optional<py::array_t<T, py::array::c_style | py::array::forcecast>> w, unsigned threads);
 
 template <typename T, typename U>
-py::array_t<T> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads);
+py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads);
 
 }
 

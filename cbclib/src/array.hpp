@@ -469,6 +469,51 @@ static std::unordered_map<std::string, extend> const modes = {{"constant", exten
                                                               {"reflect", extend::reflect},
                                                               {"wrap", extend::wrap}};
 
+/*----------------------------------------------------------------------------*/
+/*-------------------------------- Kernels -----------------------------------*/
+/*----------------------------------------------------------------------------*/
+/* All kernels defined with the support of [-1, 1]. */
+namespace detail {
+
+template <typename T>
+T rectangular(T x, T sigma) {return (x <= sigma) ? T(1.0) : T(0.0);}
+
+template <typename T>
+T gaussian(T x, T sigma) {return exp(-std::pow(x / (3 * sigma), 2) / 2) / Constants::M_1_SQRT2PI;}
+
+template <typename T>
+T triangular(T x, T sigma) {return std::max(1 - std::abs(x / sigma), T());}
+
+template <typename T>
+T parabolic(T x, T sigma) {return T(0.75) * std::max<T>(1 - std::pow(x / sigma, 2), T());}
+
+template <typename T>
+T biweight(T x, T sigma) {return 15 / 16 * std::max<T>(std::pow(1 - std::pow(x / sigma, 2), 2), T());}
+
+}
+
+template <typename T>
+struct kernels
+{
+    using kernel = T (*)(T, T);
+    using kernel_info = kernel;
+
+    static inline std::map<std::string, kernel_info> registered_kernels = {{"biweight"   , detail::biweight<T>},
+                                                                           {"gaussian"   , detail::gaussian<T>},
+                                                                           {"parabolic"  , detail::parabolic<T>},
+                                                                           {"rectangular", detail::rectangular<T>},
+                                                                           {"triangular" , detail::triangular<T>}};
+
+    static kernel_info get_kernel(std::string name, bool throw_if_missing = true)
+    {
+        auto it = registered_kernels.find(name);
+        if (it != registered_kernels.end()) return it->second;
+        if (throw_if_missing)
+            throw std::invalid_argument("kernel is missing for " + name);
+        return nullptr;
+    }
+};
+
 }
 
 #endif

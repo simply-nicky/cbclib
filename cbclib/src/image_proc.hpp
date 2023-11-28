@@ -28,56 +28,10 @@ void draw_pixel(table_t<Out> & table, int x, int y, T val)
     std::get<2>(table).push_back(static_cast<Out>(val));
 }
 
-template <typename T>
-T tophat_profile(T err, T width)
-{
-    return std::min(std::max(width - err, T()), T(1.0));
 }
-
-template <typename T>
-T line_profile(T err, T width)
-{
-    return std::max(T(1.0) - err / width, T());
-}
-
-template <typename T>
-T quad_profile(T err, T width)
-{
-    T ratio = err / width;
-    return std::max(T(1.0) - ratio * ratio, T());
-}
-
-template <typename T>
-T gauss_profile(T err, T width)
-{
-    T ratio = err / width;
-    return T(1.018657360363774) * std::max(std::exp(-4 * ratio * ratio) - T(0.01831563888873418), T());
-}
-
-}
-
-template <typename T>
-struct profiles
-{
-    using profile = T (*) (T, T);
-
-    static inline std::map<std::string, profile> registered_profiles = {{"tophat", detail::tophat_profile<T>},
-                                                                        {"linear", detail::line_profile<T>},
-                                                                        {"quad"  , detail::quad_profile<T>},
-                                                                        {"gauss" , detail::gauss_profile<T>}};
-
-    static profile get_profile(std::string name, bool throw_if_missing = true)
-    {
-        auto it = registered_profiles.find(name);
-        if (it != registered_profiles.end()) return it->second;
-        if (throw_if_missing)
-            throw std::invalid_argument("line profile is missing for " + name);
-        return nullptr;
-    }
-};
 
 template <typename Data, typename T, typename Out>
-void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<T, 4> & line, T width, Out max_val, typename profiles<T>::profile prof)
+void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<T, 4> & line, T width, Out max_val, typename kernels<T>::kernel kernel)
 {
     /* create a volatile copy of the input line */
     /* the points are given by [j0, i0, j1, i1] */
@@ -152,7 +106,7 @@ void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<
         pts[1] += dx0; dx0 = 0;
 
         auto r1 = err1 / ed, r2 = std::min(err2 / ed - T(M_SQRT1_2) * wd, T()), r3 = std::max(err2 / ed - ed + T(M_SQRT1_2) * wd, T());
-        auto val = max_val * prof(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
+        auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
         detail::draw_pixel(image, pts[1], pts[0], val);
 
         if (2 * err1 >= -dx)
@@ -164,7 +118,7 @@ void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<
                  e1 += dx, e2 += dy, y2 += sy)
             {
                 auto r1 = e1 / ed, r2 = std::min(e2 / ed - T(M_SQRT1_2) * wd, T()), r3 = std::max(e2 / ed - ed + T(M_SQRT1_2) * wd, T());
-                auto val = max_val * prof(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
+                auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, pts[1], y2, val);
             }
             if (pts[1] == pts[3]) break;
@@ -179,7 +133,7 @@ void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<
                  e1 -= dy, e2 += dx, x2 += sx)
             {
                 auto r1 = e1 / ed, r2 = std::min(e2 / ed - T(M_SQRT1_2) * wd , T()), r3 = std::max(e2 / ed - ed + T(M_SQRT1_2) * wd, T());
-                auto val = max_val * prof(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
+                auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, x2, pts[0], val);
             }
             if (pts[0] == pts[2]) break;
@@ -190,19 +144,19 @@ void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<
 
 template <typename T, typename Out>
 py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
-                           std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+                           std::vector<size_t> shape, Out max_val, T dilation, std::string kernel, unsigned threads);
 
 template <typename T, typename Out>
 py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
-                               std::vector<size_t> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+                               std::vector<size_t> shape, Out max_val, T dilation, std::string kernel, unsigned threads);
 
 template <typename T, typename Out>
 auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> lines, std::optional<std::vector<size_t>> shape,
-                     Out max_val, T dilation, std::string prof, unsigned threads);
+                     Out max_val, T dilation, std::string kernel, unsigned threads);
 
 template <typename T, typename Out>
 auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> lines,
-                         std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string prof, unsigned threads);
+                         std::optional<std::vector<size_t>> shape, Out max_val, T dilation, std::string kernel, unsigned threads);
 
 }
 

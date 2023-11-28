@@ -2,7 +2,7 @@ from typing import List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[int, ...], max_val: int=255,
-                   dilation: float=0.0, profile: str='tophat', num_threads: int=1) -> np.ndarray:
+                   dilation: float=0.0, kernel: str='rectangular', num_threads: int=1) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame
     by using the Bresenham's algorithm [BSH]_. The lines must follow the LSD convention,
     see the parameters for more info.
@@ -19,12 +19,14 @@ def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[
         shape : Shape of the output array. All the lines outside the shape will be discarded.
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output array.
-        profile : Line width profiles. The following keyword values are allowed:
+        kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+            are available:
 
-            * `tophat` : Top-hat (rectangular) function profile.
-            * `linear` : Linear (triangular) function profile.
-            * `quad` : Quadratic (parabola) function profile.
-            * `gauss` : Gaussian funtion profile.
+            * 'biweigth' : Quartic (biweight) kernel.
+            * 'gaussian' : Gaussian kernel.
+            * 'parabolic' : Epanechnikov (parabolic) kernel.
+            * 'rectangular' : Uniform (rectangular) kernel.
+            * 'triangular' : Triangular kernel.
 
         num_threads : Number of threads used in the calculations.
 
@@ -46,7 +48,7 @@ def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[
     ...
 
 def draw_line_image(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[int, ...],
-                    max_val: float=1.0, dilation: float=0.0, profile: str='gauss',
+                    max_val: float=1.0, dilation: float=0.0, kernel: str='rectangular',
                     num_threads: int=1) -> np.ndarray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
     The lines must follow the LSD convention, see the parameters for more info.
@@ -64,12 +66,14 @@ def draw_line_image(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple
         shape : Shape of the output array. All the lines outside the shape will be discarded.
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output array.
-        profile : Line width profiles. The following keyword values are allowed:
+        kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+            are available:
 
-            * `tophat` : Top-hat (rectangular) function profile.
-            * `linear` : Linear (triangular) function profile.
-            * `quad` : Quadratic (parabola) function profile.
-            * `gauss` : Gaussian funtion profile.
+            * 'biweigth' : Quartic (biweight) kernel.
+            * 'gaussian' : Gaussian kernel.
+            * 'parabolic' : Epanechnikov (parabolic) kernel.
+            * 'rectangular' : Uniform (rectangular) kernel.
+            * 'triangular' : Triangular kernel.
 
         num_threads : Number of threads used in the calculations.
 
@@ -87,7 +91,7 @@ def draw_line_image(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple
     ...
 
 def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: float=1.0,
-                    dilation: float=0.0, profile: str='gauss') -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+                    dilation: float=0.0, kernel: str='rectangular') -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
     """Return an array of rasterized thick lines indices and their corresponding pixel values.
     The lines are drawn with variable thickness and the antialiasing applied. The lines must
     follow the LSD convention, see the parameters for more info.
@@ -105,12 +109,14 @@ def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, ma
         shape : Shape of the image. All the lines outside the shape will be discarded.
         max_val : Maximum pixel value of a drawn line.
         dilation : Size of the binary dilation applied to the output image.
-        profile : Line width profiles. The following keyword values are allowed:
+        kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+            are available:
 
-            * `tophat` : Top-hat (rectangular) function profile.
-            * `linear` : Linear (triangular) function profile.
-            * `quad` : Quadratic (parabola) function profile.
-            * `gauss` : Gaussian funtion profile.
+            * 'biweigth' : Quartic (biweight) kernel.
+            * 'gaussian' : Gaussian kernel.
+            * 'parabolic' : Epanechnikov (parabolic) kernel.
+            * 'rectangular' : Uniform (rectangular) kernel.
+            * 'triangular' : Triangular kernel.
 
     Raises:
         ValueError : If `lines` has an incompatible shape.
