@@ -80,6 +80,8 @@ public:
     >
     any_container(const Container & c) : any_container(std::begin(c), std::end(c)) {}
 
+    // initializer_list's aren't deducible, so don't get matched by the above template;
+    // we need this to explicitly allow implicit conversion from one:
     template <typename TIn, typename = std::enable_if_t<std::is_convertible_v<TIn, T>>>
     any_container(const std::initializer_list<TIn> & c) : any_container(c.begin(), c.end()) {}
 
@@ -94,6 +96,13 @@ public:
     const std::vector<T> * operator->() const {return &(this->vec);}
 };
 
+}
+
+template <class InputIt, typename = std::enable_if_t<detail::is_input_iterator<InputIt>::value>>
+auto get_size(InputIt first, InputIt last)
+{
+    using value_t = typename InputIt::value_type;
+    return std::reduce(first, last, value_t(1), std::multiplies<value_t>());
 }
 
 template <typename Container>
@@ -147,6 +156,17 @@ void check_optional(const std::string & name, const py::array_t<T, py::array::c_
     }
 }
 
+template <typename Container, typename Function, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+void check_shape(const Container & shape, Function && func)
+{
+    if (std::forward<Function>(func)(shape) || !get_size(shape.begin(), shape.end()))
+    {
+        std::ostringstream oss;
+        std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("invalid shape: {" + oss.str() + "}");
+    }
+}
+
 template <typename T>
 class sequence : public detail::any_container<T>
 {
@@ -192,7 +212,7 @@ public:
             if (std::find(this->vec.begin(), this->vec.end(), i) == this->vec.end())
             {
                 auto obj = reinterpret_cast<PyArrayObject *>(arr.release().ptr());
-                arr = py::reinterpret_steal<std::decay_t<Array>>(PyArray_SwapAxes(obj, counter++, i));
+                arr = py::reinterpret_steal<std::remove_cvref_t<Array>>(PyArray_SwapAxes(obj, counter++, i));
             }
         }
         return std::forward<Array>(arr);
@@ -207,7 +227,7 @@ public:
             if (std::find(this->vec.begin(), this->vec.end(), i) == this->vec.end())
             {
                 auto obj = reinterpret_cast<PyArrayObject *>(arr.release().ptr());
-                arr = py::reinterpret_steal<std::decay_t<Array>>(PyArray_SwapAxes(obj, --counter, i));
+                arr = py::reinterpret_steal<std::remove_cvref_t<Array>>(PyArray_SwapAxes(obj, --counter, i));
             }
         }
         return std::forward<Array>(arr);

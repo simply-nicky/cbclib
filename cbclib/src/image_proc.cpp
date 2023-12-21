@@ -5,19 +5,8 @@ namespace cbclib {
 template <typename T>
 void check_lines(array<T> & lines)
 {
-    if (lines.ndim == 1 && lines.size == 5) lines = array<T>({1, 5}, lines.ptr);
+    if (lines.ndim == 1 && lines.size == 5) lines = lines.reshape({1, 5});
     check_dimensions("lines", lines.ndim - 2, lines.shape, lines.size / 5, 5);
-}
-
-template <typename Function>
-void check_shape(const std::vector<size_t> & shape, Function && func)
-{
-    if (std::forward<Function>(func)(shape) || !get_size(shape.begin(), shape.end()))
-    {
-        std::ostringstream oss;
-        std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("invalid shape: {" + oss.str() + "}");
-    }
 }
 
 template <typename T, typename Out>
@@ -29,6 +18,7 @@ py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcec
     auto krn = kernels<T>::get_kernel(kernel);
 
     check_shape(shape, [](const std::vector<size_t> & shape){return shape.size() != 2;});
+    Point<size_t> ubound {shape[shape.size() - 1] - 1, shape[shape.size() - 2] - 1};
 
     auto larr = array<T>(lines.request());
     check_lines(larr);
@@ -48,7 +38,7 @@ py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcec
         e.run([&]
         {
             auto liter = larr.line_begin(1, j);
-            draw_bresenham(oarr, &oarr.shape, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
+            draw_bresenham(oarr, {oarr.shape[1] - 1, oarr.shape[0] - 1}, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
         });
     }
 
@@ -68,6 +58,7 @@ py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | p
     auto krn = kernels<T>::get_kernel(kernel);
 
     check_shape(shape, [](const std::vector<size_t> & shape){return shape.size() < 3;});
+    Point<size_t> ubound {shape[shape.size() - 1] - 1, shape[shape.size() - 2] - 1};
 
     if (get_size(shape.begin(), std::prev(shape.end(), 2)) != lines.size())
         throw std::invalid_argument("shape is incompatible with the list of lines");
@@ -99,7 +90,7 @@ py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | p
             for (size_t j = 0; j < lvec[i].shape[0]; j++)
             {
                 auto liter = lvec[i].line_begin(1, j);
-                draw_bresenham(frame, &frame.shape, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
+                draw_bresenham(frame, ubound, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
             }
         });
     }
@@ -119,12 +110,17 @@ auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> l
 
     auto krn = kernels<T>::get_kernel(kernel);
 
-    if (shape) check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() != 2;});
-
     auto larr = array<T>(lines.request());
     check_lines(larr);
 
-    auto sptr = (shape) ? &shape.value() : nullptr;
+    Point<size_t> ubound;
+    if (shape)
+    {
+        check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() != 2;});
+        ubound.x = shape.value()[shape.value().size() - 1] - 1;
+        ubound.y = shape.value()[shape.value().size() - 2] - 1;
+    }
+    else {ubound.x = INT_MAX; ubound.y = INT_MAX;}
 
     table_t<Out> result;
 
@@ -138,7 +134,7 @@ auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> l
         e.run([&]
         {
             auto liter = larr.line_begin(1, j);
-            draw_bresenham(result, sptr, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
+            draw_bresenham(result, ubound, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
         });
     }
 
@@ -159,7 +155,14 @@ auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::arr
 
     auto krn = kernels<T>::get_kernel(kernel);
 
-    if (shape) check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() != 2;});
+    Point<size_t> ubound;
+    if (shape)
+    {
+        check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() < 3;});
+        ubound.x = shape.value()[shape.value().size() - 1] - 1;
+        ubound.y = shape.value()[shape.value().size() - 2] - 1;
+    }
+    else {ubound.x = INT_MAX; ubound.y = INT_MAX;}
 
     std::vector<array<T>> lvec;
     for (const auto & obj : lines)
@@ -167,8 +170,6 @@ auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::arr
         auto & arr = lvec.emplace_back(obj.request());
         check_lines(arr);
     }
-
-    auto sptr = (shape) ? &shape.value() : nullptr;
 
     std::vector<table_t<Out>> result;
 
@@ -190,7 +191,7 @@ auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::arr
                 for (size_t j = 0; j < lvec[i].shape[0]; j++)
                 {
                     auto liter = lvec[i].line_begin(1, j);
-                    draw_bresenham(table, sptr, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
+                    draw_bresenham(table, ubound, {liter[0], liter[1], liter[2], liter[3]}, liter[4] + dilation, max_val, krn);
                 }
             });
         }
@@ -236,7 +237,7 @@ PYBIND11_MODULE(image_proc, m)
     m.def("draw_line_mask", &draw_line_vec<double, uint32_t>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_mask", &draw_line<float, uint32_t>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_mask", &draw_line_vec<float, uint32_t>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
-    
+
     m.def("draw_line_image", &draw_line<float, float>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_image", &draw_line_vec<float, float>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_image", &draw_line<double, double>, py::arg("lines"), py::arg("shape"), py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
@@ -246,5 +247,4 @@ PYBIND11_MODULE(image_proc, m)
     m.def("draw_line_table", &draw_line_table_vec<float, float>, py::arg("lines"), py::arg("shape") = std::nullopt, py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_table", &draw_line_table<double, double>, py::arg("lines"), py::arg("shape") = std::nullopt, py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
     m.def("draw_line_table", &draw_line_table_vec<double, double>, py::arg("lines"), py::arg("shape") = std::nullopt, py::arg("max_val") = 1.0, py::arg("dilation") = 0.0, py::arg("kernel") = "rectangular", py::arg("num_threads") = 1);
-
 }

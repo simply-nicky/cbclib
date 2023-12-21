@@ -155,7 +155,6 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
 template <typename T, typename U>
 py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads)
 {
-    using iterator = typename array<T>::iterator;
     auto ibuf = inp.request();
 
     sequence<long> seq (axis);
@@ -180,53 +179,14 @@ py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::
     #pragma omp parallel num_threads(threads)
     {
         std::vector<size_t> buffer;
+        auto add_peak = [&buffer, &iarr](size_t index){iarr.unravel_index(std::back_inserter(buffer), index);};
 
         #pragma omp for schedule(static) nowait
         for (size_t i = 0; i < repeats; i++)
         {
             e.run([&]
             {
-                // First element can't be a maximum
-                auto iter = std::next(iarr.line_begin(seq[0], i));
-                auto last = std::prev(iarr.line_end(seq[0], i));
-                while (iter != last)
-                {
-                    if (*std::prev(iter) < *iter)
-                    {
-                        // ahead can be last
-                        auto ahead = std::next(iter);
-
-                        while (ahead != last && *ahead == *iter) ++ahead;
-
-                        if (*ahead < *iter)
-                        {
-                            std::vector<size_t> peak;
-                            auto index = std::distance(iarr.begin(), static_cast<iterator>(iter));
-                            iarr.unravel_index(std::back_inserter(peak), index);
-
-                            size_t n = 1;
-                            for (; n < seq.size(); n++)
-                            {
-                                if (peak[seq[n]] > 1 && peak[seq[n]] < iarr.shape[seq[n]] - 1)
-                                {
-                                    if (iarr[index - iarr.stride(seq[n])] < *iter && iarr[index + iarr.stride(seq[n])] < *iter)
-                                    {
-                                        continue;
-                                    }
-                                }
-
-                                break;
-                            }
-
-                            if (n == seq.size()) buffer.insert(buffer.end(), std::make_move_iterator(peak.begin()), std::make_move_iterator(peak.end()));
-
-                            // Skip samples that can't be maximum, check if it's not last
-                            if (ahead != last) iter = ahead;
-                        }
-                    }
-
-                    iter = std::next(iter);
-                }
+                maxima1d(iarr.line_begin(seq[0], i), iarr.line_end(seq[0], i), add_peak, iarr, seq);
             });
         }
 

@@ -85,6 +85,54 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                           py::array_t<T, py::array::c_style | py::array::forcecast> x_hat, T sigma, std::string kernel,
                           std::optional<py::array_t<T, py::array::c_style | py::array::forcecast>> w, unsigned threads);
 
+template <typename InputIt, typename T, typename Axes, class UnaryFunction>
+UnaryFunction maxima1d(InputIt first, InputIt last, UnaryFunction unary_op, const array<T> & arr, const Axes & axes)
+{
+    // First element can't be a maximum
+    auto iter = (first != last) ? std::next(first) : first;
+    last = (iter != last) ? std::prev(last) : last;
+
+    while (iter != last)
+    {
+        if (*std::prev(iter) < *iter)
+        {
+            // ahead can be last
+            auto ahead = std::next(iter);
+
+            while (ahead != last && *ahead == *iter) ++ahead;
+
+            if (*ahead < *iter)
+            {
+                auto index = arr.index(iter);
+
+                size_t n = 1;
+                for (; n < axes.size(); n++)
+                {
+                    auto coord = arr.index_along_dim(index, axes[n]);
+                    if (coord > 1 && coord < arr.shape[axes[n]] - 1)
+                    {
+                        if (arr[index - arr.stride(axes[n])] < *iter && arr[index + arr.stride(axes[n])] < *iter)
+                        {
+                            continue;
+                        }
+                    }
+
+                    break;
+                }
+
+                if (n == axes.size()) unary_op(index);
+
+                // Skip samples that can't be maximum, check if it's not last
+                if (ahead != last) iter = ahead;
+            }
+        }
+
+        iter = std::next(iter);
+    }
+
+    return unary_op;
+}
+
 template <typename T, typename U>
 py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::forcecast> inp, U axis, unsigned threads);
 

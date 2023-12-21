@@ -392,7 +392,7 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
         size_t j0 = r0 * yarr.shape[ax], j1 = r1 * yarr.shape[ax];
 
         #pragma omp for
-        for (size_t i = 0; i < repeats; i++)
+        for (size_t i = 0; i < static_cast<size_t>(repeats); i++)
         {
             e.run([&]
             {

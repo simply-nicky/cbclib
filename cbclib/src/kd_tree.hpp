@@ -4,396 +4,639 @@
 
 namespace cbclib {
 
-namespace detail {
+template <typename Point, typename Data>
+class KDTree;
 
-template<typename NodePtr>
-NodePtr && min_node(NodePtr && a, NodePtr && b, NodePtr && c, int axis)
-{
-    if (b && b->point[axis] < a->point[axis])
-    {
-        if (c && c->point[axis] < b->point[axis]) return std::forward<NodePtr>(c);
-        return std::forward<NodePtr>(b);
-    }
-    if (c && c->point[axis] < a->point[axis]) return std::forward<NodePtr>(c);
-    return std::forward<NodePtr>(a);
-}
-
-template <typename NodePtr>
-NodePtr && max_node(NodePtr && a, NodePtr && b, NodePtr && c, int axis)
-{
-    if (b && b->point[axis] > a->point[axis])
-    {
-        if (c && c->point[axis] > b->point[axis]) return std::forward<NodePtr>(c);
-        return std::forward<NodePtr>(b);
-    }
-    if (c && c->point[axis] > a->point[axis]) return std::forward<NodePtr>(c);
-    return std::forward<NodePtr>(a);
-}
-
-template <typename F>
-F distance(const std::vector<F> & a, const std::vector<F> & b)
-{
-    F dist = F();
-    for (size_t i = 0; i < a.size(); i++) dist += std::pow(a[i] - b[i], 2);
-    return dist;
-}
-
-}
-
-template <typename NodePtr>
-NodePtr find_min(NodePtr node, int axis)
-{
-    if (!node) return std::move(node);
-
-    if (node->cut_dim == axis)
-    {
-        if (!node->left) return std::move(node);
-        else return find_min(node->left, axis);
-    }
-    else return detail::min_node(std::move(node), find_min(node->left, axis), find_min(node->right, axis), axis);
-}
-
-template <typename NodePtr>
-NodePtr find_max(NodePtr node, int axis)
-{
-    if (!node) return std::move(node);
-
-    if (node->cut_dim == axis)
-    {
-        if (!node->right) return std::move(node);
-        else return find_max(node->right, axis);
-    }
-    else return detail::max_node(std::move(node), find_max(node->left, axis), find_max(node->right, axis), axis);
-}
-
-template <typename F, typename Data>
+template <typename Point, typename Data>
 class KDNode
 {
 public:
-    using coordinate_type = F;
     using data_type = Data;
+    using item_type = std::pair<Point, Data>;
 
-    using Point = std::vector<F>;
-    using node_ptr = std::shared_ptr<KDNode<F, Data>>;
-    using data_ptr = std::shared_ptr<Data>;
-
-    Point point;
+    item_type item;
     int cut_dim;
-    data_ptr data;
-    node_ptr left, right;
 
-    template<typename Container, typename = std::enable_if_t<std::is_same_v<typename Container::value_type, F>>>
-    KDNode(Container c, int dir, Data data = nullptr)
-        : point(std::begin(c), std::end(c)), cut_dim(dir), data(std::make_shared<Data>(data)) {}
+    KDNode() = default;
 
+    auto ndim() const -> decltype(std::declval<Point &>().size()) {return item.first.size();}
+
+    Point & point() {return item.first;}
+    const Point & point() const {return item.first;}
+
+    Data & data() {return item.second;}
+    const Data & data() const {return item.second;}
 
     bool is_left(const Point & pt) const
     {
-        return pt[this->cut_dim] < this->point[this->cut_dim];
+        return pt[this->cut_dim] < point()[this->cut_dim];
     }
+
+private:
+    KDNode *left;
+    KDNode *right;
+    KDNode *parent;
+
+    friend class KDTree<Point, Data>;
+
+    template <typename Item, typename = std::enable_if_t<std::is_same_v<item_type, std::remove_cvref_t<Item>>>>
+    KDNode(Item && item, int dir, KDNode * lt = nullptr, KDNode * rt = nullptr, KDNode * par = nullptr) :
+        item(std::forward<Item>(item)), cut_dim(dir), left(lt), right(rt), parent(par) {}
 };
 
-template <typename It, typename T, typename Data, typename = void>
-struct is_node_pointer : std::false_type {};
+template <typename Node, typename Point, typename Data, typename = void>
+struct is_node : std::false_type {};
 
-template <typename It, typename T, typename Data>
-struct is_node_pointer<It, T, Data,
-    typename std::enable_if_t<
-        std::is_same_v<
-            typename std::decay_t<It>,
-            std::shared_ptr<KDNode<T, Data>>
-        >
-    >
+template <typename Node, typename Point, typename Data>
+struct is_node<Node, Point, Data,
+    typename std::enable_if_t<std::is_base_of_v<KDNode<Point, Data>, std::remove_cvref_t<Node>>>
 > : std::true_type {};
 
-template <typename It, typename T, typename Data>
-constexpr bool is_node_pointer_v = is_node_pointer<It, T, Data>::value;
+template <typename Node, typename F, typename Data>
+constexpr bool is_node_v = is_node<Node, F, Data>::value;
 
-template <typename F>
-class Rectangle
-{
-public:
-    using Point = std::vector<F>;
-    Point low, high;
-
-    Rectangle(Point low, Point high) : low(std::move(low)), high(std::move(high)) {};
-
-    template <
-        class NodePtr,
-        typename = std::enable_if_t<
-            is_node_pointer_v<NodePtr, F, typename std::decay_t<NodePtr>::element_type::data_type>
-        >
-    >
-    Rectangle(NodePtr node, size_t ndim) : low(ndim), high(ndim)
-    {
-        for (size_t i = 0; i < low.size(); i++)
-        {
-            this->low[i] = find_min(node, i)->point[i];
-            this->high[i] = find_max(node, i)->point[i];
-        }
-    }
-
-    Rectangle & update(const Point & pt)
-    {
-        for (size_t i = 0; i < pt.size(); i++)
-        {
-            this->low[i] = std::min(this->low[i], pt[i]);
-            this->high[i] = std::max(this->high[i], pt[i]);
-        }
-        return *this;
-    }
-
-    F distance(const Point & pt) const
-    {
-        F dist = F();
-        for (size_t i = 0; i < pt.size(); i++)
-        {
-            if (pt[i] < this->low[i]) dist += std::pow(this->low[i] - pt[i], 2);
-            if (pt[i] > this->high[i]) dist += std::pow(pt[i] - this->high[i], 2);
-        }
-        return dist;
-    }
-};
-
-template<typename F, typename Data = std::nullptr_t>
+template<typename Point, typename Data>
 class KDTree
 {
 public:
-    using node_ptr = typename std::shared_ptr<KDNode<F, Data>>;
-    using rect_ptr = typename std::unique_ptr<Rectangle<F>>;
-    using Point = typename std::vector<F>;
+    using F = typename Point::value_type;
+    using node_t = KDNode<Point, Data>;
+    using item_type = typename node_t::item_type;
 
-    using query_t = typename std::tuple<node_ptr, F>;
-    using stack_t = typename std::vector<query_t>;
-
-    size_t ndim;
-    node_ptr root;
-    rect_ptr rect;
-
-    KDTree(size_t ndim) : ndim(ndim) {};
-
-    template<typename Container, typename = std::enable_if_t<std::is_same_v<typename Container::value_type, F>>>
-    KDTree(const std::vector<Container> & points, size_t ndim) : ndim(ndim)
+    class KDIterator
     {
-        std::vector<node_ptr> nodes;
-        std::transform(points.begin(), points.end(), std::back_inserter(nodes),
-                       [](Container c){return std::make_shared<KDNode<F, Data>>(c, 0);});
-        this->root = build_tree(nodes.begin(), nodes.end(), 0);
-        this->rect = std::make_unique<Rectangle<F>>(this->root, this->ndim);
-    }
+    public:
+        using iterator_category = std::bidirectional_iterator_tag;
+        using value_type = KDNode<Point, Data>;
+        using difference_type = std::ptrdiff_t;
+        using pointer = const value_type *;
+        using reference = const value_type &;
 
-    template<typename Container, typename = std::enable_if_t<std::is_same_v<typename Container::value_type, F>>>
-    KDTree(const std::vector<Container> & points, const std::vector<Data> & data, size_t ndim) : ndim(ndim)
-    {
-        std::vector<node_ptr> nodes;
-        std::transform(points.begin(), points.end(), data.begin(), std::back_inserter(nodes),
-                       [](Container c, Data d){return std::make_shared<KDNode<F, Data>>(c, 0, d);});
-        this->root = build_tree(nodes.begin(), nodes.end(), 0);
-        this->rect = std::make_unique<Rectangle<F>>(this->root, this->ndim);
-    }
+        KDIterator() : ptr(nullptr), root(nullptr) {}
 
-    KDTree & insert(Point pt, Data data = nullptr)
-    {
-        this->root = insert_node(this->root, pt, data, this->root->cut_dim);
-        if (!this->rect) this->rect = std::make_unique<Rectangle<F>>(this->root, this->ndim);
-        this->rect->update(pt);
-        return *this;
-    }
-
-    KDTree & remove(const Point & pt)
-    {
-        this->root = remove_node(this->root, pt);
-        if (this->rect)
+        bool operator==(const KDIterator & rhs) const
         {
-            if (this->root)
+            return root == rhs.root && ptr == rhs.ptr;
+        }
+
+        bool operator!=(const KDIterator & rhs) const {return !operator==(rhs);}
+
+        KDIterator & operator++()
+        {
+            if (ptr == nullptr)
             {
-                for (size_t i = 0; i < this->ndim; i++)
+                // ++ from end(). Get the root of the tree
+                ptr = root;
+
+                // error! ++ requested for an empty tree
+                while (ptr != nullptr && ptr->left != nullptr) ptr = ptr->left;
+
+            }
+            else if (ptr->right != nullptr)
+            {
+                // successor is the farthest left node of right subtree
+                ptr = ptr->right;
+
+                while (ptr->left != nullptr) ptr = ptr->left;
+            }
+            else
+            {
+                // have already processed the left subtree, and
+                // there is no right subtree. move up the tree,
+                // looking for a parent for which nodePtr is a left child,
+                // stopping if the parent becomes NULL. a non-NULL parent
+                // is the successor. if parent is NULL, the original node
+                // was the last node inorder, and its successor
+                // is the end of the list
+                node_t * p = ptr->parent;
+                while (p != nullptr && ptr == p->right)
                 {
-                    if (pt[i] == this->rect->low[i]) this->rect->low[i] = find_min(this->root, i)->point[i];
-                    if (pt[i] == this->rect->high[i]) this->rect->high[i] = find_max(this->root, i)->point[i];
+                    ptr = p; p = p->parent;
+                }
+
+                // if we were previously at the right-most node in
+                // the tree, nodePtr = nullptr, and the iterator specifies
+                // the end of the list
+                ptr = p;
+            }
+
+            return *this;
+        }
+
+        KDIterator operator++(int)
+        {
+            auto saved = *this;
+            operator++();
+            return saved;
+        }
+
+        KDIterator & operator--()
+        {
+            if (ptr == nullptr)
+            {
+                // -- from end(). Get the root of the tree
+                ptr = root;
+
+                // move to the largest value in the tree,
+                // which is the last node inorder
+                while (ptr != nullptr && ptr->right != nullptr) ptr = ptr->right;
+            }
+            else if (ptr->left != nullptr)
+            {
+                // must have gotten here by processing all the nodes
+                // on the left branch. predecessor is the farthest
+                // right node of the left subtree
+                ptr = ptr->left;
+
+                while (ptr->right != nullptr) ptr = ptr->right;
+            }
+            else
+            {
+                // must have gotten here by going right and then
+                // far left. move up the tree, looking for a parent
+                // for which ptr is a right child, stopping if the
+                // parent becomes nullptr. a non-nullptr parent is the
+                // predecessor. if parent is nullptr, the original node
+                // was the first node inorder, and its predecessor
+                // is the end of the list
+                node_t * p = ptr->parent;
+                while (p != nullptr && ptr == p->left)
+                {
+                    ptr = p; p = p->parent;
+                }
+
+                // if we were previously at the left-most node in
+                // the tree, ptr = NULL, and the iterator specifies
+                // the end of the list
+                ptr = p;
+            }
+
+            return *this;
+        }
+
+        KDIterator operator--(int)
+        {
+            auto saved = *this;
+            operator--();
+            return saved;
+        }
+
+        reference operator*() const {return *ptr;}
+        pointer operator->() const {return ptr;}
+
+    private:
+        friend class KDTree<Point, Data>;
+
+        const node_t * ptr;
+        const node_t * root;
+
+        KDIterator(const node_t * ptr, const node_t * root) : ptr(ptr), root(root) {}
+    };
+
+    class Rectangle
+    {
+    public:
+        std::vector<F> low, high;
+
+        Rectangle() = default;
+
+        void update(const Point & pt)
+        {
+            for (size_t i = 0; i < pt.size(); i++)
+            {
+                low[i] = std::min(low[i], pt[i]);
+                high[i] = std::max(high[i], pt[i]);
+            }
+        }
+
+        F distance(const Point & pt) const
+        {
+            F dist = F();
+            for (size_t i = 0; i < pt.size(); i++)
+            {
+                if (pt[i] < low[i]) dist += std::pow(low[i] - pt[i], 2);
+                if (pt[i] > high[i]) dist += std::pow(pt[i] - high[i], 2);
+            }
+            return dist;
+        }
+
+    private:
+        friend class KDTree<Point, Data>;
+
+        Rectangle trim_left(node_t * node) const
+        {
+            Rectangle rect = *this;
+            rect.high[node->cut_dim] = node->point()[node->cut_dim];
+            return rect;
+        }
+
+        Rectangle trim_right(node_t * node) const
+        {
+            Rectangle rect = *this;
+            rect.low[node->cut_dim] = node->point()[node->cut_dim];
+            return rect;
+        }
+
+        Rectangle(const KDTree<Point, Data> & tree)
+        {
+            for (size_t i = 0; i < tree.ndim(); i++)
+            {
+                low.push_back(tree.find_min(i)->point()[i]);
+                high.push_back(tree.find_max(i)->point()[i]);
+            }
+        }
+    };
+
+    using const_iterator = KDIterator;
+    using iterator = const_iterator;
+
+    using rect_t = Rectangle;
+
+    using query_t = std::pair<const_iterator, F>;
+    using stack_t = std::vector<std::pair<const_iterator, F>>;
+
+    KDTree(std::vector<item_type> && items)
+    {
+        root = build_tree(std::make_move_iterator(items.begin()),
+                          std::make_move_iterator(items.end()), nullptr, 0);
+        if (root) rect = new rect_t{*this};
+    }
+    
+    ~KDTree() {clear();}
+
+    auto ndim() const -> decltype(std::declval<Point &>().size())
+    {
+        if (root == nullptr) return 0;
+        else return root->ndim();
+    }
+
+    bool empty() const {return root == nullptr;}
+
+    void clear()
+    {
+        root = clear_node(root);
+        clear_rect();
+    }
+
+    const_iterator begin() const
+    {
+        return {begin_node(root), root};
+    }
+
+    const_iterator end() const
+    {
+        return {nullptr, root};
+    }
+
+    const_iterator insert(item_type && item)
+    {
+        const_iterator inserted;
+        std::tie(root, inserted) = insert_node(root, std::move(item), root, root->cut_dim);
+
+        if (inserted != end())
+        {
+            if (!rect) rect = new rect_t(*this);
+            else rect->update(item.first);
+        }
+
+        return inserted;
+    }
+
+    size_t erase(const Point & pt)
+    {
+        size_t removed;
+        std::tie(root, removed) = remove_node(root, pt);
+
+        if (rect && removed)
+        {
+            if (root)
+            {
+                for (size_t i = 0; i < ndim(); i++)
+                {
+                    if (pt[i] == rect->low[i]) rect->low[i] = find_min(i)->point()[i];
+                    if (pt[i] == rect->high[i]) rect->high[i] = find_max(i)->point()[i];
                 }
             }
-            else this->rect = nullptr;
+            else clear_rect();
         }
-        return *this;
+
+        return removed;
+    }
+
+    const_iterator erase(const_iterator pos)
+    {
+        if (pos != end())
+        {
+            erase((pos++)->point());
+        }
+        return pos;
+    }
+
+    const_iterator find(const Point & pt) const
+    {
+        return {find_node(root, pt, *rect, nullptr), root};
+    }
+
+    const_iterator find_min(int axis) const
+    {
+        return {find_min_node(root, axis), root};
+    }
+
+    const_iterator find_max(int axis) const
+    {
+        return {find_max_node(root, axis), root};
     }
 
     query_t find_nearest(const Point & pt) const
     {
-        return nearest_node(this->root, pt, this->rect, std::make_tuple(this->root, std::numeric_limits<F>::max()));
+        return nearest_node(root, pt, *rect, {const_iterator(root, root), std::numeric_limits<F>::max()});
     }
 
     stack_t find_range(const Point & pt, F range) const
     {
-        return find_range_node(this->root, pt, range * range, this->rect, stack_t());
+        return find_range_node(root, pt, range * range, *rect, {});
     }
 
-    friend std::ostream & operator<<(std::ostream & os, const KDTree<F, Data> & tree)
+    void print() const
     {
-        tree.print_rect(os);
-        tree.print_node(os, tree.root);
-        return os;
+        print_node(std::cout, root);
+        print_rect(std::cout);
     }
 
-protected:
-    template <
-        class NodeIter,
-        typename = std::enable_if_t<is_node_pointer_v<typename NodeIter::value_type, F, Data>>
-    >
-    typename NodeIter::value_type build_tree(NodeIter first, NodeIter last, int dir) const
-    {
-        node_ptr node;
+private:
+    node_t * root;
+    rect_t * rect;
 
-        if (last <= first) node = nullptr;
+    template <class Iter>
+    node_t * build_tree(Iter first, Iter last, node_t * par, int dir)
+    {
+        using value_t = typename Iter::value_type;
+
+        if (last <= first) return nullptr;
         else if (last == std::next(first))
         {
-            node = *first;
-            node->cut_dim = dir;
+            return new node_t{*first, dir, nullptr, nullptr, par};
         }
         else
         {
-            auto iter = wirthmedian(first, last, [dir](node_ptr a, node_ptr b){return a->point[dir] < b->point[dir];});
+            auto compare = [dir](const value_t & a, const value_t & b){return a.first[dir] < b.first[dir];};
+            auto iter = wirthmedian(first, last, compare);
 
-            node = *iter;
-            node->cut_dim = dir;
-            node->left = build_tree(first, iter, (dir + 1) % this->ndim);
-            node->right = build_tree(std::next(iter), last, (dir + 1) % this->ndim);
+            node_t * node = new node_t{*iter, dir, nullptr, nullptr, par};
+            node->left = build_tree(first, iter, node, (dir + 1) % node->ndim());
+            node->right = build_tree(std::next(iter), last, node, (dir + 1) % node->ndim());
+            return node;
         }
+    }
 
+    void clear_rect()
+    {
+        if (rect != nullptr)
+        {
+            delete rect; rect = nullptr;
+        }
+    }
+
+    node_t * clear_node(node_t * node)
+    {
+        if (node != nullptr)
+        {
+            node->left = clear_node(node->left);
+            node->right = clear_node(node->right);
+
+            delete node; node = nullptr;
+        }
+        
         return node;
     }
 
-    node_ptr insert_node(node_ptr node, Point pt, Data data, int dir)
+    std::tuple<node_t *, const_iterator> insert_node(node_t * node, item_type && item, node_t * par, int dir)
     {
         // Create new node if empty
-        if (!node) return std::make_shared<KDNode<F, Data>>(pt, dir, data);
+        if (!node)
+        {
+            node = new node_t{std::move(item), dir, nullptr, nullptr, par};
+            return {node, const_iterator(node, root)};
+        }
+
+        // Duplicate data point, no insertion 
+        if (item.first == node->point())
+        {
+            return {node, end()};
+        }
         
-        if (pt[node->cut_dim] == node->point[node->cut_dim])
-            throw std::runtime_error("Inserting a duplicate point");
-        
-        if (node->is_left(pt))
+        const_iterator inserted;
+
+        if (node->is_left(item.first))
         {
             // left of splitting line
-            node->left = insert_node(node->left, pt, data, (node->cut_dim + 1) % this->ndim);
+            std::tie(node->left, inserted) = insert_node(node->left, std::move(item), node, (node->cut_dim + 1) % node->ndim());
         }
         else
         {
             // on or right of splitting line
-            node->right = insert_node(node->right, pt, data, (node->cut_dim + 1) % this->ndim);
+            std::tie(node->right, inserted) = insert_node(node->right, std::move(item), node, (node->cut_dim + 1) % node->ndim());
         }
-        return node;
+
+        return {node, inserted};
     }
 
-    node_ptr remove_node(node_ptr node, const Point & pt)
+    std::tuple<node_t *, size_t> remove_node(node_t * node, const Point & pt)
     {
-        if (!node) return nullptr;
+        // Fell out of tree
+        if (!node) return {node, 0};
+
+        size_t removed;
 
         // Found the node
-        if (std::equal(node->point.begin(), node->point.end(), pt.begin()))
+        if (node->point() == pt)
         {
             // Take replacement from right
             if (node->right)
             {
                 // Swapping the node
-                auto new_node = find_min(node->right, node->cut_dim);
-                node->point = new_node->point; node->data = new_node->data;
+                node->item = find_min_node(node->right, node->cut_dim)->item;
 
-                node->right = remove_node(node->right, node->point);
+                std::tie(node->right, removed) = remove_node(node->right, node->point());
             }
             // Take replacement from left
             else if (node->left)
             {
                 // Swapping the nodes
-                auto new_node = find_min(node->left, node->cut_dim);
-                node->point = new_node->point;
+                node->item = find_min_node(node->left, node->cut_dim)->item;
 
                 // move left subtree to right!
-                node->right = remove_node(node->left, node->point);
+                std::tie(node->right, removed) = remove_node(node->left, node->point());
                 // left subtree is now empty
                 node->left = nullptr;
             }
             // Remove this leaf
-            else node = nullptr;
+            else
+            {
+                node = clear_node(node); removed = 1;
+            }
         }
         // Search left subtree
         else if (node->is_left(pt))
         {
-            node->left = remove_node(node->left, pt);
+            std::tie(node->left, removed) = remove_node(node->left, pt);
         }
         // Search right subtree
-        else node->right = remove_node(node->right, pt);
+        else std::tie(node->right, removed) = remove_node(node->right, pt);
 
-        return node;
+        return {node, removed};
     }
 
-    query_t nearest_node(node_ptr node, const Point & pt, const rect_ptr & rect, query_t query) const
+    node_t * min_node(node_t * a, node_t * b, node_t * c, int axis) const
+    {
+        if (b && b->point()[axis] < a->point()[axis])
+        {
+            if (c && c->point()[axis] < b->point()[axis]) return c;
+            return b;
+        }
+        if (c && c->point()[axis] < a->point()[axis]) return c;
+        return a;
+    }
+
+    node_t * max_node(node_t * a, node_t * b, node_t * c, int axis) const
+    {
+        if (b && b->point()[axis] > a->point()[axis])
+        {
+            if (c && c->point()[axis] > b->point()[axis]) return c;
+            return b;
+        }
+        if (c && c->point()[axis] > a->point()[axis]) return c;
+        return a;
+    }
+
+    node_t * find_min_node(node_t * node, int axis) const
+    {
+        // Fell out of tree
+        if (!node) return node;
+
+        if (node->cut_dim == axis)
+        {
+            if (!node->left) return node;
+            else return find_min_node(node->left, axis);
+        }
+        else return min_node(node, find_min_node(node->left, axis), find_min_node(node->right, axis), axis);
+    }
+
+    node_t * find_max_node(node_t * node, int axis) const
+    {
+        // Fell out of tree
+        if (!node) return node;
+
+        if (node->cut_dim == axis)
+        {
+            if (!node->right) return node;
+            else return find_max_node(node->right, axis);
+        }
+        else return max_node(node, find_max_node(node->left, axis), find_max_node(node->right, axis), axis);
+    }
+
+    node_t * begin_node(node_t * node) const
+    {
+        if (node == nullptr) return nullptr;
+        if (node->left == nullptr) return node;
+        return begin_node(node->left);
+    }
+
+    template <typename Point1, typename Point2>
+    F distance(const Point1 & a, const Point2 & b) const
+    {
+        F dist = F();
+        for (size_t i = 0; i < a.size(); i++) dist += std::pow(a[i] - b[i], 2);
+        return dist;
+    }
+
+    node_t * find_node(node_t * node, const Point & pt, const rect_t & rect, node_t * query) const
     {
         // Fell out of tree
         if (!node) return query;
         // This cell is too far away
-        if (rect->distance(pt) >= std::pow(std::get<1>(query), 2)) return query;
+        if (rect.distance(pt) > F()) return query;
 
-        // Update if the root is closer
-        F dist = detail::distance(node->point, pt);
-        if (dist < std::pow(std::get<1>(query), 2)) query = std::make_tuple(node, std::sqrt(dist));
+        // We found the node
+        if (pt == node->point()) query = node;
 
         // pt is close to left child
-        rect_ptr slice = std::make_unique<Rectangle<F>>(rect->low, rect->high);
         if (node->is_left(pt))
         {
-            slice->high[node->cut_dim] = node->point[node->cut_dim];
-            query = nearest_node(node->left, pt, slice, query);
-
-            slice->high[node->cut_dim] = rect->high[node->cut_dim];
-            slice->low[node->cut_dim] = node->point[node->cut_dim];
-            query = nearest_node(node->right, pt, slice, query);
+            // First left then right
+            query = find_node(node->left, pt, rect.trim_left(node), query);
+            query = find_node(node->right, pt, rect.trim_right(node), query);
         }
         // pt is closer to right child
         else
         {
-            slice->low[node->cut_dim] = node->point[node->cut_dim];
-            query = nearest_node(node->right, pt, slice, query);
-
-            slice->low[node->cut_dim] = rect->low[node->cut_dim];
-            slice->high[node->cut_dim] = node->point[node->cut_dim];
-            query = nearest_node(node->left, pt, slice, query);
+            // First right then left
+            query = find_node(node->right, pt, rect.trim_right(node), query);
+            query = find_node(node->left, pt, rect.trim_left(node), query);
         }
+
         return query;
     }
 
-    stack_t stack_push_node(node_ptr node, const Point & pt, stack_t stack) const
+    query_t nearest_node(node_t * node, const Point & pt, const rect_t & rect, query_t && query) const
     {
-        if (node->left) stack = stack_push_node(node->left, pt, stack);
-        stack.emplace_back(node, std::sqrt(detail::distance(node->point, pt)));
-        if (node->right) stack = stack_push_node(node->right, pt, stack);
+        // Fell out of tree
+        if (!node) return query;
+        // This cell is too far away
+        if (rect.distance(pt) >= std::pow(query.second, 2)) return query;
+
+        // Update if the root is closer
+        F dist = distance(node->point(), pt);
+        if (dist < std::pow(query.second, 2)) query = std::make_pair(const_iterator(node, root), std::sqrt(dist));
+
+        // pt is close to left child
+        if (node->is_left(pt))
+        {
+            // First left then right
+            query = nearest_node(node->left, pt, rect.trim_left(node), std::move(query));
+            query = nearest_node(node->right, pt, rect.trim_right(node), std::move(query));
+        }
+        // pt is closer to right child
+        else
+        {
+            // First right then left
+            query = nearest_node(node->right, pt, rect.trim_right(node), std::move(query));
+            query = nearest_node(node->left, pt, rect.trim_left(node), std::move(query));
+        }
+
+        return query;
+    }
+
+    stack_t stack_push_node(node_t * node, const Point & pt, stack_t && stack) const
+    {
+        if (node->left) stack = stack_push_node(node->left, pt, std::move(stack));
+        stack.emplace_back(const_iterator(node, root), std::sqrt(distance(node->point(), pt)));
+        if (node->right) stack = stack_push_node(node->right, pt, std::move(stack));
         return stack;
     }
 
-    stack_t find_range_node(node_ptr node, const Point & pt, F range, const rect_ptr & rect, stack_t stack) const
+    stack_t find_range_node(node_t * node, const Point & pt, F range_sq, const rect_t & rect, stack_t && stack) const
     {
         // Fell out of tree
         if (!node) return stack;
         // The cell doesn't overlap the query
-        if (rect->distance(pt) > range) return stack;
+        if (rect.distance(pt) > range_sq) return stack;
 
         // The query contains the cell
-        if (detail::distance(pt, rect->low) < range && detail::distance(pt, rect->high) < range)
+        if (distance(pt, rect.low) < range_sq && distance(pt, rect.high) < range_sq)
         {
-            return stack_push_node(node, pt, stack);
+            return stack_push_node(node, pt, std::move(stack));
         }
 
-        F dist = detail::distance(pt, node->point);
-        if (dist < range) stack.emplace_back(node, std::sqrt(dist));
+        F dist = distance(pt, node->point());
+        // Put this item to stack
+        if (dist < range_sq) stack.emplace_back(const_iterator(node, root), std::sqrt(dist));
 
         // Search left subtree
-        rect_ptr slice = std::make_unique<Rectangle<F>>(rect->low, rect->high);
-        slice->high[node->cut_dim] = node->point[node->cut_dim];
-        stack = find_range_node(node->left, pt, range, slice, stack);
+        stack = find_range_node(node->left, pt, range_sq, rect.trim_left(node), std::move(stack));
 
         // Search right subtree
-        slice->high[node->cut_dim] = rect->high[node->cut_dim];
-        slice->low[node->cut_dim] = node->point[node->cut_dim];
-        stack = find_range_node(node->right, pt, range, slice, stack);
+        stack = find_range_node(node->right, pt, range_sq, rect.trim_right(node), std::move(stack));
 
         return stack;
     }
@@ -401,29 +644,32 @@ protected:
     std::ostream & print_rect(std::ostream & os) const
     {
         os << "low  : [";
-        std::copy(this->rect->low.begin(), this->rect->low.end(), std::experimental::make_ostream_joiner(os, ", "));
+        std::copy(rect->low.begin(), rect->low.end(), std::experimental::make_ostream_joiner(os, ", "));
         os << "]" << std::endl;
 
         os << "high : [";
-        std::copy(this->rect->high.begin(), this->rect->high.end(), std::experimental::make_ostream_joiner(os, ", "));
+        std::copy(rect->high.begin(), rect->high.end(), std::experimental::make_ostream_joiner(os, ", "));
         os << "]" << std::endl;
         return os;
     }
 
-    std::ostream & print_node(std::ostream & os, node_ptr node, size_t level = 0) const
+    std::ostream & print_node(std::ostream & os, node_t * node, size_t level = 0) const
     {
         if (!node) return os;
 
         print_node(os, node->left, level + 1);
 
         os << std::string(level, '\t') << "(";
-        std::copy(node->point.begin(), node->point.end(), std::experimental::make_ostream_joiner(os, ", "));
+        std::copy(node->point().begin(), node->point().end(), std::experimental::make_ostream_joiner(os, ", "));
         os << ")" << " axis = " << node->cut_dim << std::endl;
 
         print_node(os, node->right, level + 1);
         return os;
     }
 };
+
+template<typename F, size_t ndim>
+void test_tree(size_t npts, F range);
 
 }
 

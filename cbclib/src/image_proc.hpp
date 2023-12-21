@@ -1,6 +1,6 @@
 #ifndef IMAGE_PROC_
 #define IMAGE_PROC_
-#include "array.hpp"
+#include "streak_finder.hpp"
 
 namespace cbclib {
 
@@ -10,137 +10,109 @@ using table_t = std::tuple<std::vector<int>, std::vector<int>, std::vector<T>>;
 namespace detail {
 
 template <typename T, typename Out>
-void draw_pixel(array<Out> & image, int x, int y, T val)
+void draw_pixel(array<Out> & image, const Point<int> & pt, T val)
 {
-    if (image.is_inbound({y, x}))
+    if (image.is_inbound({pt.y, pt.x}))
     {
-        auto index = image.ravel_index({y, x});
+        auto index = image.ravel_index({pt.y, pt.x});
         image[index] = std::max(image[index], static_cast<Out>(val));
     }
-    else throw std::runtime_error("Invalid pixel index: {" + std::to_string(y) + ", " + std::to_string(x) + "}");
+    else throw std::runtime_error("Invalid pixel index: {" + std::to_string(pt.y) + ", " + std::to_string(pt.x) + "}");
 }
 
 template <typename T, typename Out>
-void draw_pixel(table_t<Out> & table, int x, int y, T val)
+void draw_pixel(table_t<Out> & table, const Point<int> & pt, T val)
 {
-    std::get<0>(table).push_back(x);
-    std::get<1>(table).push_back(y);
+    std::get<0>(table).push_back(pt.x);
+    std::get<1>(table).push_back(pt.y);
     std::get<2>(table).push_back(static_cast<Out>(val));
 }
 
 }
 
+/*----------------------------------------------------------------------------*/
+/*-------------------------- Bresenham's Algorithm ---------------------------*/
+/*----------------------------------------------------------------------------*/
+
+/*----------------------------------------------------------------------------
+    Function :  plot_line_width()
+    In       :  A 2d line defined by two (float) points (x0, y0, x1, y1)
+                and a (float) width wd
+    Out      :  A rasterized image of the line
+
+    Reference:
+        Author: Alois Zingl
+        Title: A Rasterizing Algorithm for Drawing Curves
+        pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
+        url: http://members.chello.at/~easyfilter/bresenham.html
+------------------------------------------------------------------------------*/
 template <typename Data, typename T, typename Out>
-void draw_bresenham(Data & image, std::vector<size_t> * shape, const std::array<T, 4> & line, T width, Out max_val, typename kernels<T>::kernel kernel)
+void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & line, T width, Out max_val, typename kernels<T>::kernel kernel)
 {
-    /* create a volatile copy of the input line */
-    /* the points are given by [j0, i0, j1, i1] */
-    std::array<int, 4> pts = {static_cast<int>(std::round(line[1])), static_cast<int>(std::round(line[0])),
-                              static_cast<int>(std::round(line[3])), static_cast<int>(std::round(line[2]))};
+    /* Discrete line */
+    auto pt0 = static_cast<Point<int>>(line.pt0.round());
+    auto pt1 = static_cast<Point<int>>(line.pt1.round());
 
-    /* plot an anti-aliased line of width wd */
-    T dx = std::abs(line[2] - line[0]), dy = std::abs(line[3] - line[1]), wd = 0.5 * (width + 1.0);
-    int sx = (pts[1] < pts[3]) ? 1 : -1, sy = (pts[0] < pts[2]) ? 1 : -1, wi = std::round(wd);
-    T ed = std::sqrt(dx * dx + dy * dy);
+    T wd = (width + 1.0) / 2, length = std::sqrt(line.magnitude());
+    int wi = std::round(wd), xstep = (pt0.x < pt1.x) ? 1 : -1, ystep = (pt0.y < pt1.y) ? 1 : -1;
 
-    /* initialise line error : err1 = [(y - line[1]) * dx - (x - line[0]) * dy] / ed */
-    T err1 = (pts[0] - line[1]) * dx - (pts[1] - line[0]) * dy;
+    if (!length) return;
 
-    /* check if line has a non-zero length */
-    if (ed == 0.0) return;
+    /* Define bounds of the line plot */
+    auto bnd0 = (pt0 - wi * Point<int>{xstep, ystep}).clamp(Point<size_t>{}, ubound);
+    auto bnd1 = (pt1 + wi * Point<int>{xstep, ystep}).clamp(Point<size_t>{}, ubound);
 
-    /* initialise bound error: err2 = [(x - line[0]) * dx + (y - line[1]) * dy] / ed */
-    T err2 = (pts[1] - line[0]) * dx + (pts[0] - line[1]) * dy;
+    BhmIterator<T, int> lpix {bnd0, line.norm(), line.pt0};
+    BhmIterator<T, int> epix {bnd0, line.tau, line.pt0};
+    Point<int> step;
 
-    /* define image bounds */
-    std::array<int, 4> bnd;
+    auto max_cnt = Line<int>(bnd0, bnd1).perimeter();
 
-    if (pts[1] < pts[3])
+    for (int cnt = 0; cnt < max_cnt; cnt++)
     {
-        auto max = (shape) ? static_cast<int>((*shape)[1]) - 1 : INT_MAX;
-        bnd[1] = std::clamp(pts[1] - wi, 0, max);
-        bnd[3] = std::clamp(pts[3] + wi, 0, max);
+        // Perform a step
+        lpix.step(step); epix.step(step);
+        step.x = T(); step.y = T();
 
-        err1 += (pts[1] - bnd[1]) * dy;
-        err2 -= (pts[1] - bnd[1]) * dx;
-        pts[1] = bnd[1]; pts[3] = bnd[3];
-    }
-    else
-    {
-        auto max = (shape) ? static_cast<int>((*shape)[1]) - 1 : INT_MAX;
-        bnd[1] = std::clamp(pts[3] - wi, 0, max);
-        bnd[3] = std::clamp(pts[1] + wi, 0, max);
-
-        err1 += (bnd[3] - pts[1]) * dy;
-        err2 -= (bnd[3] - pts[1]) * dx;
-        pts[1] = bnd[3]; pts[3] = bnd[1];
-    }
-    if (pts[0] < pts[2])
-    {
-        auto max = (shape) ? static_cast<int>((*shape)[0]) - 1 : INT_MAX;
-        bnd[0] = std::clamp(pts[0] - wi, 0, max);
-        bnd[2] = std::clamp(pts[2] + wi, 0, max);
-
-        err1 -= (pts[0] - bnd[0]) * dx;
-        err2 -= (pts[0] - bnd[0]) * dy;
-        pts[0] = bnd[0]; pts[2] = bnd[2];
-    }
-    else
-    {
-        auto max = (shape) ? static_cast<int>((*shape)[0]) - 1 : INT_MAX;
-        bnd[0] = std::clamp(pts[2] - wi, 0, max);
-        bnd[2] = std::clamp(pts[0] + wi, 0, max);
-
-        err1 -= (bnd[2] - pts[0]) * dx;
-        err2 -= (bnd[2] - pts[0]) * dy; 
-        pts[0] = bnd[2]; pts[2] = bnd[0];
-    }
-
-    /* Main loop */
-    T derr1 = T(), derr2 = T(); int dx0 = 0;
-    for (int cnt = 0; cnt < dx + dy + 4 * wi; cnt++)
-    {
-        /* pixel loop */
-        err1 += derr1; derr1 = T();
-        err2 += derr2; derr2 = T();
-        pts[1] += dx0; dx0 = 0;
-
-        auto r1 = err1 / ed, r2 = std::min(err2 / ed - T(M_SQRT1_2) * wd, T()), r3 = std::max(err2 / ed - ed + T(M_SQRT1_2) * wd, T());
+        // Draw a pixel
+        auto r1 = lpix.error / length, r2 = std::min(epix.error / length, T()), r3 = std::max(epix.error / length - length, T());
         auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
-        detail::draw_pixel(image, pts[1], pts[0], val);
+        detail::draw_pixel(image, lpix.point, val);
 
-        if (2 * err1 >= -dx)
+        if (lpix.is_xnext(xstep))
         {
-            /* x step */
-            T e1, e2; int y2;
-            for (e1 = err1 + dx, e2 = err2 + dy, y2 = pts[0] + sy;
-                 abs(e1) < ed * wd && y2 >= bnd[0] && y2 <= bnd[2];
-                 e1 += dx, e2 += dy, y2 += sy)
+            // x step
+            for (auto liter = lpix.move(Point<int>{0, ystep}), eiter = epix.move(Point<int>{0, ystep});
+                 std::abs(liter.error) < length * wd && liter.point.y != bnd1.y + ystep;
+                 liter.ystep(ystep), eiter.ystep(ystep))
             {
-                auto r1 = e1 / ed, r2 = std::min(e2 / ed - T(M_SQRT1_2) * wd, T()), r3 = std::max(e2 / ed - ed + T(M_SQRT1_2) * wd, T());
+                auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
-                detail::draw_pixel(image, pts[1], y2, val);
+                detail::draw_pixel(image, liter.point, val);
             }
-            if (pts[1] == pts[3]) break;
-            derr1 -= dy; derr2 += dx; dx0 += sx;
+            if (lpix.point.x == bnd1.x) break;
+            step.x = xstep;
         }
-        if (2 * err1 <= dy)
+        if (lpix.is_ynext(ystep))
         {
-            /* y step */
-            T e1, e2; int x2;
-            for (e1 = err1 - dy, e2 = err2 + dx, x2 = pts[1] + sx;
-                 abs(e1) < ed * wd && x2 >= bnd[1] && x2 <= bnd[3];
-                 e1 -= dy, e2 += dx, x2 += sx)
+            // y step
+            for (auto liter = lpix.move(Point<int>{xstep, 0}), eiter = epix.move(Point<int>{xstep, 0});
+                 std::abs(liter.error) < length * wd && liter.point.x != bnd1.x + xstep;
+                 liter.xstep(xstep), eiter.xstep(xstep))
             {
-                auto r1 = e1 / ed, r2 = std::min(e2 / ed - T(M_SQRT1_2) * wd , T()), r3 = std::max(e2 / ed - ed + T(M_SQRT1_2) * wd, T());
+                auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
-                detail::draw_pixel(image, x2, pts[0], val);
+                detail::draw_pixel(image, liter.point, val);
             }
-            if (pts[0] == pts[2]) break;
-            derr1 += dx; derr2 += dy; pts[0] += sy;
+            if (lpix.point.y == bnd1.y) break;
+            step.y = ystep;
         }
     }
 }
+
+template <typename T, typename Out>
+py::array_t<Out> draw_line_new(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
+                               std::vector<size_t> shape, Out max_val, T dilation, std::string kernel, unsigned threads);
 
 template <typename T, typename Out>
 py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
