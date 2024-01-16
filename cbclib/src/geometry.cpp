@@ -466,13 +466,9 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
     }
 
     auto hibuf = hidxs.value().request(), bibuf = bidxs.value().request();
-    if (!std::equal(hibuf.shape.begin(), hibuf.shape.end(), bibuf.shape.begin()))
-    {
-        std::ostringstream oss1, oss2;
-        std::copy(hibuf.shape.begin(), hibuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
-        std::copy(bibuf.shape.begin(), bibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
-        throw std::invalid_argument("hidxs and bidxs have incompatible shapes: {" + oss1.str() + "}, {" + oss2.str() + "}");
-    }
+    check_equal("hidxs and bidxs have incompatible shapes",
+                hibuf.shape.begin(), hibuf.shape.end(),
+                bibuf.shape.begin(), bibuf.shape.end());
 
     std::vector<py::ssize_t> out_shape;
     std::copy(hibuf.shape.begin(), hibuf.shape.end(), std::back_inserter(out_shape));

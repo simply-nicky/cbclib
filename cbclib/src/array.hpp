@@ -270,6 +270,8 @@ public:
     using iterator = strided_iterator<T, false>;
     using const_iterator = strided_iterator<T, true>;
 
+    operator py::array_t<T>() const {return {shape, ptr};}
+
     array(size_t ndim, size_t size, ShapeContainer shape, ShapeContainer strides, T * ptr) :
         shape_handler(ndim, size, std::move(shape), std::move(strides)), ptr(ptr) {}
 
@@ -441,7 +443,7 @@ ForwardIt searchsorted(const T & value, ForwardIt first, ForwardIt last, side s,
             break;
 
         default:
-            throw std::invalid_argument("searchsorted: invalid side argument.");
+            throw std::invalid_argument("invalid side argument: " + std::to_string(static_cast<int>(s)));
     }
     return out;
 }

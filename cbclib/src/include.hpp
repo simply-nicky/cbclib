@@ -132,6 +132,29 @@ void check_dimensions(const std::string & name, ssize_t axis, const Container & 
     check_dimensions(name, axis + 1, shape, index...);
 }
 
+template <typename Container, typename Function, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+void check_shape(const Container & shape, Function && func)
+{
+    if (std::forward<Function>(func)(shape) || !get_size(shape.begin(), shape.end()))
+    {
+        std::ostringstream oss;
+        std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+        throw std::invalid_argument("invalid shape: {" + oss.str() + "}");
+    }
+}
+
+template <typename ForwardIt1, typename ForwardIt2>
+void check_equal(const std::string & msg, ForwardIt1 first1, ForwardIt1 last1, ForwardIt2 first2, ForwardIt2 last2)
+{
+    if (!std::equal(first1, last1, first2))
+    {
+        std::ostringstream oss1, oss2;
+        std::copy(first1, last1, std::experimental::make_ostream_joiner(oss1, ", "));
+        std::copy(first2, last2, std::experimental::make_ostream_joiner(oss2, ", "));
+        throw std::invalid_argument(msg + ": {" + oss1.str() + "}, {" + oss2.str() + "}");
+    }
+}
+
 template <typename T, typename V>
 void check_optional(const std::string & name, const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
                     std::optional<py::array_t<V, py::array::c_style | py::array::forcecast>> & opt, V fill_value)
@@ -146,25 +169,8 @@ void check_optional(const std::string & name, const py::array_t<T, py::array::c_
                          reinterpret_cast<PyArrayObject *>(fill.ptr()));
     }
     py::buffer_info obuf = opt.value().request();
-    if (!std::equal(obuf.shape.begin(), obuf.shape.end(), ibuf.shape.begin()))
-    {
-        std::ostringstream oss1, oss2;
-        std::copy(obuf.shape.begin(), obuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
-        std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
-        throw std::invalid_argument(name + " and inp arrays must have identical shapes: {" + oss1.str() +
-                                    "}, {" + oss2.str() + "}");
-    }
-}
-
-template <typename Container, typename Function, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
-void check_shape(const Container & shape, Function && func)
-{
-    if (std::forward<Function>(func)(shape) || !get_size(shape.begin(), shape.end()))
-    {
-        std::ostringstream oss;
-        std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("invalid shape: {" + oss.str() + "}");
-    }
+    check_equal(name + " and inp arrays must have identical shapes",
+                obuf.shape.begin(), obuf.shape.end(), ibuf.shape.begin(), ibuf.shape.end());
 }
 
 template <typename T>

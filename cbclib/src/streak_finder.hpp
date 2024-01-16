@@ -5,36 +5,22 @@
 
 namespace cbclib {
 
-namespace detail{
-
-// Taken from the boost::hash_combine: https://www.boost.org/doc/libs/1_35_0/doc/html/boost/hash_combine_id241013.html
-template <typename T, size_t N>
-struct ArrayHasher
-{
-    std::size_t operator()(const std::array<T, N> & arr) const
-    {
-        std::size_t h = 0;
-
-        for (auto elem : arr)
-        {
-            h ^= std::hash<T>{}(elem)  + 0x9e3779b9 + (h << 6) + (h >> 2); 
-        }
-        return h;
-    }   
-};
-
-}
+// 2D Point class
 
 template <typename T>
 struct Point
 {
+    using value_type = T;
+
     T x, y;
 
     Point() : x(), y() {}
     Point(T x, T y) : x(x), y(y) {}
 
     template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    explicit operator Point<V>() const {return {static_cast<V>(x), static_cast<V>(y)};}
+    operator Point<V>() const {return {static_cast<V>(x), static_cast<V>(y)};}
+
+    operator std::array<T, 2>() const {return {x, y};}
 
     template <typename V>
     Point<std::common_type_t<T, V>> operator+(const Point<V> & rhs) const {return {x + rhs.x, y + rhs.y};}
@@ -98,15 +84,102 @@ struct Point
 
     T magnitude() const {return x * x + y * y;}
     Point<T> round() const {return {std::round(x), std::round(y)};}
-
-    std::array<T, 2> to_array() const {return {x, y};}
 };
+
+template <typename Pt, typename = void>
+struct is_point : std::false_type {};
+
+template <typename Pt>
+struct is_point <Pt, 
+    typename std::enable_if_t<std::is_base_of_v<Point<typename Pt::value_type>, std::remove_cvref_t<Pt>>>
+> : std::true_type {};
+
+template <typename Pt>
+constexpr bool is_point_v = is_point<Pt>::value;
+
+namespace detail{
+
+// Taken from the boost::hash_combine: https://www.boost.org/doc/libs/1_35_0/doc/html/boost/hash_combine_id241013.html
+template <typename T, size_t N>
+struct ArrayHasher
+{
+    std::size_t operator()(const std::array<T, N> & arr) const
+    {
+        std::size_t h = 0;
+
+        for (auto elem : arr)
+        {
+            h ^= std::hash<T>{}(elem) + 0x9e3779b9 + (h << 6) + (h >> 2); 
+        }
+        return h;
+    }   
+};
+
+template <typename T>
+struct PointHasher
+{
+    std::size_t operator()(const Point<T> & point) const
+    {
+        std::size_t h = 0;
+
+        h ^= std::hash<T>{}(point.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<T>{}(point.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
+    }
+};
+
+template <typename Container, typename = std::enable_if_t<is_point_v<typename Container::value_type>>>
+auto get_x(const Container & list)
+{
+    using T = Container::value_type::value_type;
+    std::vector<T> x;
+    std::transform(list.begin(), list.end(), std::back_inserter(x), [](const Point<T> & elem){return elem.x;});
+    return x;
+}
+
+template <typename Container, typename = std::enable_if_t<is_point_v<typename Container::value_type>>>
+auto get_y(const Container & list)
+{
+    using T = Container::value_type::value_type;
+    std::vector<T> y;
+    std::transform(list.begin(), list.end(), std::back_inserter(y), [](const Point<T> & elem){return elem.y;});
+    return y;
+}
+
+// Return log(binomial_tail(n, k, p))
+// binomial_tail(n, k, p) = sum_{i = k}^n bincoef(n, i) * p^i * (1 - p)^{n - i}
+// bincoef(n, k) = gamma(n + 1) / (gamma(k + 1) * gamma(n - k + 1))
+
+template <typename I, typename T>
+T logbinom(I n, I k, T p)
+{
+    if (n == k) return n * std::log(p);
+
+    auto term = std::exp(std::lgamma(n + 1) - std::lgamma(k + 1) - std::lgamma(n - k + 1) +
+                         k * std::log(p) + (n - k) * std::log(T(1.0) - p));
+    auto bin_tail = term;
+    auto p_term = p / (T(1.0) - p);
+
+    for (I i = k + 1; i < n + 1; i++)
+    {
+        term *= (n - i + 1) / i * p_term;
+        bin_tail += term;
+    }
+
+    return std::log(bin_tail);
+}
+
+}
+
+// 2D Line class
 
 template <typename T>
 struct Line
 {
     Point<T> pt0, pt1;
     Point<T> tau;
+
+    operator std::array<T, 4>() const {return {pt0.x, pt0.y, pt1.x, pt1.y};}
 
     template <typename Pt, typename = std::enable_if_t<std::is_base_of_v<Point<T>, std::remove_cvref_t<Pt>>>>
     Line(Pt && pt0, Pt && pt1) : pt0(std::forward<Pt>(pt0)), pt1(std::forward<Pt>(pt1)), tau(pt1 - pt0) {}
@@ -132,13 +205,11 @@ struct Line
                 auto dist = r0 - (tau.dot(r0) / magnitude()) * tau;
                 return std::sqrt(dist.magnitude());
             }
-            auto dist = r1 - (tau.dor(r1) / magnitude()) * tau;
+            auto dist = r1 - (tau.dot(r1) / magnitude()) * tau;
             return std::sqrt(dist.magnitude());
         }
         return std::sqrt((pt0 - point).magnitude());
     }
-
-    std::array<T, 4> to_array() const {return {pt0.x, pt0.y, pt1.x, pt1.y};}
 
     friend std::ostream & operator<<(std::ostream & os, const Line<T> & line)
     {
@@ -148,12 +219,16 @@ struct Line
 
 };
 
+// Iterator for a rasterizing algorithm for drawing lines
+// See -> http://members.chello.at/~easyfilter/bresenham.html
+
 template <typename T, typename I>
 struct BhmIterator
 {
-    Point<I> point;
-    Point<T> tau;
-    T error;
+    Point<I> point;     /* Current point position                                           */
+    Point<T> tau;       /* Line norm, derivative of a line error function:                  */
+                        /* error(x + dx, y + dy) = error(x, y) + tau.x * dx + tau.y * dy    */
+    T error;            /* Current error value                                              */
 
     template <typename Point1, typename Point2, typename Point3>
     BhmIterator(Point1 && pt, Point2 && tau, const Point3 & origin) :
@@ -186,20 +261,76 @@ struct BhmIterator
         return *this;
     }
 
-    bool is_xnext(I step) const
+    // Increment x if:
+    //      e(x + sx, y + sy) + e(x, y + sy) < 0    if sx * tau.x > 0
+    //      e(x + sx, y + sy) + e(x, y + sy) > 0    if sx * tau.x < 0
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    bool is_xnext(const Point<J> & step) const
     {
-        if (step * tau.x > 0) return 2 * error <= step * tau.x;
-        return 2 * error >= step * tau.x;
+        if (step.x * tau.x > 0) return 2 * e_xy(step) <= step.x * tau.x;
+        return 2 * e_xy(step) >= step.x * tau.x;
     }
-    bool is_ynext(I step) const
+
+    // Increment y if:
+    //      e(x + sx, y + sy) + e(x + sx, y) < 0    if sy * tau.y > 0
+    //      e(x + sx, y + sy) + e(x + sx, y) > 0    if sy * tau.y < 0
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    bool is_ynext(const Point<J> & step) const
     {
-        if (step * tau.y > 0) return 2 * error <= step * tau.y;
-        return 2 * error >= step * tau.y;
+        if (step.y * tau.y > 0) return 2 * e_xy(step) <= step.y * tau.y;
+        return 2 * e_xy(step) >= step.y * tau.y;
+    }
+
+private:
+
+    // Return e(x + sx, y + sy)
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    T e_xy(const Point<J> & step) const
+    {
+        return error + step.x * tau.x + step.y * tau.y;
     }
 };
 
+// Drawing direction
+
+enum class direction
+{
+    forward,
+    backward
+};
+
+// Choose a steping vector based on drawing direction
+// tau is NOT the same as BhmIterator::tau (Line::norm()), but is equal to Line::tau
+
+template <typename T>
+Point<int> bresenham_step(const Point<T> & tau, direction dir)
+{
+    int xstep, ystep;
+    switch (dir)
+    {
+        case direction::forward:
+            xstep = tau.x > T() ? 1 : -1;
+            ystep = tau.y > T() ? 1 : -1;
+            break;
+
+        case direction::backward:
+            xstep = tau.x > T() ? -1 : 1;
+            ystep = tau.y > T() ? -1 : 1;
+            break;
+
+        default:
+            throw std::invalid_argument("invalid direction argument: " + std::to_string(static_cast<int>(dir)));
+    }
+    return {xstep, ystep};
+}
+
 template <typename T>
 using pset_t = std::set<std::tuple<Point<int>, T>>;
+
+// Image moments class
 
 template <typename T>
 struct Moments
@@ -349,6 +480,8 @@ struct Moments
     }
 };
 
+// Line support class
+
 template <typename T>
 struct Pixels
 {
@@ -403,8 +536,132 @@ struct Pixels
     }
 };
 
-template <typename T>
-struct Pattern;
+// Connectivity structure class
+
+struct Structure
+{
+    int radius, rank;
+    std::vector<Point<int>> idxs;
+
+    Structure(int radius, int rank) : radius(radius), rank(rank)
+    {
+        for (int i = -radius; i <= radius; i++)
+        {
+            for (int j = -radius; j <= radius; j++)
+            {
+                if (std::abs(i) + std::abs(j) <= rank) idxs.push_back(Point<int>{j, i});
+            }
+        }
+        std::sort(idxs.begin(), idxs.end());
+    }
+
+    std::string info() const
+    {
+        return "<Structure, radius = " + std::to_string(radius) + ", rank = " + std::to_string(rank) + ">";
+    }
+};
+
+// Sparse 2D peaks
+
+struct Peaks
+{
+    std::list<Point<size_t>> points;
+
+    template <typename T>
+    Peaks(const array<T> & data, size_t radius, T vmin)
+    {
+        std::array<size_t, 2> axes {0, 1};
+        std::unordered_map<Point<size_t>, Point<size_t>, detail::PointHasher<size_t>> peak_map;
+        auto add_peak = [&data, &peak_map, radius, vmin](size_t index)
+        {
+            auto y = data.index_along_dim(index, 0);
+            auto x = data.index_along_dim(index, 1);
+            if (data[data.ravel_index({y, x})] > vmin)
+            {
+                peak_map.try_emplace(Point<size_t>{x / radius, y / radius}, Point<size_t>{x, y});
+            }
+        };
+
+        for (auto axis : axes)
+        {
+            for (size_t i = radius / 2; i < data.shape[1 - axis]; i += radius)
+            {
+                maxima1d(data.line_begin(axis, i), data.line_end(axis, i), add_peak, data, axes);
+            }
+        }
+
+        std::transform(std::make_move_iterator(peak_map.begin()),
+                       std::make_move_iterator(peak_map.end()),
+                       std::back_inserter(points),
+                       [](std::pair<Point<size_t>, Point<size_t>> && elem){return std::move(elem.second);});
+
+        // Sorting peaks in descending order
+        points.sort(
+            [&data](Point<size_t> a, Point<size_t> b)
+            {
+                return data[data.ravel_index({a.y, a.x})] > data[data.ravel_index({b.y, b.x})];
+            });
+    }
+
+    template <typename T>
+    Peaks(py::array_t<T> d, size_t radius, T vmin) : Peaks(array<T>(d.request()), radius, vmin) {}
+
+    template <typename T>
+    void filter(const array<T> & data, const Structure & srt, T vmin, size_t npts)
+    {
+        std::set<Point<size_t>> support;
+        std::set<Point<size_t>> new_points;
+        auto iter = points.begin();
+
+        while (iter != points.end())
+        {
+            support.clear(); new_points.clear();
+
+            size_t prev_size = 0;
+            support.insert(*iter);
+
+            while (support.size() != prev_size && support.size() < npts)
+            {
+                prev_size = support.size();
+
+                for (const auto & point: support)
+                {
+                    for (const auto & shift: srt.idxs)
+                    {
+                        auto pt = point + shift;
+
+                        if (data.is_inbound({pt.y, pt.x}) && data[data.ravel_index({pt.y, pt.x})] > vmin)
+                        {
+                            new_points.insert(pt);
+                        }
+                    }
+                }
+
+                support.merge(std::move(new_points)); new_points.clear();
+            }
+
+            if (support.size() < npts) iter = points.erase(iter);
+            else ++iter;
+        }
+    }
+
+    void mask(const array<bool> & mask)
+    {
+        auto iter = points.begin();
+        while (iter != points.end())
+        {
+            if (!mask[mask.ravel_index({iter->y, iter->x})]) iter = points.erase(iter);
+            else ++iter;
+        }
+    }
+
+    std::string info() const
+    {
+        return "<Peaks, points.shape = (" + std::to_string(points.size()) + ", 2)>";
+    }
+};
+
+// Final streak class
 
 template <typename T>
 struct Streak
@@ -423,15 +680,6 @@ struct Streak
         linelets.push_back(line);
     }
 
-    // void grow(const Pattern<T> & pattern, T xtol, T vmin, unsigned max_iter, unsigned lookahead)
-    // {
-    //     for (unsigned i = 0; i < max_iter; i++)
-    //     {
-    //         Streak streak0 {pattern.get_pset(line.pt0)};
-
-    //     }
-    // }
-
     void insert(Streak && streak)
     {
         pixels.insert(std::move(streak.pixels));
@@ -439,51 +687,19 @@ struct Streak
                                         std::make_move_iterator(streak.linelets.end()));
     }
 
+    T log_nfa(unsigned min_size, T xtol, T p) const
+    {
+        size_t k = 0;
+        for (auto ll: linelets)
+        {
+            if (line.distance(ll.pt0) < xtol && line.distance(ll.pt1) < xtol) k++;
+        }
+        return -static_cast<int>(min_size) * std::log(p) + detail::logbinom(linelets.size(), k, p);
+    }
+
     void update_line()
     {
         line = pixels.get_line();
-    }
-
-private:
-    void grow_step(Line<T> && streak, const array<T> & data, T xtol, T vmin)
-    {
-        if (streak.line.magnitude())
-        {
-            T d0 = line.distance(streak.line.pt0);
-            T d1 = line.distance(streak.line.pt1);
-            if (d0 < xtol && d1 < xtol)
-            {
-                auto pt = static_cast<Point<int>>(streak.pixels.moments.pt0.round());
-                if (data.is_inbound({pt.y, pt.x}))
-                {
-                    if (data[data.ravel_index({pt.y, pt.x})] > vmin) insert(std::move(streak));
-                }
-            }
-        }
-    }
-};
-
-struct Structure
-{
-    using struct_t = std::vector<std::array<int, 2>>;
-    int radius, rank;
-    struct_t idxs;
-
-    Structure(int radius, int rank) : radius(radius), rank(rank)
-    {
-        for (int i = -radius; i <= radius; i++)
-        {
-            for (int j = -radius; j <= radius; j++)
-            {
-                if (std::abs(i) + std::abs(j) <= rank) idxs.push_back({i, j});
-            }
-        }
-        std::sort(idxs.begin(), idxs.end());
-    }
-
-    std::string info() const
-    {
-        return "<Structure, radius = " + std::to_string(radius) + ", rank = " + std::to_string(rank) + ">";
     }
 };
 
@@ -491,32 +707,86 @@ template <typename T>
 struct Pattern
 {
     array<T> data;
+    array<bool> good;
     Structure structure;
 
-    template <typename Array, typename Struct,
+    template <typename Data, typename Good, typename Struct,
         typename = std::enable_if_t<
-            std::is_base_of_v<array<T>, std::remove_cvref_t<Array>> &&
+            std::is_base_of_v<array<T>, std::remove_cvref_t<Data>> &&
+            std::is_base_of_v<array<bool>, std::remove_cvref_t<Good>> &&
             std::is_base_of_v<Structure, std::remove_cvref_t<Struct>>
         >
     >
-    Pattern(Array && d, Struct && s) : data(std::forward<Array>(d)), structure(std::forward<Struct>(s))
+    Pattern(Data && d, Good && g, Struct && s) :
+        data(std::forward<Data>(d)), good(std::forward<Good>(g)), structure(std::forward<Struct>(s))
     {
         if (data.ndim != 2)
         {
             throw std::invalid_argument("Pattern data array has invalid number of dimensions (" +
                                         std::to_string(data.ndim) + ")");
         }
+        check_equal("data and good have incompatible shapes",
+                    data.shape.begin(), data.shape.end(), good.shape.begin(), good.shape.end());
     }
 
-    Pattern(const py::array_t<T> & d, Structure && s) : Pattern(array<T>{d.request()}, std::move(s)) {}
+    template <typename Struct,
+        typename = std::enable_if_t<
+            std::is_base_of_v<Structure, std::remove_cvref_t<Struct>>
+        >
+    >
+    Pattern(const py::array_t<T> & d, const py::array_t<bool> & g, Struct && s) :
+        Pattern(array<T>{d.request()}, array<bool>{g.request()}, std::forward<Struct>(s)) {}
+
+    auto find_streaks(Peaks peaks, T xtol, T vmin, T log_eps, unsigned max_iter, unsigned lookahead, unsigned min_size)
+    {
+        std::vector<std::array<T, 4>> lines;
+
+        while (peaks.points.size())
+        {
+            Streak<T> streak = get_streak(peaks.points.front(), xtol, vmin, max_iter, lookahead);
+
+            if (streak.log_nfa(min_size, xtol, xtol / (structure.radius + 0.5)) < log_eps)
+            {
+                update(streak.pixels.pset);
+                peaks.mask(good);
+                lines.emplace_back(streak.line);
+            }
+            else peaks.points.pop_front();
+        }
+
+        return lines;
+    }
+
+    Streak<T> get_streak(int x, int y, T xtol, T vmin, unsigned max_iter, unsigned lookahead) const
+    {
+        Streak<T> streak {get_pset(x, y)};
+        for (unsigned i = 0; i < max_iter; i++)
+        {
+            auto old_size = streak.linelets.size();
+
+            streak = grow_step(std::move(streak), streak.line.pt0, direction::backward, xtol, vmin, lookahead);
+            streak = grow_step(std::move(streak), streak.line.pt1, direction::forward, xtol, vmin, lookahead);
+
+            if (streak.linelets.size() == old_size) break;
+
+            streak.update_line();
+        }
+        return streak;
+    }
+
+    template <typename I, typename = std::enable_if_t<std::is_integral_v<I>>>
+    Streak<T> get_streak(const Point<I> & point, T xtol, T vmin, unsigned max_iter, unsigned lookahead) const
+    {
+        return get_streak(point.x, point.y, xtol, vmin, max_iter, lookahead);
+    }
 
     pset_t<T> get_pset(int x, int y) const
     {
         pset_t<T> pset;
         for (auto shift : structure.idxs)
         {
-            int new_x = x + shift[1], new_y = y + shift[0];
-            if (data.is_inbound({new_y, new_x}))
+            int new_x = x + shift.x, new_y = y + shift.y;
+            if (data.is_inbound({new_y, new_x}) && good[good.ravel_index({new_y, new_x})])
             {
                 pset.emplace_hint(pset.end(), Point<int>{new_x, new_y}, data[data.ravel_index({new_y, new_x})]);
             }
@@ -530,102 +800,102 @@ struct Pattern
         return get_pset(point.x, point.y);
     }
 
-    Streak<T> get_streak(int x, int y) const {return get_pset(x, y);}
-
     std::string info() const
     {
         return "<Pattern, data.shape = (" + std::to_string(data.shape[0]) + ", " + std::to_string(data.shape[1]) +
+               "), good.shape = (" + std::to_string(good.shape[0]) + ", " + std::to_string(good.shape[1]) +
                "), struct = " + structure.info() + ">";
     }
-};
 
-struct DetState
-{
-    std::list<std::array<size_t, 2>> peaks;
-    std::vector<bool> used;
-
-    template <typename ShapeContainer>
-    DetState(const ShapeContainer & shape) : used(get_size(shape.begin(), shape.end()), false) {}
-
-    template <typename T>
-    DetState(const array<T> & data, size_t radius, T vmin) : DetState(data.shape)
+    void update(const pset_t<T> & pset)
     {
-        std::array<size_t, 2> axes {0, 1};
-        std::unordered_map<std::array<size_t, 2>, std::array<size_t, 2>, detail::ArrayHasher<size_t, 2>> peak_map;
-        auto add_peak = [&data, &peak_map, radius, vmin](size_t index)
+        for (auto [pt, _] : pset)
         {
-            auto i = data.index_along_dim(index, 0);
-            auto j = data.index_along_dim(index, 1);
-            if (data[data.ravel_index({i, j})] > vmin)
-            {
-                peak_map.try_emplace(std::array<size_t, 2>{i / radius, j / radius}, std::array<size_t, 2>{i, j});
-            }
-        };
-
-        for (auto axis : axes)
-        {
-            for (size_t i = radius / 2; i < data.shape[1 - axis]; i += radius)
-            {
-                maxima1d(data.line_begin(axis, i), data.line_end(axis, i), add_peak, data, axes);
-            }
+            good[good.ravel_index({pt.y, pt.x})] = false;
         }
-
-        std::transform(std::make_move_iterator(peak_map.begin()),
-                       std::make_move_iterator(peak_map.end()),
-                       std::back_inserter(peaks),
-                       [](std::pair<std::array<size_t, 2>, std::array<size_t, 2>> && elem){return std::move(elem.second);});
     }
 
-    template <typename T>
-    DetState(py::array_t<T> d, size_t radius, T vmin) : DetState(array<T>(d.request()), radius, vmin) {}
-
-    template <typename T>
-    void filter(const array<T> & data, const Structure & s, T vmin, size_t npts)
+private:
+    Point<int> find_next_step(const Streak<T> & streak, const Point<T> & point, int max_cnt, direction dir) const
     {
-        std::set<std::array<size_t, 2>> support;
-        std::set<std::array<size_t, 2>> new_points;
-        auto iter = peaks.begin();
+        BhmIterator<T, int> pix {point.round(), streak.line.norm(), point};
+        auto step = bresenham_step(streak.line.tau, dir);
 
-        while (iter != peaks.end())
+        Point<int> new_step;
+
+        for (int cnt = 0; cnt <= max_cnt; cnt++)
         {
-            support.clear(); new_points.clear();
+            pix.step(new_step);
+            new_step = Point<int>();
 
-            size_t prev_size = 0;
-            support.insert(*iter);
+            if (pix.is_xnext(step)) new_step.x = step.x;
+            if (pix.is_ynext(step)) new_step.y = step.y;
+        }
 
-            while (support.size() != prev_size && support.size() < npts)
+        return pix.point;
+    }
+
+    std::pair<bool, Streak<T>> add_streak(Streak<T> && streak, const Point<int> & pt, T xtol, T vmin) const
+    {
+        Streak new_streak {get_pset(pt.x, pt.y)};
+        if (new_streak.line.magnitude())
+        {
+            T d0 = streak.line.distance(new_streak.line.pt0);
+            T d1 = streak.line.distance(new_streak.line.pt1);
+
+            if (d0 < xtol && d1 < xtol)
             {
-                prev_size = support.size();
-
-                for (const auto & point: support)
+                Point<int> pt {new_streak.pixels.moments.pt0.round()};
+                if (data.is_inbound({pt.y, pt.x}))
                 {
-                    for (const auto & shift: s.idxs)
+                    if (data[data.ravel_index({pt.y, pt.x})] > vmin)
                     {
-                        int i = point[0] + shift[0], j = point[1] + shift[1];
-
-                        if (data.is_inbound({i, j}) && data[data.ravel_index({i, j})] > vmin)
-                        {
-                            new_points.insert({static_cast<size_t>(i), static_cast<size_t>(j)});
-                        }
+                        streak.insert(std::move(new_streak));
+                        return std::make_pair(true, std::move(streak));
                     }
                 }
-
-                support.merge(std::move(new_points)); new_points.clear();
             }
-
-            if (support.size() < npts) iter = peaks.erase(iter);
-            else ++iter;
         }
+        return std::make_pair(false, std::move(streak));
     }
 
-    std::string info() const
+    Streak<T> grow_step(Streak<T> && streak, Point<T> point, direction dir, T xtol, T vmin, unsigned lookahead) const
     {
-        return "<DetState, peaks.shape = (" + std::to_string(peaks.size()) + ", 2)>";
+        unsigned max_gap = std::sqrt(streak.line.magnitude()) / structure.radius;
+        unsigned tries = 0, gap = 0;
+
+        while (tries < lookahead && gap < max_gap)
+        {
+            Point<int> pt = find_next_step(streak, point, structure.radius, dir);
+
+            if (!data.is_inbound({pt.y, pt.x})) break;
+
+            if (good[good.ravel_index({pt.y, pt.x})])
+            {
+                auto [is_add, new_streak] = add_streak(std::move(streak), pt, xtol, vmin);
+
+                if (is_add) return new_streak;
+                else
+                {
+                    streak = std::move(new_streak);
+                    tries++;
+                }
+            }
+            else gap++;
+
+            point = pt;
+        }
+
+        return streak;
     }
 };
 
 template <typename T>
-std::array<T, 4> test(std::array<int, 4> pts, py::array_t<T> data, int radius, int rank);
+std::array<T, 4> test_line(std::array<int, 4> pts, py::array_t<T> data, py::array_t<bool> mask, Structure srt);
+
+template <typename T>
+std::array<T, 4> test_grow(int x, int y, py::array_t<T> data, py::array_t<bool> mask, Structure srt,
+                           T xtol, T vmin, unsigned max_iter, unsigned lookahead);
 
 }
 

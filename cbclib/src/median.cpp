@@ -340,16 +340,9 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     py::buffer_info Wbuf = W.request();
     py::buffer_info ybuf = y.request();
     auto ax = ybuf.ndim - seq.size();
-    if (!std::equal(std::make_reverse_iterator(ybuf.shape.end()),
-                    std::make_reverse_iterator(ybuf.shape.begin() + ax),
-                    std::make_reverse_iterator(Wbuf.shape.end())))
-    {
-        std::ostringstream oss1, oss2;
-        std::copy(ybuf.shape.begin(), ybuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
-        std::copy(Wbuf.shape.begin(), Wbuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
-        throw std::invalid_argument("W and y arrays have incompatible shapes: {" + oss1.str() + 
-                                    "}, {" + oss2.str() + "}");
-    }
+    check_equal("W and y arrays have incompatible shapes",
+                std::make_reverse_iterator(ybuf.shape.end()), std::make_reverse_iterator(ybuf.shape.begin() + ax),
+                std::make_reverse_iterator(Wbuf.shape.end()), std::make_reverse_iterator(Wbuf.shape.begin()));
 
     if (!ybuf.size || !Wbuf.size)
         throw std::invalid_argument("W and y must have a positive size");

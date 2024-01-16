@@ -54,58 +54,60 @@ void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & 
     auto pt1 = static_cast<Point<int>>(line.pt1.round());
 
     T wd = (width + 1.0) / 2, length = std::sqrt(line.magnitude());
-    int wi = std::round(wd), xstep = (pt0.x < pt1.x) ? 1 : -1, ystep = (pt0.y < pt1.y) ? 1 : -1;
+    int wi = std::round(wd);
+
+    auto step = bresenham_step(line.tau, direction::forward);
 
     if (!length) return;
 
     /* Define bounds of the line plot */
-    auto bnd0 = (pt0 - wi * Point<int>{xstep, ystep}).clamp(Point<size_t>{}, ubound);
-    auto bnd1 = (pt1 + wi * Point<int>{xstep, ystep}).clamp(Point<size_t>{}, ubound);
+    auto bnd0 = (pt0 - wi * step).clamp(Point<size_t>{}, ubound);
+    auto bnd1 = (pt1 + wi * step).clamp(Point<size_t>{}, ubound);
 
     BhmIterator<T, int> lpix {bnd0, line.norm(), line.pt0};
     BhmIterator<T, int> epix {bnd0, line.tau, line.pt0};
-    Point<int> step;
+    Point<int> new_step;
 
     auto max_cnt = Line<int>(bnd0, bnd1).perimeter();
 
     for (int cnt = 0; cnt < max_cnt; cnt++)
     {
         // Perform a step
-        lpix.step(step); epix.step(step);
-        step.x = T(); step.y = T();
+        lpix.step(new_step); epix.step(new_step);
+        new_step = Point<int>();
 
         // Draw a pixel
         auto r1 = lpix.error / length, r2 = std::min(epix.error / length, T()), r3 = std::max(epix.error / length - length, T());
         auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
         detail::draw_pixel(image, lpix.point, val);
 
-        if (lpix.is_xnext(xstep))
+        if (lpix.is_xnext(step))
         {
             // x step
-            for (auto liter = lpix.move(Point<int>{0, ystep}), eiter = epix.move(Point<int>{0, ystep});
-                 std::abs(liter.error) < length * wd && liter.point.y != bnd1.y + ystep;
-                 liter.ystep(ystep), eiter.ystep(ystep))
+            for (auto liter = lpix.move(Point<int>{0, step.y}), eiter = epix.move(Point<int>{0, step.y});
+                 std::abs(liter.error) < length * wd && liter.point.y != bnd1.y + step.y;
+                 liter.ystep(step.y), eiter.ystep(step.y))
             {
                 auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, liter.point, val);
             }
             if (lpix.point.x == bnd1.x) break;
-            step.x = xstep;
+            new_step.x = step.x;
         }
-        if (lpix.is_ynext(ystep))
+        if (lpix.is_ynext(step))
         {
             // y step
-            for (auto liter = lpix.move(Point<int>{xstep, 0}), eiter = epix.move(Point<int>{xstep, 0});
-                 std::abs(liter.error) < length * wd && liter.point.x != bnd1.x + xstep;
-                 liter.xstep(xstep), eiter.xstep(xstep))
+            for (auto liter = lpix.move(Point<int>{step.x, 0}), eiter = epix.move(Point<int>{step.x, 0});
+                 std::abs(liter.error) < length * wd && liter.point.x != bnd1.x + step.x;
+                 liter.xstep(step.x), eiter.xstep(step.x))
             {
                 auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, liter.point, val);
             }
             if (lpix.point.y == bnd1.y) break;
-            step.y = ystep;
+            new_step.y = step.y;
         }
     }
 }
