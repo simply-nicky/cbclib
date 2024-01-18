@@ -352,6 +352,9 @@ public:
         return {iter + lsize, strides[axis]};
     }
 
+    const T * data() const {return ptr;}
+    T * data() {return ptr;}
+
 protected:
     void check_index(size_t axis, size_t index) const
     {
@@ -360,7 +363,7 @@ protected:
                                     + std::to_string(axis));
     }
 
-    void set_pointer(T * new_ptr) {ptr = new_ptr;}
+    void set_data(T * new_ptr) {ptr = new_ptr;}
 
 private:
     T * ptr;
@@ -375,7 +378,7 @@ public:
     vector_array(typename array<T>::ShapeContainer shape) : array<T>(std::move(shape), nullptr)
     {
         buffer = std::vector<T>(this->size, T());
-        set_pointer(buffer.data());
+        this->set_data(buffer.data());
     }
 };
 

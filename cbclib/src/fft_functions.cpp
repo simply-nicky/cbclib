@@ -21,6 +21,156 @@ size_t next_fast_len(size_t target)
     return best_match;
 }
 
+struct FFTFactor
+{
+    enum mode
+    {
+        backward,
+        forward,
+        ortho
+    };
+
+    static inline std::map<std::string, mode> registered_modes = {{"backward", backward},
+                                                                  {"forward", forward},
+                                                                  {"ortho", ortho}};
+
+    static mode get_mode(std::string name, bool throw_if_missing = true)
+    {
+        auto it = registered_modes.find(name);
+        if (it != registered_modes.end()) return it->second;
+        if (throw_if_missing)
+            throw std::invalid_argument("mode is missing for " + name);
+        return backward;
+    }
+
+    template <typename T>
+    static T factor(size_t size, mode m, bool isForward)
+    {
+        T fct;
+        switch (m)
+        {
+            case backward:
+                fct = (isForward) ? T(1.0) : T(1.0) / size;
+                break;
+
+            case forward:
+                fct = (isForward) ? T(1.0) / size : T(1.0);
+                break;
+
+            case ortho:
+                fct = std::sqrt(T(1.0) / size);
+                break;
+
+            default:
+                throw std::invalid_argument("Invalid mode: " + std::to_string(m));
+        }
+
+        return fct;
+    }
+};
+
+template <typename Inp, typename Shape, typename Axis, bool isForward>
+auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> axis, std::string norm, unsigned threads)
+{
+    using Out = std::complex<remove_complex_t<Inp>>;
+    assert(PyArray_API);
+
+    sequence<long> seq;
+    sequence<size_t> shape_seq;
+
+    if (axis) seq = axis.value();
+    if (shape) shape_seq = shape.value();
+
+    if (!axis)
+    {
+        if (!shape)
+        {
+            seq->resize(inp.ndim());
+            std::iota(seq->begin(), seq->end(), 0);
+        }
+        else
+        {
+            seq->resize(shape_seq.size());
+            std::iota(seq->begin(), seq->end(), inp.ndim() - shape_seq.size());
+        }
+    }
+
+    seq = seq.unwrap(inp.ndim());
+    inp = seq.swap_axes(inp);
+    auto iarr = array<Inp>(inp.request());
+
+    auto ax = iarr.ndim - seq.size();
+    
+    if (!shape)
+    {
+        std::copy(std::next(iarr.shape.begin(), ax), iarr.shape.end(), std::back_inserter(*shape_seq));
+    }
+    check_shape(*shape_seq, [&seq](const std::vector<size_t> & shape){return shape.size() != seq.size();});
+
+    std::vector<size_t> oshape (iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
+    oshape.insert(oshape.end(), shape_seq->begin(), shape_seq->end());
+
+    auto out = py::array_t<Out>(oshape);
+    auto oarr = array<Out>(out.request());
+
+    std::vector<size_t> org (seq.size());
+    std::vector<size_t> axes (seq.size());
+    std::iota(axes.begin(), axes.end(), ax);
+    auto repeats = get_size(iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
+    threads = (threads > repeats) ? repeats : threads;
+
+    std::vector<size_t> fshape;
+    std::transform(shape_seq->begin(), shape_seq->end(), std::back_inserter(fshape),
+                   [](size_t n){return next_fast_len(n);});
+    auto bshape = fftw_buffer_shape<Out>(fshape);
+
+    auto factor = FFTFactor::factor<remove_complex_t<Inp>>(get_size(fshape.begin(), fshape.end()),
+                                                           FFTFactor::get_mode(norm), isForward);
+
+    thread_exception e;
+
+    py::gil_scoped_release release;
+
+    #pragma omp parallel num_threads(threads)
+    {
+        vector_array<Out> ibuffer (bshape);
+
+        auto ibuf_inp = ibuffer.data();
+        auto ibuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(ibuffer.data());
+
+        detail::fftw_plan_t<remove_complex_t<Inp>> fft_plan;
+        #pragma omp critical
+        {
+            if constexpr (isForward)
+            {
+                fft_plan = make_forward_plan(fshape, ibuf_inp, ibuf_out);
+            }
+            else
+            {
+                fft_plan = make_backward_plan(fshape, ibuf_inp, ibuf_out);
+            }
+        }
+
+        #pragma omp for
+        for (size_t i = 0; i < repeats; i++)
+        {
+            e.run([&]
+            {
+                write_buffer(ibuffer, iarr.slice(i, axes), fshape, org);
+                fftw_execute(fft_plan, ibuf_inp, ibuf_out);
+                for (size_t j = 0; j < ibuffer.size; j++) ibuf_out[j] *= factor;
+                read_buffer(ibuffer, oarr.slice(i, axes), fshape, org);
+            });
+        }
+    }
+
+    py::gil_scoped_acquire acquire;
+
+    e.rethrow();
+
+    return seq.swap_axes_back(out);
+}
+
 template <typename Inp, typename Krn, typename Seq>
 auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<Seq> axis, unsigned threads)
 {
@@ -34,9 +184,8 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
             throw std::invalid_argument("inp and kernel have different numbers of dimensions: " +
                                         std::to_string(inp.ndim()) + " and " + std::to_string(kernel.ndim()));
 
-        std::vector<long> vec (inp.ndim(), 0);
-        std::iota(vec.begin(), vec.end(), 0);
-        seq = std::move(vec);
+        seq->resize(inp.ndim());
+        std::iota(seq->begin(), seq->end(), 0);
     }
     else seq = axis.value();
 
@@ -53,14 +202,15 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     auto oarr = array<Out>(out.request());
 
     auto ax = iarr.ndim - seq.size();
+    std::vector<size_t> ishape (std::next(iarr.shape.begin(), ax), iarr.shape.end());
     std::vector<size_t> axes (seq.size());
     std::iota(axes.begin(), axes.end(), ax);
     auto repeats = get_size(iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
     threads = (threads > repeats) ? repeats : threads;
 
     std::vector<size_t> fshape;
-    std::transform(karr.shape.begin(), karr.shape.end(), std::next(iarr.shape.begin(), ax),
-                   std::back_inserter(fshape), [](size_t nk, size_t ni){return next_fast_len(nk + ni);});
+    std::transform(karr.shape.begin(), karr.shape.end(), ishape.begin(), std::back_inserter(fshape),
+                   [](size_t nk, size_t ni){return next_fast_len(nk + ni);});
     auto bshape = fftw_buffer_shape<Out>(fshape);
 
     Out factor = 1.0 / get_size(fshape.begin(), fshape.end());
@@ -70,9 +220,10 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     py::gil_scoped_release release;
 
     vector_array<Out> kbuffer (bshape);
-    write_buffer(kbuffer, fshape, std::move(karr));
-    auto kbuf_inp = kbuffer.ptr;
-    auto kbuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(kbuffer.ptr);
+    write_buffer(kbuffer, karr, fshape, write_origin(fshape, karr.shape));
+
+    auto kbuf_inp = kbuffer.data();
+    auto kbuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(kbuffer.data());
 
     auto fwd_plan = make_forward_plan(fshape, kbuf_inp, kbuf_out);
     auto bwd_plan = make_backward_plan(fshape, kbuf_out, kbuf_inp);
@@ -83,20 +234,23 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     {
         vector_array<Out> ibuffer (bshape);
 
-        auto ibuf_inp = ibuffer.ptr;
-        auto ibuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(ibuffer.ptr);
+        auto ibuf_inp = ibuffer.data();
+        auto ibuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(ibuffer.data());
         auto buf_size = is_complex_v<Out> ? ibuffer.size : ibuffer.size / 2;
+
+        auto worg = write_origin(fshape, ishape);
+        auto rorg = read_origin(fshape, ishape);
 
         #pragma omp for
         for (size_t i = 0; i < repeats; i++)
         {
             e.run([&]
             {
-                write_buffer(ibuffer, fshape, iarr.slice(i, axes));
+                write_buffer(ibuffer, iarr.slice(i, axes), fshape, worg);
                 fftw_execute(fwd_plan, ibuf_inp, ibuf_out);
                 for (size_t j = 0; j < buf_size; j++) ibuf_out[j] *= kbuf_out[j] * factor;
                 fftw_execute(bwd_plan, ibuf_out, ibuf_inp);
-                read_buffer(ibuffer, fshape, oarr.slice(i, axes));
+                read_buffer(ibuffer, oarr.slice(i, axes), fshape, rorg);
             });
         }
     }
@@ -287,6 +441,26 @@ PYBIND11_MODULE(fft_functions, m)
     }
 
     m.def("next_fast_len", py::vectorize(next_fast_len), py::arg("target"));
+
+    m.def("fftn", &fftn<float, int, int, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<float, std::vector<int>, std::vector<int>, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<double, int, int, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<double, std::vector<int>, std::vector<int>, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+
+    m.def("fftn", &fftn<std::complex<float>, int, int, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<std::complex<float>, std::vector<int>, std::vector<int>, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<std::complex<double>, int, int, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("fftn", &fftn<std::complex<double>, std::vector<int>, std::vector<int>, true>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+
+    m.def("ifftn", &fftn<float, int, int, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<float, std::vector<int>, std::vector<int>, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<double, int, int, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<double, std::vector<int>, std::vector<int>, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+
+    m.def("ifftn", &fftn<std::complex<float>, int, int, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<std::complex<float>, std::vector<int>, std::vector<int>, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<std::complex<double>, int, int, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
+    m.def("ifftn", &fftn<std::complex<double>, std::vector<int>, std::vector<int>, false>, py::arg("inp"), py::arg("shape") = std::nullopt, py::arg("axis") = std::nullopt, py::arg("norm") = "backward", py::arg("num_threads") = 1);
 
     m.def("fft_convolve", &fft_convolve<float, float, int>, py::arg("inp"), py::arg("kernel"), py::arg("axis") = std::nullopt, py::arg("num_threads") = 1);
     m.def("fft_convolve", &fft_convolve<float, float, std::vector<int>>, py::arg("inp"), py::arg("kernel"), py::arg("axis") = std::nullopt, py::arg("num_threads") = 1);

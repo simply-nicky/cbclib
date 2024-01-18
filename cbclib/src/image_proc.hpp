@@ -54,7 +54,7 @@ void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & 
     auto pt1 = static_cast<Point<int>>(line.pt1.round());
 
     T wd = (width + 1.0) / 2, length = std::sqrt(line.magnitude());
-    int wi = std::round(wd);
+    int wi = std::ceil(wd);
 
     auto step = bresenham_step(line.tau, direction::forward);
 

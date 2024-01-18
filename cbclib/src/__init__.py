@@ -1,5 +1,5 @@
-from .fft_functions import (next_fast_len, fft_convolve, gaussian_kernel, gaussian_filter,
-                            gaussian_gradient_magnitude)
+from .fft_functions import (next_fast_len, fftn, fft_convolve, gaussian_kernel, gaussian_filter,
+                            gaussian_gradient_magnitude, ifftn)
 from .geometry import (euler_angles, euler_matrix, tilt_angles, tilt_matrix, det_to_k,
                        k_to_det, k_to_smp, rotate, source_lines)
 from .image_proc import draw_line_mask, draw_line_image, draw_line_table

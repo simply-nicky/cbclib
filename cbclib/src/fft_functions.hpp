@@ -183,6 +183,32 @@ void fftw_execute_impl(fftwl_plan_ptr & plan, std::complex<long double> * inp, l
     fftwl_execute_dft_c2r(plan.get(), reinterpret_cast<fftwl_complex *>(inp), out);
 }
 
+// Type traits
+
+template <typename T>
+struct fftw_traits {};
+
+template <>
+struct fftw_traits<float>
+{
+    using plan_type = fftwf_plan_ptr;
+};
+
+template <>
+struct fftw_traits<double>
+{
+    using plan_type = fftw_plan_ptr;
+};
+
+template <>
+struct fftw_traits<long double>
+{
+    using plan_type = fftwl_plan_ptr;
+};
+
+template <typename T>
+using fftw_plan_t = typename fftw_traits<T>::plan_type;
+
 static const std::array<size_t, 585> LPRE =
 {
     18, 20, 21, 22, 24, 25, 26, 27, 28, 30, 32, 33, 35, 36, 39, 40, 42, 44, 45, 48, 49, 50, 52, 54, 55, 56, 60, 63, 64,
@@ -354,7 +380,8 @@ template <
     class Container, typename From, typename To,
     typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, int>>
 >
-auto make_forward_plan(const Container & shape, From * inp, To * out, int flags = fft::estimate)
+auto make_forward_plan(const Container & shape, From * inp, To * out, int flags = fft::estimate) ->
+    detail::fftw_plan_t<std::common_type_t<remove_complex_t<From>, remove_complex_t<To>>>
 {
     int rank = shape.size();
     auto ns = std::vector<int>(shape.begin(), shape.end());
@@ -365,7 +392,8 @@ template <
     class Container, typename From, typename To,
     typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, int>>
 >
-auto make_backward_plan(const Container & shape, From * inp, To * out, int flags = fft::estimate)
+auto make_backward_plan(const Container & shape, From * inp, To * out, int flags = fft::estimate) ->
+    detail::fftw_plan_t<std::common_type_t<remove_complex_t<From>, remove_complex_t<To>>>
 {
     int rank = shape.size();
     auto ns = std::vector<int>(shape.begin(), shape.end());
@@ -384,17 +412,19 @@ std::vector<size_t> fftw_buffer_shape(typename detail::any_container<size_t> sha
     return detail::fftw_buffer_shape(std::move(shape), typename is_complex<T>::type ());
 }
 
-template <typename T, typename U, class Container>
-void write_buffer(array<T> & buffer, const Container & fshape, array<U> data)
+template <class Container1, class Container2>
+auto write_origin(const Container1 & fshape, const Container2 & ishape)
 {
-    auto find_origin = [](size_t flen, size_t n)
-    {
-        return std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;
-    };
+    auto find_origin = [](size_t flen, size_t n){return std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;};
 
     std::vector<long> origin;
-    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin), find_origin);
+    std::transform(fshape.begin(), fshape.end(), ishape.begin(), std::back_inserter(origin), find_origin);
+    return origin;
+}
 
+template <typename T, typename U, class Shape, class Origin>
+void write_buffer(array<T> & buffer, const array<U> & data, const Shape & fshape, const Origin & origin)
+{
     std::vector<long> coord (buffer.ndim, 0);
     for (auto riter = rect_iterator(fshape); !riter.is_end(); ++riter)
     {
@@ -410,13 +440,19 @@ void write_buffer(array<T> & buffer, const Container & fshape, array<U> data)
     }
 }
 
-template <typename T, typename U, class Container>
-void read_buffer(const array<T> & buffer, const Container & fshape, array<U> data)
+template <class Container1, class Container2>
+auto read_origin(const Container1 & fshape, const Container2 & oshape)
 {
     auto find_origin = [](size_t flen, size_t n){return std::minus<long>()(flen, n / 2);};
-    std::vector<long> origin;
-    std::transform(fshape.begin(), fshape.end(), data.shape.begin(), std::back_inserter(origin), find_origin);
 
+    std::vector<long> origin;
+    std::transform(fshape.begin(), fshape.end(), oshape.begin(), std::back_inserter(origin), find_origin);
+    return origin;
+}
+
+template <typename T, typename U, class Shape, class Origin>
+void read_buffer(const array<T> & buffer, array<U> data, const Shape & fshape, const Origin & origin)
+{
     std::vector<long> coord (buffer.ndim, 0);
     for (auto riter = rect_iterator(data.shape); !riter.is_end(); ++riter)
     {
@@ -496,6 +532,9 @@ void read_line(const std::vector<T> & buffer, size_t flen, OutputIt first, Outpu
 }
 
 size_t next_fast_len(size_t target);
+
+template <typename Inp, typename Shape, typename Axis>
+auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> axis, std::string norm, unsigned threads);
 
 template <typename Inp, typename Krn, typename Seq>
 auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<Seq> axis, unsigned threads);
