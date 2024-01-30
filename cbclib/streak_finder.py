@@ -38,10 +38,11 @@ class Pattern(DataContainer):
         Returns:
             Set of detected peaks.
         """
-        peaks =  Peaks(self.data, 2 * self.structure.radius, vmin)
-        return peaks.filter(self.data, connectivity, vmin, npts)
+        peaks = Peaks(self.data, self.mask, 2 * self.structure.radius, vmin)
+        return peaks.filter(data=self.data, mask=self.mask, structure=connectivity, vmin=vmin,
+                            npts=npts)
 
-    def find_streaks(self, peaks: Peaks, xtol: float, vmin: float, log_eps: float=np.log(1e-1),
+    def find_streaks(self, peaks: Peaks, xtol: float, vmin: float, log_eps: float=0.0,
                      max_iter: int=100, lookahead: int=3, min_size: int=5) -> List[Line]:
         """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
         extended with a connectivity structure.

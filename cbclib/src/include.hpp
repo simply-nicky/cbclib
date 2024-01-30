@@ -28,6 +28,20 @@ namespace cbclib {
 
 namespace py = pybind11;
 
+template <typename Container, typename Shape, typename = std::enable_if_t<
+    std::is_rvalue_reference_v<Container &&> && std::is_integral_v<typename std::remove_cvref_t<Shape>::value_type>
+>>
+inline py::array_t<typename Container::value_type> as_pyarray(Container && seq, Shape && shape)
+{
+    Container * seq_ptr = new Container(std::move(seq));
+    auto capsule = py::capsule(seq_ptr, [](void * p) {delete reinterpret_cast<Container *>(p);});
+    return py::array(std::forward<Shape>(shape),  // shape of array
+                     seq_ptr->data(),  // c-style contiguous strides for Container
+                     capsule           // numpy array references this parent
+    );
+}
+
+
 template <typename Container, typename = std::enable_if_t<std::is_rvalue_reference_v<Container &&>>>
 inline py::array_t<typename Container::value_type> as_pyarray(Container && seq)
 {
@@ -87,6 +101,7 @@ public:
 
     any_container(std::vector<T> && v) : vec(std::move(v)) {}
 
+    // Moves the vector out of an rvalue any_container
     operator std::vector<T> && () && { return std::move(this->vec); }
 
     std::vector<T> & operator*() {return this->vec;}
@@ -96,13 +111,6 @@ public:
     const std::vector<T> * operator->() const {return &(this->vec);}
 };
 
-}
-
-template <class InputIt, typename = std::enable_if_t<detail::is_input_iterator<InputIt>::value>>
-auto get_size(InputIt first, InputIt last)
-{
-    using value_t = typename InputIt::value_type;
-    return std::reduce(first, last, value_t(1), std::multiplies<value_t>());
 }
 
 template <typename Container>
@@ -135,7 +143,8 @@ void check_dimensions(const std::string & name, ssize_t axis, const Container & 
 template <typename Container, typename Function, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
 void check_shape(const Container & shape, Function && func)
 {
-    if (std::forward<Function>(func)(shape) || !get_size(shape.begin(), shape.end()))
+    using value_t = typename Container::value_type;
+    if (std::forward<Function>(func)(shape) || !std::reduce(shape.begin(), shape.end(), 1, std::multiplies<value_t>()))
     {
         std::ostringstream oss;
         std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
@@ -209,8 +218,10 @@ public:
         return *this;
     }
 
-    template <class Array>
-    Array swap_axes(Array && arr) const
+    template <class Array, typename V = std::remove_cvref_t<Array>::value_type, typename = std::enable_if_t<
+        std::is_same_v<py::array_t<V>, std::remove_cvref_t<Array>>
+    >>
+    Array && swap_axes(Array && arr) const
     {
         size_t counter = 0;
         for (py::ssize_t i = 0; i < arr.ndim(); i++)
@@ -224,8 +235,10 @@ public:
         return std::forward<Array>(arr);
     }
 
-    template <class Array>
-    Array swap_axes_back(Array && arr) const
+    template <class Array, typename V = std::remove_cvref_t<Array>::value_type, typename = std::enable_if_t<
+        std::is_same_v<py::array_t<V>, std::remove_cvref_t<Array>>
+    >>
+    Array && swap_axes_back(Array && arr) const
     {
         size_t counter = arr.ndim() - this->size();
         for (py::ssize_t i = arr.ndim() - 1; i >= 0; i--)

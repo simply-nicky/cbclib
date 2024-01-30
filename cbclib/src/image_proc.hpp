@@ -1,8 +1,153 @@
 #ifndef IMAGE_PROC_
 #define IMAGE_PROC_
-#include "streak_finder.hpp"
+#include "array.hpp"
 
 namespace cbclib {
+
+// 2D Point class
+
+template <typename T>
+struct Point
+{
+    using value_type = T;
+
+    T x, y;
+
+    Point() : x(), y() {}
+    Point(T x, T y) : x(x), y(y) {}
+
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    operator Point<V>() const {return {static_cast<V>(x), static_cast<V>(y)};}
+
+    operator std::array<T, 2>() const {return {x, y};}
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator+(const Point<V> & rhs) const {return {x + rhs.x, y + rhs.y};}
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator+(V rhs) const {return {x + rhs, y + rhs};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator+(V lhs, const Point<T> & rhs) {return {lhs + rhs.x, lhs + rhs.y};}
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator-(const Point<V> & rhs) const {return {x - rhs.x, y - rhs.y};}
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator-(V rhs) const {return {x - rhs, y - rhs};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator-(V lhs, const Point<T> & rhs) {return {lhs - rhs.x, lhs - rhs.y};}
+
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator*(V rhs) const {return {rhs * x, rhs * y};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator*(V lhs, const Point<T> & rhs) {return {lhs * rhs.x, lhs * rhs.y};}
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator/(V rhs) const {return {x / rhs, y / rhs};}
+
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator+=(const Point<V> & rhs) {x += rhs.x; y += rhs.y; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator+=(V rhs) {x += rhs; y += rhs; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator-=(const Point<V> & rhs) {x -= rhs.x; y -= rhs.y; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator-=(V rhs) {x -= rhs; y -= rhs; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> operator/=(V rhs) {x /= rhs; y /= rhs; return *this;}
+
+    template <typename V>
+    std::common_type_t<T, V> dot(const Point<V> & rhs) const {return x * rhs.x + y * rhs.y;}
+
+    bool operator<(const Point<T> & rhs) const
+    {
+        if (x < rhs.x) return true;
+        if (rhs.x < x) return false;
+        if (y < rhs.y) return true;
+        if (rhs.y < y) return false;
+        return false;
+    }
+    bool operator==(const Point<T> & rhs) const {return x == rhs.x && y == rhs.y;}
+    bool operator!=(const Point<T> & rhs) const {return !operator==(rhs);}
+
+    friend std::ostream & operator<<(std::ostream & os, const Point<T> & pt)
+    {
+        os << "{" << pt.x << ", " << pt.y << "}";
+        return os;
+    }
+
+    template <typename V, typename U, typename = std::enable_if_t<std::is_convertible_v<V, T> && std::is_convertible_v<U, T>>>
+    Point<T> clamp(const Point<V> & lo, const Point<U> & hi) const
+    {
+        return {std::clamp<T>(x, lo.x, hi.x), std::clamp<T>(y, lo.y, hi.y)};
+    }
+
+    std::array<T, 2> coordinate() const
+    {
+        return {y, x};
+    }
+
+    T magnitude() const {return x * x + y * y;}
+    Point<T> round() const {return {std::round(x), std::round(y)};}
+};
+
+template <typename Pt, typename = void>
+struct is_point : std::false_type {};
+
+template <typename Pt>
+struct is_point <Pt, 
+    typename std::enable_if_t<std::is_base_of_v<Point<typename Pt::value_type>, std::remove_cvref_t<Pt>>>
+> : std::true_type {};
+
+template <typename Pt>
+constexpr bool is_point_v = is_point<Pt>::value;
+
+// 2D Line class
+
+template <typename T>
+struct Line
+{
+    Point<T> pt0, pt1;
+    Point<T> tau;
+
+    operator std::array<T, 4>() const {return {pt0.x, pt0.y, pt1.x, pt1.y};}
+
+    template <typename Pt, typename = std::enable_if_t<std::is_base_of_v<Point<T>, std::remove_cvref_t<Pt>>>>
+    Line(Pt && pt0, Pt && pt1) : pt0(std::forward<Pt>(pt0)), pt1(std::forward<Pt>(pt1)), tau(pt1 - pt0) {}
+
+    Line(T x0, T y0, T x1, T y1) : Line(Point<T>{x0, y0}, Point<T>{x1, y1}) {}
+
+    T magnitude() const {return tau.magnitude();}
+
+    Point<T> norm() const {return {tau.y, -tau.x};}
+
+    T perimeter() const {return std::abs(tau.x) + std::abs(tau.y);}
+
+    T theta() const {return std::atan(tau.y, tau.x);}
+
+    T distance(const Point<T> & point) const
+    {
+        if (magnitude())
+        {
+            auto r0 = pt0 - point, r1 = pt1 - point;
+
+            if (r0.magnitude() < r1.magnitude())
+            {
+                auto dist = r0 - (tau.dot(r0) / magnitude()) * tau;
+                return std::sqrt(dist.magnitude());
+            }
+            auto dist = r1 - (tau.dot(r1) / magnitude()) * tau;
+            return std::sqrt(dist.magnitude());
+        }
+        return std::sqrt((pt0 - point).magnitude());
+    }
+
+    friend std::ostream & operator<<(std::ostream & os, const Line<T> & line)
+    {
+        os << "{" << line.pt0 << ", " << line.pt1 << "}";
+        return os;
+    }
+
+};
 
 template <typename T>
 using table_t = std::tuple<std::vector<int>, std::vector<int>, std::vector<T>>;
@@ -12,9 +157,9 @@ namespace detail {
 template <typename T, typename Out>
 void draw_pixel(array<Out> & image, const Point<int> & pt, T val)
 {
-    if (image.is_inbound({pt.y, pt.x}))
+    if (image.is_inbound(pt.coordinate()))
     {
-        auto index = image.ravel_index({pt.y, pt.x});
+        auto index = image.ravel_index(pt.coordinate());
         image[index] = std::max(image[index], static_cast<Out>(val));
     }
     else throw std::runtime_error("Invalid pixel index: {" + std::to_string(pt.y) + ", " + std::to_string(pt.x) + "}");
@@ -46,6 +191,115 @@ void draw_pixel(table_t<Out> & table, const Point<int> & pt, T val)
         pdf: http://members.chello.at/%7Eeasyfilter/Bresenham.pdf
         url: http://members.chello.at/~easyfilter/bresenham.html
 ------------------------------------------------------------------------------*/
+
+// Iterator for a rasterizing algorithm for drawing lines
+// See -> http://members.chello.at/~easyfilter/bresenham.html
+
+template <typename T, typename I>
+struct BhmIterator
+{
+    Point<I> point;     /* Current point position                                           */
+    Point<T> tau;       /* Line norm, derivative of a line error function:                  */
+                        /* error(x + dx, y + dy) = error(x, y) + tau.x * dx + tau.y * dy    */
+    T error;            /* Current error value                                              */
+
+    template <typename Point1, typename Point2, typename Point3>
+    BhmIterator(Point1 && pt, Point2 && tau, const Point3 & origin) :
+        point(std::forward<Point1>(pt)), tau(std::forward<Point2>(tau)), error((pt - origin).dot(tau)) {}
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    BhmIterator move(const Point<J> & step) const
+    {
+        auto pix = *this;
+        pix.xstep(step.x); pix.ystep(step.y);
+        return pix;
+    }
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    BhmIterator & step(const Point<J> & step)
+    {
+        xstep(step.x); ystep(step.y);
+        return *this;
+    }
+
+    BhmIterator & xstep(I step)
+    {
+        point.x += step; error += step * tau.x;
+        return *this;
+    }
+
+    BhmIterator & ystep(I step)
+    {
+        point.y += step; error += step * tau.y;
+        return *this;
+    }
+
+    // Increment x if:
+    //      e(x + sx, y + sy) + e(x, y + sy) < 0    if sx * tau.x > 0
+    //      e(x + sx, y + sy) + e(x, y + sy) > 0    if sx * tau.x < 0
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    bool is_xnext(const Point<J> & step) const
+    {
+        if (step.x * tau.x > 0) return 2 * e_xy(step) <= step.x * tau.x;
+        return 2 * e_xy(step) >= step.x * tau.x;
+    }
+
+    // Increment y if:
+    //      e(x + sx, y + sy) + e(x + sx, y) < 0    if sy * tau.y > 0
+    //      e(x + sx, y + sy) + e(x + sx, y) > 0    if sy * tau.y < 0
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    bool is_ynext(const Point<J> & step) const
+    {
+        if (step.y * tau.y > 0) return 2 * e_xy(step) <= step.y * tau.y;
+        return 2 * e_xy(step) >= step.y * tau.y;
+    }
+
+private:
+
+    // Return e(x + sx, y + sy)
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    T e_xy(const Point<J> & step) const
+    {
+        return error + step.x * tau.x + step.y * tau.y;
+    }
+};
+
+// Drawing direction
+
+enum class direction
+{
+    forward,
+    backward
+};
+
+// Choose a steping vector based on drawing direction
+// tau is NOT the same as BhmIterator::tau (Line::norm()), but is equal to Line::tau
+
+template <typename T>
+Point<int> bresenham_step(const Point<T> & tau, direction dir)
+{
+    int xstep, ystep;
+    switch (dir)
+    {
+        case direction::forward:
+            xstep = tau.x > T() ? 1 : -1;
+            ystep = tau.y > T() ? 1 : -1;
+            break;
+
+        case direction::backward:
+            xstep = tau.x > T() ? -1 : 1;
+            ystep = tau.y > T() ? -1 : 1;
+            break;
+
+        default:
+            throw std::invalid_argument("invalid direction argument: " + std::to_string(static_cast<int>(dir)));
+    }
+    return {xstep, ystep};
+}
+
 template <typename Data, typename T, typename Out>
 void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & line, T width, Out max_val, typename kernels<T>::kernel kernel)
 {
@@ -111,10 +365,6 @@ void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & 
         }
     }
 }
-
-template <typename T, typename Out>
-py::array_t<Out> draw_line_new(py::array_t<T, py::array::c_style | py::array::forcecast> lines,
-                               std::vector<size_t> shape, Out max_val, T dilation, std::string kernel, unsigned threads);
 
 template <typename T, typename Out>
 py::array_t<Out> draw_line(py::array_t<T, py::array::c_style | py::array::forcecast> lines,

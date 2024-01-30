@@ -60,7 +60,7 @@ py::array_t<Out> draw_line_vec(std::vector<py::array_t<T, py::array::c_style | p
     check_shape(shape, [](const std::vector<size_t> & shape){return shape.size() < 3;});
     Point<size_t> ubound {shape[shape.size() - 1] - 1, shape[shape.size() - 2] - 1};
 
-    if (get_size(shape.begin(), std::prev(shape.end(), 2)) != lines.size())
+    if (std::reduce(shape.begin(), std::prev(shape.end(), 2), size_t(1), std::multiplies()) != lines.size())
         throw std::invalid_argument("shape is incompatible with the list of lines");
 
     std::vector<array<T>> lvec;

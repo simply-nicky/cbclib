@@ -8,7 +8,7 @@ size_t next_fast_len(size_t target)
     if (!(target & (target - 1))) return target;
     if (target <= detail::LPRE[detail::LPRE.size() - 1])
     {
-        return *searchsorted(target, detail::LPRE.cbegin(), detail::LPRE.cend(), side::left, std::less<size_t>());
+        return *std::lower_bound(detail::LPRE.cbegin(), detail::LPRE.cend(), target, std::less<size_t>());
     }
     size_t match, best_match = 2 * target;
 
@@ -62,7 +62,7 @@ struct FFTFactor
                 break;
 
             default:
-                throw std::invalid_argument("Invalid mode: " + std::to_string(m));
+                throw std::invalid_argument("Invalid mode: " + std::to_string(static_cast<int>(m)));
         }
 
         return fct;
@@ -116,7 +116,7 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
     std::vector<size_t> org (seq.size());
     std::vector<size_t> axes (seq.size());
     std::iota(axes.begin(), axes.end(), ax);
-    auto repeats = get_size(iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
+    size_t repeats = std::reduce(iarr.shape.begin(), std::next(iarr.shape.begin(), ax), 1, std::multiplies());
     threads = (threads > repeats) ? repeats : threads;
 
     std::vector<size_t> fshape;
@@ -124,7 +124,7 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
                    [](size_t n){return next_fast_len(n);});
     auto bshape = fftw_buffer_shape<Out>(fshape);
 
-    auto factor = FFTFactor::factor<remove_complex_t<Inp>>(get_size(fshape.begin(), fshape.end()),
+    auto factor = FFTFactor::factor<remove_complex_t<Inp>>(std::reduce(fshape.begin(), fshape.end(), 1, std::multiplies<size_t>()),
                                                            FFTFactor::get_mode(norm), isForward);
 
     thread_exception e;
@@ -205,7 +205,7 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     std::vector<size_t> ishape (std::next(iarr.shape.begin(), ax), iarr.shape.end());
     std::vector<size_t> axes (seq.size());
     std::iota(axes.begin(), axes.end(), ax);
-    auto repeats = get_size(iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
+    size_t repeats = std::reduce(iarr.shape.begin(), std::next(iarr.shape.begin(), ax), 1, std::multiplies());
     threads = (threads > repeats) ? repeats : threads;
 
     std::vector<size_t> fshape;
@@ -213,7 +213,7 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
                    [](size_t nk, size_t ni){return next_fast_len(nk + ni);});
     auto bshape = fftw_buffer_shape<Out>(fshape);
 
-    Out factor = 1.0 / get_size(fshape.begin(), fshape.end());
+    Out factor = 1.0 / std::reduce(fshape.begin(), fshape.end(), 1, std::multiplies());
 
     thread_exception e;
 

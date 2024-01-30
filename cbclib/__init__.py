@@ -11,5 +11,6 @@ from .cxi_protocol import CXIProtocol, CXIStore
 from .log_protocol import LogProtocol, LogContainer
 from .data_container import Transform, Crop, Downscale, Mirror, ComposeTransforms
 from .data_processing import CrystData, LSDetector, ModelDetector
+from .streak_finder import Pattern
 from . import bin
 from . import src

@@ -87,18 +87,22 @@ public:
 
     using ShapeContainer = detail::any_container<size_t>;
 
-    shape_handler(size_t ndim, size_t size, ShapeContainer shape, ShapeContainer strides) :
-        ndim(ndim), size(size), shape(std::move(shape)), strides(std::move(strides)) {}
-
-    shape_handler(ShapeContainer shape) : ndim(std::distance(shape->begin(), shape->end()))
+    shape_handler(ShapeContainer sh, ShapeContainer st) : shape(std::move(sh)), strides(std::move(st))
     {
-        this->size = get_size(shape->begin(), shape->end());
-        size_t stride = this->size;
-        for (auto length : *shape)
+        ndim = shape.size();
+        size = strides[ndim - 1];
+        for (size_t i = 0; i < ndim; i++) size += (shape[i] - 1) * strides[i];
+    }
+
+    shape_handler(ShapeContainer sh) : shape(std::move(sh))
+    {
+        ndim = shape.size();
+        size = std::reduce(shape.begin(), shape.end(), 1, std::multiplies());
+        size_t stride = size;
+        for (auto length : shape)
         {
             stride /= length;
-            this->strides.push_back(stride);
-            this->shape.push_back(length);
+            strides.push_back(stride);
         }
     }
 
@@ -272,8 +276,8 @@ public:
 
     operator py::array_t<T>() const {return {shape, ptr};}
 
-    array(size_t ndim, size_t size, ShapeContainer shape, ShapeContainer strides, T * ptr) :
-        shape_handler(ndim, size, std::move(shape), std::move(strides)), ptr(ptr) {}
+    array(ShapeContainer shape, ShapeContainer strides, T * ptr) :
+        shape_handler(std::move(shape), std::move(strides)), ptr(ptr) {}
 
     array(shape_handler handler, T * ptr) : shape_handler(std::move(handler)), ptr(ptr) {}
 
@@ -284,10 +288,10 @@ public:
     T & operator[] (size_t index) {return ptr[index];}
     const T & operator[] (size_t index) const {return ptr[index];}
 
-    iterator begin() {return {ptr, 1};}
-    iterator end() {return {ptr + size, 1};}
-    const_iterator begin() const {return {ptr, 1};}
-    const_iterator end() const {return {ptr + size, 1};}
+    iterator begin() {return {ptr, strides[ndim - 1]};}
+    iterator end() {return {ptr + size, strides[ndim - 1]};}
+    const_iterator begin() const {return {ptr, strides[ndim - 1]};}
+    const_iterator end() const {return {ptr + size, strides[ndim - 1]};}
 
     template <bool IsConst>
     typename strided_iterator<T, IsConst>::difference_type index(const strided_iterator<T, IsConst> & iter) const
@@ -316,8 +320,7 @@ public:
         shape_handler(std::move(other_shape)).unravel_index(std::back_inserter(coord), index);
         for (auto axis : *axes) coord.insert(std::next(coord.begin(), axis), 0);
 
-        return array<T>(shape.size(), get_size(shape.begin(), shape.end()),
-                        std::move(new_shape), std::move(new_strides), ptr + ravel_index(coord.begin(), coord.end()));
+        return array<T>(std::move(new_shape), std::move(new_strides), ptr + ravel_index(coord.begin(), coord.end()));
     }
 
     iterator line_begin(size_t axis, size_t index)
@@ -414,42 +417,6 @@ public:
 
     bool is_end() const {return index >= size; }
 };
-
-/*----------------------------------------------------------------------------*/
-/*------------------------------ Binary search -------------------------------*/
-/*----------------------------------------------------------------------------*/
-// Array search
-enum class side
-{
-    left = 0,
-    right = 1
-};
-
-/* find idx \el [0, npts], so that base[idx - 1] < key <= base[idx] */
-template <class ForwardIt, typename T, class Compare>
-ForwardIt searchsorted(const T & value, ForwardIt first, ForwardIt last, side s, Compare comp)
-{
-    auto npts = std::distance(first, last);
-    auto extreme = std::next(first, npts - 1);
-    if (comp(value, *first)) return first;
-    if (!comp(value, *extreme)) return extreme;
-
-    ForwardIt out;
-    switch (s)
-    {
-        case side::left:
-            out = std::lower_bound(first, last, value, comp);
-            break;
-
-        case side::right:
-            out = std::next(first, std::distance(first, std::upper_bound(first, last, value, comp)) - 1);
-            break;
-
-        default:
-            throw std::invalid_argument("invalid side argument: " + std::to_string(static_cast<int>(s)));
-    }
-    return out;
-}
 
 /*----------------------------------------------------------------------------*/
 /*------------------------------- Wirth select -------------------------------*/

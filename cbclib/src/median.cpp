@@ -227,7 +227,7 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     auto ax = ibuf.ndim - seq.size();
     auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
     auto new_shape = out_shape;
-    size_t repeats = get_size(out_shape.begin(), out_shape.end());
+    size_t repeats = std::reduce(out_shape.begin(), out_shape.end(), 1, std::multiplies());
 
     if (return_std) out_shape.insert(out_shape.begin(), 2);
     auto out = py::array_t<D>(out_shape);
@@ -348,7 +348,7 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
         throw std::invalid_argument("W and y must have a positive size");
 
     auto new_shape = std::vector<py::ssize_t>(ybuf.shape.begin(), std::next(ybuf.shape.begin(), ax));
-    auto repeats = get_size(new_shape.begin(), new_shape.end());
+    size_t repeats = std::reduce(new_shape.begin(), new_shape.end(), 1, std::multiplies());
     new_shape.push_back(ybuf.size / repeats);
 
     y = y.reshape(new_shape);
