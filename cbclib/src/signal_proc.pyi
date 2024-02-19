@@ -1,6 +1,25 @@
 from typing import Optional, Tuple, Union
 import numpy as np
 
+def unique_indices(array: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Returns the sorted unique elements of a sorted array of integers. There are three optional
+    outputs in addition to the unique elements:
+
+    * the indices of the input array that give the unique values
+    * the indices of the unique array that reconstruct the input array
+
+    Args:
+        array : A sorted array of integers.
+
+    Returns:
+        A tuple of three arrays:
+
+        * The sorted unique values.
+        * The indices of the first occurrences of the unique values in the original array.
+        * The indices to reconstruct the original array from the unique array.
+    """
+    ...
+
 def binterpolate(inp: np.ndarray, grid: Tuple[np.ndarray, ...], coords: np.ndarray, num_threads: int=1) -> np.ndarray:
     """Perform bilinear multidimensional interpolation on regular grids. The integer grid starting
     from ``(0, 0, ...)`` to ``(inp.shape[0] - 1, inp.shape[1] - 1, ...)`` is implied.

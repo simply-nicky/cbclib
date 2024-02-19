@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Tuple
+from typing import List, Optional, Tuple, Union
 import numpy as np
 from .label import Points, Structure
 
@@ -55,9 +55,19 @@ class Peaks:
         """
         ...
 
-def detect_streaks(peaks: Peaks, data: np.ndarray, mask: np.ndarray, structure: Structure,
-                   xtol: float, vmin: float, log_eps: float=0.0, max_iter: int=100,
-                   lookahead: int=1, min_size: int=5) -> List[Line]:
+def detect_peaks(data: np.ndarray, mask: np.ndarra, radius: int, vmin: float,
+                 axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[Peaks]:
+    ...
+
+def filter_peaks(peaks: Union[Peaks, List[Peaks]], data: np.ndarray, mask: np.ndarray,
+                 structure: Structure, vmin: float, npts: int, axes: Optional[Tuple[int, int]]=None,
+                 num_threads: int=1) -> Union[Peaks, List[Peaks]]:
+    ...
+
+def detect_streaks(peaks: Union[Peaks, List[Peaks]], data: np.ndarray, mask: np.ndarray,
+                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0, max_iter: int=100,
+                   lookahead: int=1, min_size: int=5, axes: Optional[Tuple[int, int]]=None,
+                   num_threads: int=1) -> Union[List[Line], List[List[Line]]]:
     """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
     extended with a connectivity structure.
 

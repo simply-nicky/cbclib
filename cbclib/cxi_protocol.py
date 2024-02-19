@@ -7,92 +7,137 @@ Examples:
 
     >>> import cbclib as cbc
     >>> cbc.CXIProtocol.import_default()
-    CXIProtocol(datatypes={...}, load_paths={...}, kinds={...})
+    CXIProtocol(load_paths={...})
 """
 from __future__ import annotations
 from dataclasses import dataclass
 from functools import partial
+from enum import auto, Enum
+from glob import iglob
 from multiprocessing import Pool
 import os
+import fnmatch
+import re
 from types import TracebackType
-from typing import (Any, Callable, ClassVar, Dict, ItemsView, Iterator, KeysView,
-                    List, Optional, Tuple, Union, ValuesView)
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple, Union, get_type_hints
 import h5py
 import numpy as np
 from tqdm.auto import tqdm
-from .data_container import INIContainer
+from extra_data import open_run, stack_detector_data, DataCollection
+from extra_geom import JUNGFRAUGeometry
+from .data_container import DataContainer, Parser, INIParser, JSONParser, StringFormatter
 
+EXP_ROOT_DIR = '/gpfs/exfel/exp'
 CXI_PROTOCOL = os.path.join(os.path.dirname(__file__), 'config/cxi_protocol.ini')
 Indices = Union[int, slice, np.ndarray, List[int], Tuple[int]]
 
+class Kinds(Enum):
+    SCALAR = auto()
+    SEQUENCE = auto()
+    FRAME = auto()
+    STACK = auto()
+    NO_KIND = auto()
+
 @dataclass
-class CXIProtocol(INIContainer):
+class CrystProtocol():
+    data        : Optional[np.ndarray] = None
+    good_frames : Optional[np.ndarray] = None
+    mask        : Optional[np.ndarray] = None
+    frames      : Optional[np.ndarray] = None
+
+    whitefield  : Optional[np.ndarray] = None
+    std         : Optional[np.ndarray] = None
+    snr         : Optional[np.ndarray] = None
+    scales      : Optional[np.ndarray] = None
+
+    kinds       : ClassVar[Dict[str, Kinds]] = {'data': Kinds.STACK, 'good_frames': Kinds.SEQUENCE,
+                                                'mask': Kinds.FRAME, 'frames': Kinds.SEQUENCE,
+                                                'whitefield': Kinds.FRAME, 'std': Kinds.FRAME,
+                                                'scales': Kinds.SEQUENCE}
+
+    @classmethod
+    def get_kind(cls, attr: str) -> Kinds:
+        return cls.kinds.get(attr, Kinds.NO_KIND)
+
+@dataclass
+class CXIProtocol(DataContainer):
     """CXI protocol class. Contains a CXI file tree path with the paths written to all the data
     attributes necessary for the :class:`cbclib.CrystData` detector data container, their
     corresponding attributes' data types, and data structure.
 
     Args:
-        datatypes : Dictionary with attributes' datatypes. 'float', 'int', 'uint', or 'bool' are
-            allowed.
         load_paths : Dictionary with attributes' CXI default file paths.
-        kinds : The attribute's kind, that specifies data dimensionality. The following keywords
-            are allowed:
-
-            * `scalar` : Data is either 0D, 1D, or 2D. The data is saved and loaded plainly
-              without any transforms or indexing.
-            * `sequence` : A time sequence array. Data is either 1D, 2D, or 3D. The data is
-              indexed, so the first dimension of the data array must be a time dimension. The
-              data points for the given index are not transformed.
-            * `frame` : Frame array. Data must be 2D, it may be transformed with any of
-              :class:`cbclib.Transform` objects. The data shape is identical to the detector
-              pixel grid.
-            * `stack` : A time sequnce of frame arrays. The data must be 3D. It's indexed in the
-              same way as `sequence` attributes. Each frame array may be transformed with any of
-              :class:`cbclib.Transform` objects.
     """
-    __ini_fields__ = {'datatypes': 'datatypes', 'load_paths': 'load_paths', 'kinds': 'kinds'}
-
-    datatypes   : Dict[str, str]
     load_paths  : Dict[str, List[str]]
-    kinds       : Dict[str, str]
-
-    known_types: ClassVar[Dict[str, Any]] = {'int': np.integer, 'bool': bool, 'float': np.floating,
-                                             'str': str, 'uint': np.unsignedinteger}
-    default_types: ClassVar[Dict[str, Any]] = {'int': np.int64, 'bool': bool, 'float': np.float64,
-                                               'str': str, 'uint': np.uint64}
-    known_ndims: ClassVar[Dict[str, Tuple[int, ...]]] = {'stack': (3,), 'frame': (2, 3),
-                                                         'sequence': (1, 2, 3), 'scalar': (0, 1, 2)}
+    known_ndims: ClassVar[Dict[Kinds, Tuple[int, ...]]] = {Kinds.STACK: (3,), Kinds.FRAME: (2, 3),
+                                                           Kinds.SEQUENCE: (1, 2, 3),
+                                                           Kinds.SCALAR: (0, 1, 2)}
 
     def __post_init__(self):
-        self.load_paths = {attr: self.str_to_list(val) for attr, val in self.load_paths.items()
-                           if attr in self.datatypes}
-        self.kinds = {attr: val for attr, val in self.kinds.items() if attr in self.datatypes}
+        self.load_paths = {attr: paths for attr, paths in self.load_paths.items()
+                           if CrystProtocol.get_kind(attr) != Kinds.NO_KIND}
+
+    @staticmethod
+    def initializer(load_paths: Dict[str, List[str]], attr: str):
+        global worker
+        protocol = CXIProtocol(load_paths)
+        kind = CrystProtocol.get_kind(attr)
+
+        def _worker(fname: str) -> Tuple[Any, ...]:
+            with h5py.File(fname) as cxi_file:
+                shapes = protocol.read_file_shapes(attr, cxi_file)
+                for cxi_path, shape in shapes.items():
+                    if len(shape) not in protocol.get_ndim(attr):
+                        err_txt = f'Dataset at {cxi_file.filename}:'\
+                                f' {cxi_path} has invalid shape: {str(shape)}'
+                        raise ValueError(err_txt)
+
+                    if kind in [Kinds.STACK, Kinds.SEQUENCE]:
+                        return (shape[0] * [cxi_file.filename,],
+                                shape[0] * [cxi_path,], range(shape[0]))
+                    if kind in [Kinds.FRAME, Kinds.SCALAR]:
+                        return ([cxi_file.filename,], [cxi_path,], [tuple(),])
+
+                return ()
+
+        worker = _worker
+
+    @staticmethod
+    def read_worker(fname: str):
+        return worker(fname)
 
     @classmethod
-    def import_default(cls) -> CXIProtocol:
+    def parser(cls, ext: str='ini') -> Parser:
+        if ext == 'ini':
+            return INIParser({'load_paths': 'load_paths'},
+                             types=get_type_hints(cls))
+        if ext == 'json':
+            return JSONParser({'load_paths': 'load_paths'})
+
+        raise ValueError(f"Invalid format: {ext}")
+
+    @classmethod
+    def read(cls, file: Optional[str]=None, ext: str='ini') -> CXIProtocol:
         """Return the default :class:`CXIProtocol` object.
 
         Returns:
             A :class:`CXIProtocol` object with the default parameters.
         """
-        return cls.import_ini(CXI_PROTOCOL)
+        if file is None:
+            file = CXI_PROTOCOL
+        return cls(**cls.parser(ext).read(file))
 
-    def add_attribute(self, attr: str, datatype: str, load_paths: List[str],
-                      kind: str) -> CXIProtocol:
+    def add_attribute(self, attr: str, load_paths: List[str]) -> CXIProtocol:
         """Add a data attribute to the protocol.
 
         Args:
             attr : Attribute's name.
-            datatype : Attribute's data type.
             load_paths : List of attribute's CXI paths.
-            kind : Attribute's kind.
 
         Returns:
             A new protocol with the new attribute included.
         """
-        return self.replace(datatypes=dict(**self.datatypes, **{attr: datatype}),
-                            load_paths = dict(**self.load_paths, **{attr: load_paths}),
-                            kinds=dict(**self.kinds, **{attr: kind}))
+        return self.replace(load_paths = dict(**self.load_paths, **{attr: load_paths}))
 
     def find_path(self, attr: str, cxi_file: h5py.File) -> str:
         """Find attribute's path in a CXI file `cxi_file`.
@@ -111,12 +156,6 @@ class CXIProtocol(INIContainer):
                 return path
         return str()
 
-    def __iter__(self) -> Iterator:
-        return self.datatypes.__iter__()
-
-    def __contains__(self, attr: str) -> bool:
-        return attr in self.datatypes
-
     def get_load_paths(self, attr: str, value: Optional[List[str]]=None) -> List[str]:
         """Return the attribute's default path in the CXI file. Return ``value`` if ``attr`` is not
         found.
@@ -130,51 +169,6 @@ class CXIProtocol(INIContainer):
         """
         return self.load_paths.get(attr, value)
 
-    def get_dtype(self, attr: str, dtype: Optional[np.dtype]=None) -> type:
-        """Return the attribute's data type. Return ``dtype`` if the attribute's data type is not
-        found.
-
-        Args:
-            attr : The data attribute.
-            dtype : Data type which is returned if the attribute's data type is not found.
-
-        Returns:
-            Attribute's data type.
-        """
-        if attr not in self:
-            raise ValueError(f'Invalid attribute: {attr:s}')
-
-        attr_type = self.known_types.get(self.datatypes.get(attr))
-        if dtype is not None and np.issubdtype(dtype, attr_type):
-            return dtype
-        return self.default_types.get(self.datatypes.get(attr))
-
-    def get_kind(self, attr: str, value: str='scalar') -> str:
-        """Return the attribute's kind, that specifies data dimensionality. Return ``value`` if the
-        attribute is not found.
-
-        Args:
-            attr : The data attribute.
-            value : value which is returned if the ``attr`` is not found.
-
-        Returns:
-            The attribute's kind, that specifies data dimensionality. The following keywords are
-            allowed:
-
-            * `scalar` : Data is either 0D, 1D, or 2D. The data is saved and loaded plainly without
-              any transforms or indexing.
-            * `sequence` : A time sequence array. Data is either 1D, 2D, or 3D. The data is indexed,
-              so the first dimension of the data array must be a time dimension. The data points
-              for the given index are not transformed.
-            * `frame` : Frame array. Data must be 2D, it may be transformed with any of
-              :class:`cbclib.Transform` objects. The data shape is identical to the detector pixel
-              grid.
-            * `stack` : A time sequnce of frame arrays. The data must be 3D. It's indexed in the
-              same way as `sequence` attributes. Each frame array may be transformed with any of
-              :class:`cbclib.Transform` objects.
-        """
-        return self.kinds.get(attr, value)
-
     def get_ndim(self, attr: str, value: int=0) -> Tuple[int, ...]:
         """Return the acceptable number of dimensions that the attribute's data may have.
 
@@ -185,32 +179,28 @@ class CXIProtocol(INIContainer):
         Returns:
             Number of dimensions acceptable for the attribute.
         """
-        return self.known_ndims.get((self.get_kind(attr)), value)
+        return self.known_ndims.get(CrystProtocol.get_kind(attr), value)
 
-    def cast(self, attr: str, array: np.ndarray) -> np.ndarray:
-        """Cast the attribute's data to the right data type.
+    def read_frame_shape(self, cxi_file: h5py.File) -> Tuple[int, int]:
+        for attr in self.load_paths:
+            if CrystProtocol.get_kind(attr) in (Kinds.STACK, Kinds.FRAME):
+                for shape in self.read_file_shapes(attr, cxi_file).values():
+                    return shape[-2:]
 
-        Args:
-            attr : The data attribute.
-            array : The attribute's data.
+        return (0, 0)
 
-        Returns:
-            Data array casted to the right data type.
-        """
-        return np.asarray(array, dtype=self.get_dtype(attr, array.dtype))
-
-    @staticmethod
-    def read_dataset_shapes(cxi_path: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
-        """Visit recursively all the underlying datasets and return their names and shapes.
+    def read_file_shapes(self, attr: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
+        """Return a shape of the dataset containing the attribute's data inside a file.
 
         Args:
-            cxi_path : Path of the dataset inside the ``cxi_file``.
-            cxi_file : HDF5 file handler.
+            attr : Attribute's name.
+            cxi_file : HDF5 file object.
 
         Returns:
-            List of all the datasets and their shapes under the ``cxi_path`` of the ``cxi_file``
-            HDF5 file.
+            List of all the datasets and their shapes inside ``cxi_file``.
         """
+        cxi_path = self.find_path(attr, cxi_file)
+
         shapes = {}
 
         def caller(sub_path, obj):
@@ -228,20 +218,7 @@ class CXIProtocol(INIContainer):
 
         return shapes
 
-    def read_attribute_shapes(self, attr: str, cxi_file: h5py.File) -> Dict[str, Tuple[int, ...]]:
-        """Return a shape of the dataset containing the attribute's data inside a file.
-
-        Args:
-            attr : Attribute's name.
-            cxi_file : HDF5 file object.
-
-        Returns:
-            List of all the datasets and their shapes inside ``cxi_file``.
-        """
-        cxi_path = self.find_path(attr, cxi_file)
-        return self.read_dataset_shapes(cxi_path, cxi_file)
-
-    def read_attribute_indices(self, attr: str, cxi_files: List[h5py.File]) -> np.ndarray:
+    def read_indices(self, attr: str, fnames: List[str], processes: int=1) -> np.ndarray:
         """Return a set of indices of the dataset containing the attribute's data inside a set
         of files.
 
@@ -253,36 +230,147 @@ class CXIProtocol(INIContainer):
             Dataset indices of the data pertined to the attribute ``attr``.
         """
         files, cxi_paths, fidxs = [], [], []
-        kind = self.get_kind(attr)
+        kind = CrystProtocol.get_kind(attr)
 
-        for cxi_file in cxi_files:
-            shapes = self.read_attribute_shapes(attr, cxi_file)
-            for cxi_path, shape in shapes.items():
-                if len(shape) not in self.get_ndim(attr):
-                    err_txt = f'Dataset at {cxi_file.filename}:'\
-                              f' {cxi_path} has invalid shape: {str(shape)}'
-                    raise ValueError(err_txt)
+        if kind != Kinds.NO_KIND:
+            with Pool(processes=processes, initializer=type(self).initializer,
+                    initargs=(self.load_paths, attr)) as pool:
+                for idxs in pool.imap(CXIProtocol.read_worker, fnames):
+                    if len(idxs) >= 3:
+                        files.extend(idxs[0])
+                        cxi_paths.extend(idxs[1])
+                        fidxs.extend(idxs[2])
 
-                if kind in ['stack', 'sequence']:
-                    files.extend(np.repeat(cxi_file.filename, shape[0]).tolist())
-                    cxi_paths.extend(np.repeat(cxi_path, shape[0]).tolist())
-                    fidxs.extend(np.arange(shape[0]).tolist())
-                if kind in ['frame', 'scalar']:
-                    files.append(cxi_file.filename)
-                    cxi_paths.append(cxi_path)
-                    fidxs.append(tuple())
+            return np.array([files, cxi_paths, fidxs], dtype=object).T
 
-        return np.array([files, cxi_paths, fidxs], dtype=object).T
+        raise ValueError(f"Invalid attribute {attr}")
 
-def initializer(read_worker: Callable[[np.ndarray, Indices, Indices], np.ndarray],
-                ss_idxs: np.ndarray, fs_idxs: np.ndarray):
-    global worker
-    worker = partial(read_worker, ss_idxs=ss_idxs, fs_idxs=fs_idxs)
+@dataclass
+class CXIReader():
+    protocol : CXIProtocol
 
-def read_frame(index: np.ndarray) -> np.ndarray:
-    return worker(index)
+    @staticmethod
+    def initializer(read_worker: Callable[[np.ndarray, Indices, Indices], np.ndarray],
+                    ss_idxs: np.ndarray, fs_idxs: np.ndarray):
+        global worker
+        worker = partial(read_worker, ss_idxs=ss_idxs, fs_idxs=fs_idxs)
 
-class CXIStore():
+    @staticmethod
+    def read_item(index: np.ndarray) -> np.ndarray:
+        return h5py.File(index[0])[index[1]][index[2]]
+
+    @staticmethod
+    def read_frame(index: np.ndarray, ss_idxs: Indices, fs_idxs: Indices) -> np.ndarray:
+        return h5py.File(index[0])[index[1]][index[2]][..., ss_idxs, fs_idxs]
+
+    @staticmethod
+    def read_worker(index: np.ndarray) -> np.ndarray:
+        return worker(index)
+
+    def load_stack(self, attr: str, idxs: np.ndarray, ss_idxs: Indices,
+                   fs_idxs: Indices, processes: int, verbose: bool) -> np.ndarray:
+        stack = []
+
+        with Pool(processes=processes, initializer=type(self).initializer,
+                  initargs=(type(self).read_frame, ss_idxs, fs_idxs)) as pool:
+            for frame in tqdm(pool.imap(CXIReader.read_worker, idxs), total=idxs.shape[0],
+                              disable=not verbose, desc=f'Loading {attr:s}'):
+                stack.append(frame)
+
+        return np.stack(stack, axis=0)
+
+    def load_frame(self, index: np.ndarray, ss_idxs: Indices, fs_idxs: Indices) -> np.ndarray:
+        return self.read_frame(index, ss_idxs, fs_idxs)
+
+    def load_sequence(self, idxs: np.ndarray) -> np.ndarray:
+        return np.array([self.read_item(index) for index in idxs])
+
+@dataclass
+class CXIWriter():
+    files : List[h5py.File]
+    protocol : CXIProtocol
+
+    def find_dataset(self, attr: str) -> Tuple[Optional[h5py.File], str]:
+        """Return the path to the attribute from the first file where the attribute is found. Return
+        the default path if the attribute is not found inside the first file.
+
+        Args:
+            attr : Attribute's name.
+
+        Returns:
+            A file where the attribute is found and a path to the attribute inside the file.
+        """
+        for file in self.files:
+            cxi_path = self.protocol.find_path(attr, file)
+
+            if cxi_path:
+                return file, cxi_path
+
+        return None, self.protocol.get_load_paths(attr)[0]
+
+    def save_stack(self, attr: str, data: np.ndarray, mode: str='overwrite',
+                    idxs: Optional[Indices]=None) -> None:
+        file, cxi_path = self.find_dataset(attr)
+
+        if cxi_path in file and file[cxi_path].shape[1:] == data.shape[1:]:
+            if mode == 'append':
+                file[cxi_path].resize(file[cxi_path].shape[0] + data.shape[0],
+                                               axis=0)
+                file[cxi_path][-data.shape[0]:] = data
+            elif mode == 'overwrite':
+                file[cxi_path].resize(data.shape[0], axis=0)
+                file[cxi_path][...] = data
+            elif mode == 'insert':
+                if idxs is None or len(idxs) != data.shape[0]:
+                    raise ValueError('Incompatible indices')
+                file[cxi_path].resize(max(file[cxi_path].shape[0], max(idxs) + 1),
+                                           axis=0)
+                file[cxi_path][idxs] = data
+
+        else:
+            if file is None:
+                file = self.files[0]
+            if cxi_path in file:
+                del file[cxi_path]
+            file.create_dataset(cxi_path, data=data, shape=data.shape,
+                                chunks=(1,) + data.shape[1:],
+                                maxshape=(None,) + data.shape[1:])
+
+    def save_data(self, attr: str, data: np.ndarray) -> None:
+        file, cxi_path = self.find_dataset(attr)
+
+        if cxi_path in file and file[cxi_path].shape == data.shape:
+            file[cxi_path][...] = data
+
+        else:
+            if file is None:
+                file = self.files[0]
+            if cxi_path in file:
+                del file[cxi_path]
+            file.create_dataset(cxi_path, data=data, shape=data.shape)
+
+class FileStore():
+    size : int
+
+    def attributes(self) -> List[str]:
+        raise NotImplementedError
+
+    def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
+             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> np.ndarray:
+        raise NotImplementedError
+
+    def read_frame_shape(self) -> Tuple[int, int]:
+        raise NotImplementedError
+
+    def save(self, attr: str, data: np.ndarray, mode: str='overwrite',
+             idxs: Optional[Indices]=None):
+        raise NotImplementedError
+
+    def update(self, processes: int=1):
+        raise NotImplementedError
+
+@dataclass
+class CXIStore(FileStore):
     """File handler class for HDF5 and CXI files. Provides an interface to save and load data
     attributes to a file. Support multiple files. The handler saves data to the first file.
 
@@ -292,9 +380,8 @@ class CXIStore():
         protocol : CXI protocol. Uses the default protocol if not provided.
 
     Attributes:
-        file_dict : Dictionary of paths to the files and their file
+        files : Dictionary of paths to the files and their file
             objects.
-        file : :class:`h5py.File` object of the first file.
         protocol : :class:`cbclib.CXIProtocol` protocol object.
         mode : File mode. Valid modes are:
 
@@ -304,199 +391,58 @@ class CXIStore():
             * 'w-' or 'x' : Create file, fail if exists.
             * 'a' : Read/write if exists, create otherwise.
     """
+    names       : Union[str, List[str]]
+    mode        : str = 'r'
+    protocol    : CXIProtocol = CXIProtocol.read()
+    files       : Optional[Dict[str, Optional[h5py.File]]] = None
+    indices     : Optional[Dict[str, np.ndarray]] = None
 
-    def __init__(self, names: Union[str, List[str]], mode: str='r',
-                 protocol: CXIProtocol=CXIProtocol.import_default()) -> None:
-        if mode not in ['r', 'r+', 'w', 'w-', 'x', 'a']:
-            raise ValueError(f'Wrong file mode: {mode}')
-        names = protocol.str_to_list(names)
+    def __post_init__(self):
+        if self.mode not in ['r', 'r+', 'w', 'w-', 'x', 'a']:
+            raise ValueError(f'Wrong file mode: {self.mode}')
+        if self.files is None:
+            self.files = {fname: None for fname in StringFormatter.str_to_list(self.names)}
 
-        self.file_dict: Dict[str, Optional[h5py.File]] = {data_file: None for data_file in names}
-        self.protocol = protocol
-        self.mode = mode
-
-        with self:
-            self.update_indices()
+    @property
+    def size(self) -> int:
+        for attr in self.protocol.load_paths:
+            if CrystProtocol.get_kind(attr) == Kinds.STACK:
+                return self.indices.get(attr).shape[0]
+        return 0
 
     def __bool__(self) -> bool:
         isopen = True
-        for cxi_file in self.files():
+        for cxi_file in self.files.values():
             isopen &= bool(cxi_file)
         return isopen
-
-    def __contains__(self, attr: str) -> bool:
-        return attr in self._indices
-
-    def __iter__(self) -> Iterator:
-        return self._indices.__iter__()
-
-    def __len__(self) -> int:
-        return len(self._indices)
-
-    def __repr__(self) -> str:
-        return self._indices.__repr__()
-
-    def __str__(self) -> str:
-        return self._indices.__str__()
 
     def __enter__(self) -> CXIStore:
         self.open()
         return self
 
     def __exit__(self, exc_type: Optional[BaseException], exc: Optional[BaseException],
-                 traceback: Optional[TracebackType]) -> None:
+                 traceback: Optional[TracebackType]):
         self.close()
 
-    def update_indices(self) -> None:
-        """Read the files for the data attributes contained in the protocol."""
-        indices = {}
-        if self:
-            for attr in self.protocol:
-                kind = self.protocol.get_kind(attr)
-                try:
-                    if kind in ['stack', 'sequence', 'scalar']:
-                        idxs = self.protocol.read_attribute_indices(attr, self.files())
-                    if kind == 'frame':
-                        idxs = self.protocol.read_attribute_indices(attr, self.files())
-                except ValueError as err:
-                    print(f'{attr:s} is not loaded: {err}')
-                else:
-                    if idxs.size:
-                        indices[attr] = idxs
+    def attributes(self) -> List[str]:
+        if self.indices is not None:
+            return list(self.indices)
+        return []
 
-        self._indices = indices
-
-    @property
-    def file(self) -> h5py.File:
-        return self.files()[0]
-
-    def open(self) -> None:
-        """Open the files."""
-        if not self:
-            for data_file in self.file_dict:
-                self.file_dict[data_file] = h5py.File(data_file, mode=self.mode)
-
-    def close(self) -> None:
+    def close(self):
         """Close the files."""
-        for cxi_file in self.files():
-            cxi_file.close()
+        for fname, cxi_file in self.files.items():
+            if cxi_file is not None:
+                cxi_file.close()
+            self.files[fname] = None
 
-    def filenames(self) -> List[str]:
-        """Return a list of paths to the files.
-
-        Returns:
-            List of paths to the files.
-        """
-        return list(self.file_dict.keys())
-
-    def files(self) -> List[h5py.File]:
-        """Return a list of file objects of the files.
-
-        Returns:
-            List of file objects of the files.
-        """
-        return list(self.file_dict.values())
-
-    def indices(self) -> np.ndarray:
-        """Return a list of frame indices of the data contained in the files.
-
-        Returns:
-            A list of frame indices of the data in the files.
-        """
-        return np.arange(self._indices.get('data', np.array([])).shape[0])
-
-    def keys(self) -> KeysView:
-        """Return a set of the attribute's names contained in the files.
-
-        Returns:
-            A set of the attribute's names in the files.
-        """
-        return self._indices.keys()
-
-    def values(self) -> ValuesView:
-        """Return a set of the attribute's indices in the files.
-
-        Returns:
-            A set of the attribute's indices in the files.
-        """
-        return self._indices.values()
-
-    def items(self) -> ItemsView:
-        """Return a set of ``(name, index)`` pairs. ``name`` is the attribute's name contained in
-        the files, and ``index`` it's corresponding set of indices.
-
-        Returns:
-            A set of ``(name, index)`` pairs of the data attributes in the files.
-        """
-        return self._indices.items()
-
-    def read_shape(self) -> Tuple[int, int]:
-        """Read the input files and return a shape of the `frame` type data attribute.
-
-        Raises:
-            RuntimeError : If the files are not opened.
-
-        Returns:
-            The shape of the 2D `frame`-like data attribute.
-        """
-        if self:
-            for attr, indices in self._indices.items():
-                kind = self.protocol.get_kind(attr)
-                if kind in ['stack', 'frame']:
-                    return self.file_dict[indices[0, 0]][indices[0, 1]].shape[-2:]
-
-            return (0, 0)
-
-        raise RuntimeError('Invalid file objects: the file is closed')
-
-    @staticmethod
-    def _read_worker_sequence(index: np.ndarray) -> np.ndarray:
-        return h5py.File(index[0])[index[1]][index[2]]
-
-    @staticmethod
-    def _read_worker_frame(index: np.ndarray, ss_idxs: Indices, fs_idxs: Indices) -> np.ndarray:
-        return h5py.File(index[0])[index[1]][index[2]][..., ss_idxs, fs_idxs]
-
-    def _load_stack(self, attr: str, idxs: Optional[Indices], ss_idxs: Indices,
-                    fs_idxs: Indices, processes: int, verbose: bool) -> np.ndarray:
-        stack = []
-        if idxs is None:
-            idxs = self.indices()
-        idxs = np.atleast_1d(idxs)
-
-        with Pool(processes=processes, initializer=initializer,
-                  initargs=(type(self)._read_worker_frame, ss_idxs, fs_idxs)) as pool:
-            for frame in tqdm(pool.imap(read_frame, self._indices[attr][idxs]),
-                              total=self.indices()[idxs].size, disable=not verbose,
-                              desc=f'Loading {attr:s}'):
-                stack.append(frame)
-
-        return self.protocol.cast(attr, np.stack(stack, axis=0))
-
-    def _load_frame(self, attr: str, ss_idxs: Indices, fs_idxs: Indices) -> np.ndarray:
-        dset = self._read_worker_frame(self._indices[attr][0], ss_idxs, fs_idxs)
-        return self.protocol.cast(attr, dset)
-
-    def _load_sequence(self, attr: str, idxs: Optional[Indices]) -> np.ndarray:
-        sequence = []
-        if idxs is None:
-            idxs = self.indices()
-        idxs = np.atleast_1d(idxs)
-
-        for index in self._indices[attr][idxs]:
-            sequence.append(self._read_worker_sequence(index))
-
-        return self.protocol.cast(attr, np.array(sequence))
-
-    def load_attribute(self, attr: str, idxs: Optional[Indices]=None, processes: int=1,
-                       ss_idxs: Indices=slice(None), fs_idxs: Indices=slice(None),
-                       verbose: bool=True) -> np.ndarray:
+    def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
+             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> np.ndarray:
         """Load a data attribute from the files.
 
         Args:
             attr : Attribute's name to load.
             idxs : A list of frames' indices to load.
-            processes : Number of parallel workers used during the loading.
             verbose : Set the verbosity of the loading process.
 
         Raises:
@@ -506,81 +452,49 @@ class CXIStore():
         Returns:
             Attribute's data array.
         """
-        kind = self.protocol.get_kind(attr)
+        kind = CrystProtocol.get_kind(attr)
 
-        if kind not in ('stack', 'frame', 'scalar', 'sequence'):
-            raise ValueError(f'Invalid kind: {kind:s}')
+        if kind == Kinds.NO_KIND:
+            raise ValueError(f'Invalid attribute: {attr:s}')
 
-        if self:
-            if kind == 'stack':
-                return self._load_stack(attr=attr, idxs=idxs, processes=processes,
-                                        ss_idxs=ss_idxs, fs_idxs=fs_idxs, verbose=verbose)
-            if kind == 'frame':
-                return self._load_frame(attr=attr, ss_idxs=ss_idxs, fs_idxs=fs_idxs)
-            if kind == 'scalar':
-                return self._load_sequence(attr=attr, idxs=0)
-            if kind == 'sequence':
-                return self._load_sequence(attr=attr, idxs=idxs)
+        if idxs is None:
+            idxs = np.arange(self.size)
 
-        raise RuntimeError('Invalid file objects: the file is closed')
+        reader = CXIReader(self.protocol)
 
-    def find_dataset(self, attr: str) -> str:
-        """Return the path to the attribute from the first file. Return the default path if the
-        attribute is not found inside the first file.
+        if kind == Kinds.STACK:
+            return reader.load_stack(attr=attr, idxs=self.indices[attr][idxs],
+                                        processes=processes, ss_idxs=ss_idxs,
+                                        fs_idxs=fs_idxs, verbose=verbose)
+        if kind == Kinds.FRAME:
+            return reader.load_frame(index=self.indices[attr][0], ss_idxs=ss_idxs,
+                                        fs_idxs=fs_idxs)
+        if kind == Kinds.SCALAR:
+            return reader.load_sequence(idxs=self.indices[attr][0])
+        if kind == Kinds.SEQUENCE:
+            return reader.load_sequence(idxs=self.indices[attr][idxs])
 
-        Args:
-            attr : Attribute's name.
+    def open(self):
+        """Open the files."""
+        if not self:
+            for fname in self.files:
+                self.files[fname] = h5py.File(fname, mode=self.mode)
+
+    def read_frame_shape(self) -> Tuple[int, int]:
+        """Read the input files and return a shape of the `frame` type data attribute.
+
+        Raises:
+            RuntimeError : If the files are not opened.
 
         Returns:
-            Path to the attribute inside the first file.
+            The shape of the 2D `frame`-like data attribute.
         """
-        cxi_path = self.protocol.find_path(attr, self.file)
+        with self:
+            for cxi_file in self.files.values():
+                return self.protocol.read_frame_shape(cxi_file)
 
-        if cxi_path:
-            return cxi_path
-        return self.protocol.get_load_paths(attr)[0]
-
-    def _save_stack(self, attr: str, data: np.ndarray, mode: str='overwrite',
-                    idxs: Optional[Indices]=None) -> None:
-        cxi_path = self.find_dataset(attr)
-
-        if cxi_path in self.file and self.file[cxi_path].shape[1:] == data.shape[1:]:
-            if mode == 'append':
-                self.file[cxi_path].resize(self.file[cxi_path].shape[0] + data.shape[0],
-                                               axis=0)
-                self.file[cxi_path][-data.shape[0]:] = data
-            elif mode == 'overwrite':
-                self.file[cxi_path].resize(data.shape[0], axis=0)
-                self.file[cxi_path][...] = data
-            elif mode == 'insert':
-                if idxs is None or len(idxs) != data.shape[0]:
-                    raise ValueError('Incompatible indices')
-                self.file[cxi_path].resize(max(self.file[cxi_path].shape[0], max(idxs) + 1),
-                                           axis=0)
-                self.file[cxi_path][idxs] = data
-
-        else:
-            if cxi_path in self.file:
-                del self.file[cxi_path]
-            self.file.create_dataset(cxi_path, data=data, shape=data.shape,
-                                     chunks=(1,) + data.shape[1:],
-                                     maxshape=(None,) + data.shape[1:],
-                                     dtype=self.protocol.get_dtype(attr, data.dtype))
-
-    def _save_data(self, attr: str, data: np.ndarray) -> None:
-        cxi_path = self.find_dataset(attr)
-
-        if cxi_path in self.file and self.file[cxi_path].shape == data.shape:
-            self.file[cxi_path][...] = data
-
-        else:
-            if cxi_path in self.file:
-                del self.file[cxi_path]
-            self.file.create_dataset(cxi_path, data=data, shape=data.shape,
-                                     dtype=self.protocol.get_dtype(attr, data.dtype))
-
-    def save_attribute(self, attr: str, data: np.ndarray, mode: str='overwrite',
-                       idxs: Optional[Indices]=None) -> None:
+    def save(self, attr: str, data: np.ndarray, mode: str='overwrite',
+             idxs: Optional[Indices]=None):
         """Save a data array pertained to the data attribute into the first file.
 
         Args:
@@ -601,15 +515,194 @@ class CXIStore():
         """
         if self.mode == 'r':
             raise ValueError('File is open in read-only mode')
-        kind = self.protocol.get_kind(attr)
+        kind = CrystProtocol.get_kind(attr)
 
-        if self:
-            if kind in ['stack', 'sequence']:
-                return self._save_stack(attr=attr, data=data, mode=mode, idxs=idxs)
+        with self:
+            writer = CXIWriter(list(self.files.values()), self.protocol)
 
-            if kind in ['frame', 'scalar']:
-                return self._save_data(attr=attr, data=data)
+            if kind in (Kinds.STACK, Kinds.SEQUENCE):
+                return writer.save_stack(attr=attr, data=data, mode=mode, idxs=idxs)
+
+            if kind in (Kinds.FRAME, Kinds.SCALAR):
+                return writer.save_data(attr=attr, data=data)
 
             raise ValueError(f'Invalid kind: {kind:s}')
 
-        raise RuntimeError('Invalid file objects: the file is closed')
+    def update(self, processes: int=1):
+        """Read the files for the data attributes contained in the protocol."""
+        self.indices = {}
+        for attr in self.protocol.load_paths:
+            idxs = self.protocol.read_indices(attr, list(self.files), processes)
+            if idxs.size:
+                self.indices[attr] = idxs
+
+@dataclass
+class ExtraProtocol(DataContainer):
+    data_paths  : Dict[str, str]
+    folder      : str
+    geom_path   : str
+    modules     : int
+    pattern     : str
+    proposal    : int
+    source      : str
+    starts_at   : int
+
+    @classmethod
+    def parser(cls, ext: str='ini') -> Parser:
+        if ext == 'ini':
+            return INIParser({'experiment': ('folder', 'geom_path', 'modules', 'pattern',
+                                             'proposal', 'source', 'starts_at'),
+                              'data_paths': 'data_paths'}, types=get_type_hints(cls))
+        if ext == 'json':
+            return JSONParser({'experiment': ('folder', 'geom_path', 'modules', 'pattern',
+                                              'proposal', 'source', 'starts_at'),
+                               'data_paths': 'data_paths'})
+
+        raise ValueError(f"Invalid format: {ext}")
+
+    @classmethod
+    def read(cls, file: str, ext: str='ini') -> ExtraProtocol:
+        return cls(**cls.parser(ext).read(file))
+
+    @staticmethod
+    def get_index(fname: str) -> np.ndarray:
+        with h5py.File(fname) as file:
+            return file['INDEX/trainId'][()]
+
+    @staticmethod
+    def get_index_and_run(fname: str) -> np.ndarray:
+        run = int(re.search('/r\d{4}/', fname)[0][2:-1])
+        with h5py.File(fname) as file:
+            index = file['INDEX/trainId'][()]
+        return np.stack((np.full(index.size, run), index), axis=-1, dtype=int)
+
+    def detector_geometry(self) -> JUNGFRAUGeometry:
+        return JUNGFRAUGeometry.from_crystfel_geom(self.geom_path)
+
+    def detector_data(self, attr: str, train_data: Dict[str, Any]) -> np.ndarray:
+        return stack_detector_data(train_data, self.data_paths[attr], modules=self.modules,
+                                   starts_at=self.starts_at, pattern=self.pattern)
+
+    def find_proposal(self) -> str:
+        """Find the proposal directory for a given proposal on Maxwell"""
+        for d in iglob(os.path.join(EXP_ROOT_DIR, f'*/*/p{self.proposal:06d}')):
+            return d
+
+        raise ValueError(f"Couldn't find proposal dir for {self.proposal:!r}")
+
+    def find_files(self, prop_dir: str, run: Union[int, List[int]], include: str='*') -> List[str]:
+        files = []
+        for run in np.atleast_1d(run):
+            path = os.path.join(prop_dir, self.folder, f'r{run:04d}')
+            new_files = [f for f in os.listdir(path)
+                         if f.endswith('.h5') and (f.lower() != 'overview.h5')]
+            new_files = [os.path.join(path, f) for f in fnmatch.filter(new_files, include)]
+            files.extend(new_files)
+        return files
+
+    def train_ids(self, run: Union[int, List[int]], include: str='*', processes: int=1) -> np.ndarray:
+        files = self.find_files(self.find_proposal(), run, include)
+
+        tids = []
+        with Pool(processes=processes) as pool:
+            for tid in pool.imap_unordered(ExtraProtocol.get_index, files):
+                tids.append(tid)
+
+        return np.unique(np.concatenate(tids))
+
+    def open_run(self, run: int) -> DataCollection:
+        run: DataCollection = open_run(proposal=self.proposal, run=run, data=self.folder)
+        return run.select(self.source)
+
+    def read_frame_shape(self) -> Tuple[int, int]:
+        return self.detector_geometry().output_array_for_position().shape
+
+    def read_indices(self, run: Union[int, List[int]], include: str='*', processes: int=1) -> np.ndarray:
+        files = self.find_files(self.find_proposal(), run, include)
+
+        tids = []
+        with Pool(processes=processes) as pool:
+            for tid in pool.imap_unordered(ExtraProtocol.get_index_and_run, files):
+                tids.append(tid)
+
+        return np.unique(np.concatenate(tids), axis=0)
+
+Processor = Callable[[np.ndarray], np.ndarray]
+
+@dataclass
+class ExtraReader():
+    protocol : ExtraProtocol
+    geom : JUNGFRAUGeometry
+
+    @staticmethod
+    def initializer(protocol: ExtraProtocol, attr: str, ss_idxs: np.ndarray, fs_idxs: np.ndarray,
+                    proc: Optional[Processor]):
+        global worker
+        worker = partial(ExtraReader(protocol, protocol.detector_geometry()).read_frame,
+                         attr=attr, ss_idxs=ss_idxs, fs_idxs=fs_idxs, proc=proc)
+
+    @staticmethod
+    def read_worker(index: np.ndarray) -> np.ndarray:
+        return worker(index)
+
+    def read_frame(self, index: np.ndarray, attr: str, ss_idxs: Indices,
+                   fs_idxs: Indices, proc: Optional[Processor]) -> np.ndarray:
+        run = self.protocol.open_run(index[0])
+        _, train_data = run.train_from_id(index[1])
+        data = self.protocol.detector_data(attr, train_data)
+        data = np.nan_to_num(data, nan=0, posinf=0, neginf=0)
+        data = np.nan_to_num(self.geom.position_modules(data)[0])[..., ss_idxs, fs_idxs]
+        if proc is not None:
+            data = proc(data)
+        return data
+
+    def load(self, attr: str, idxs: np.ndarray, ss_idxs: Indices, fs_idxs: Indices,
+             processes: int, proc: Optional[Processor], verbose: bool) -> np.ndarray:
+        stack = []
+        with Pool(processes=processes, initializer=type(self).initializer,
+                  initargs=(self.protocol, attr, ss_idxs, fs_idxs, proc)) as pool:
+            for frame in tqdm(pool.imap(ExtraReader.read_worker, idxs), total=idxs.shape[0],
+                              disable=not verbose, desc=f'Loading {attr:s}'):
+                stack.append(frame)
+
+        return np.stack(stack, axis=0)
+
+@dataclass
+class ExtraStore(FileStore):
+    runs : Union[int, List[int]]
+    protocol : ExtraProtocol
+    indices : Optional[np.ndarray] = None
+
+    @property
+    def size(self) -> int:
+        if self.indices is not None:
+            return self.indices.shape[0]
+        return 0
+
+    def attributes(self) -> List[str]:
+        return list(self.protocol.data_paths)
+
+    def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
+             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> np.ndarray:
+        if idxs is None:
+            idxs = np.arange(self.size)
+
+        reader = ExtraReader(self.protocol, self.protocol.detector_geometry())
+        return reader.load(attr, self.indices[idxs], ss_idxs, fs_idxs, processes,
+                           None, verbose)
+
+    def process(self, proc: Processor, attr: str, idxs: Optional[Indices]=None,
+                ss_idxs: Indices=slice(None), fs_idxs: Indices=slice(None),
+                processes: int=1, verbose: bool=True) -> np.ndarray:
+        if idxs is None:
+            idxs = np.arange(self.size)
+
+        reader = ExtraReader(self.protocol, self.protocol.detector_geometry())
+        return reader.load(attr, self.indices[idxs], ss_idxs, fs_idxs, processes,
+                           proc, verbose)
+
+    def read_frame_shape(self) -> Tuple[int, int]:
+        return self.protocol.read_frame_shape()
+
+    def update(self, processes: int=1):
+        self.indices = self.protocol.read_indices(self.runs, processes=processes)

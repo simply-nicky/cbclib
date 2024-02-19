@@ -13,22 +13,20 @@ Examples:
     >>> sample = cbc.Sample(cbc.Rotation.import_tilt((0.1, 0.5 * np.pi, 0.5 * np.pi)), np.ones(3))
 """
 from __future__ import annotations
-from copy import deepcopy
-from dataclasses import dataclass, fields
-from typing import (Any, ClassVar, Dict, ItemsView, Sequence, Iterator, KeysView, List, Optional,
-                    Tuple, Union, ValuesView)
+from multiprocessing import cpu_count
+from dataclasses import dataclass
+from typing import (Any, ClassVar, Dict, Iterator, Sequence, List, Optional, Set, Tuple, Union,
+                    get_type_hints)
 import numpy as np
 import pandas as pd
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import WhiteKernel, RBF, ConstantKernel
-from .bin import (tilt_matrix, cartesian_to_spherical, spherical_to_cartesian, euler_angles,
-                  det_to_k, k_to_det, k_to_smp, rotate, euler_matrix, tilt_angles, draw_line_image,
-                  draw_line_mask, draw_line_table, calc_source_lines)
+from .src import (tilt_matrix, euler_angles, det_to_k, k_to_det, k_to_smp, rotate, euler_matrix,
+                  tilt_angles, draw_line_image, draw_line_mask, draw_line_table, source_lines,
+                  unique_indices)
 from .cxi_protocol import Indices
-from .data_container import DataContainer, INIContainer, Transform, Crop
+from .data_container import DataContainer, Parser, INIParser, JSONParser, Transform, Crop
 
 @dataclass
-class Basis(INIContainer):
+class Basis(DataContainer):
     """An indexing solution, defined by a set of three unit cell vectors.
 
     Args:
@@ -44,6 +42,20 @@ class Basis(INIContainer):
 
     def __post_init__(self):
         self.mat = np.stack((self.a_vec, self.b_vec, self.c_vec))
+
+    @classmethod
+    def parser(cls, ext: str='ini') -> Parser:
+        if ext == 'ini':
+            return INIParser({'basis': ('a_vec', 'b_vec', 'c_vec')},
+                             types=get_type_hints(cls))
+        if ext == 'json':
+            return JSONParser({'basis': ('a_vec', 'b_vec', 'c_vec')})
+
+        raise ValueError(f"Invalid format: {ext}")
+
+    @classmethod
+    def read(cls, file: str, ext: str='ini') -> Basis:
+        return cls(**cls.parser(ext).read(file))
 
     @classmethod
     def import_matrix(cls, mat: np.ndarray) -> Basis:
@@ -69,7 +81,9 @@ class Basis(INIContainer):
         Returns:
             A new :class:`Basis` object.
         """
-        return cls.import_matrix(spherical_to_cartesian(mat))
+        return cls.import_matrix(np.stack((mat[:, 0] * np.sin(mat[:, 1]) * np.cos(mat[:, 2]),
+                                           mat[:, 0] * np.sin(mat[:, 1]) * np.sin(mat[:, 2]),
+                                           mat[:, 0] * np.cos(mat[:, 1])), axis=1))
 
     def generate_hkl(self, q_abs: float) -> np.ndarray:
         """Return a set of reflections lying inside of a sphere of radius ``q_abs`` in the
@@ -123,10 +137,12 @@ class Basis(INIContainer):
         Returns:
             A matrix of three stacked unit cell vectors in spherical coordinate system.
         """
-        return cartesian_to_spherical(self.mat)
+        lengths = np.sqrt(np.sum(self.mat**2, axis=1))
+        return np.stack((lengths, np.cos(self.mat[:, 2] / lengths),
+                         np.arctan2(self.mat[:, 1], self.mat[:, 0])), axis=1)
 
 @dataclass
-class ScanSetup(INIContainer):
+class ScanSetup(DataContainer):
     """Convergent beam crystallography experimental setup. Contains the parameters of the scattering
     geometry and experimental setup.
 
@@ -140,9 +156,6 @@ class ScanSetup(INIContainer):
         x_pixel_size : Detector pixel size along the x axis [m].
         y_pixel_size : Detector pixel size along the y axis [m].
     """
-    __ini_fields__ = {'exp_geom': ('foc_pos', 'pupil_roi', 'rot_axis', 'smp_dist', 'wavelength',
-                                   'x_pixel_size', 'y_pixel_size')}
-
     foc_pos         : np.ndarray
     pupil_roi       : np.ndarray
     rot_axis        : np.ndarray
@@ -156,6 +169,22 @@ class ScanSetup(INIContainer):
         self.kin_max = self.detector_to_kin(x=self.pupil_roi[3], y=self.pupil_roi[1])[0]
         self.kin_center = self.detector_to_kin(x=np.mean(self.pupil_roi[2:]),
                                                y=np.mean(self.pupil_roi[:2]))[0]
+
+    @classmethod
+    def parser(cls, ext: str='ini') -> Parser:
+        if ext == 'ini':
+            return INIParser({'exp_geom': ('foc_pos', 'pupil_roi', 'rot_axis', 'smp_dist',
+                                           'wavelength', 'x_pixel_size', 'y_pixel_size')},
+                             types=get_type_hints(cls))
+        if ext == 'json':
+            return JSONParser({'exp_geom': ('foc_pos', 'pupil_roi', 'rot_axis', 'smp_dist',
+                                            'wavelength', 'x_pixel_size', 'y_pixel_size')})
+
+        raise ValueError(f"Invalid format: {ext}")
+
+    @classmethod
+    def read(cls, file: str, ext: str='ini') -> ScanSetup:
+        return cls(**cls.parser(ext).read(file))
 
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, pos: np.ndarray,
                          idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
@@ -365,7 +394,7 @@ class Rotation(DataContainer):
         return tilt_angles(self.matrix)
 
 @dataclass
-class Sample():
+class Sample(DataContainer):
     """A convergent beam sample implementation. Stores position and orientation of the sample.
 
     Args:
@@ -426,25 +455,6 @@ class Sample():
         """
         return Basis.import_matrix(self.rotation(basis.mat))
 
-    def replace(self, **kwargs: Any) -> Sample:
-        """Return a new :class:`Sample` object with a set of attributes replaced.
-
-        Args:
-            kwargs : A set of attributes and the values to to replace.
-
-        Returns:
-            A new :class:`Sample` object with the updated attributes.
-        """
-        return Sample(**dict(self.to_dict(), **kwargs))
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Export the :class:`Sample` object to a :class:`dict`.
-
-        Returns:
-            A dictionary of :class:`Sample` object's attributes.
-        """
-        return {field.name: getattr(self, field.name) for field in fields(self)}
-
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup,
                          rec_vec: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
         """Project detector coordinates ``(x, y)`` to the output wave-vectors space originating
@@ -503,12 +513,15 @@ class Sample():
 
 MapSamples = Union[Sequence[Tuple[int, Sample]], Dict[int, Sample]]
 
+@dataclass
 class ScanSamples():
     """A collection of sample :class:`cbclib.Sample` objects. Provides an interface to import
     from and exprort to a :class:`pandas.DataFrame` table and a set of dictionary methods.
     """
-    def __init__(self, items: MapSamples=list()):
-        self._dct = dict(items)
+    samples : Dict[int, Sample]
+
+    def __getitem__(self, idxs: Indices) -> ScanSamples:
+        return ScanSamples(self.samples[idxs])
 
     @classmethod
     def import_dataframe(cls, df: pd.DataFrame) -> ScanSamples:
@@ -530,62 +543,11 @@ class ScanSamples():
 
     @property
     def z(self) -> np.ndarray:
-        return np.array([sample.z for sample in self.values()])
+        return np.array([sample.z for sample in self.samples.values()])
 
     @property
     def rmats(self) -> np.ndarray:
-        return np.stack([sample.rotation.matrix for sample in self.values()])
-
-    def __getitem__(self, frame: int) -> Sample:
-        return self._dct.__getitem__(frame)
-
-    def __setitem__(self, frame: int, smp: Sample):
-        self._dct.__setitem__(frame, smp)
-
-    def __iter__(self) -> Iterator[int]:
-        return self._dct.__iter__()
-
-    def __contains__(self, frame: int) -> bool:
-        return self._dct.__contains__(frame)
-
-    def __copy__(self) -> ScanSamples:
-        return ScanSamples(self)
-
-    def __deepcopy__(self, memo: Dict[int, Any]) -> ScanSamples:
-        return ScanSamples({key: deepcopy(val, memo) for key, val in self.items()})
-
-    def __str__(self) -> str:
-        return self._dct.__str__()
-
-    def __repr__(self) -> str:
-        return self._dct.__repr__()
-
-    def __len__(self) -> int:
-        return len(self._dct)
-
-    def keys(self) -> KeysView[str]:
-        """Return a list of sample indices available in the container.
-
-        Returns:
-            List of sample indices available in the container.
-        """
-        return self._dct.keys()
-
-    def values(self) -> ValuesView[Sample]:
-        """Return a set of samples stored in the container.
-
-        Returns:
-            List of samples stored in the container.
-        """
-        return self._dct.values()
-
-    def items(self) -> ItemsView[str, Sample]:
-        """Return ``(index, sample)`` pairs stored in the container.
-
-        Returns:
-            ``(index, sample)`` pairs stored in the container.
-        """
-        return self._dct.items()
+        return np.stack([sample.rotation.matrix for sample in self.samples.values()])
 
     def kin_to_sample(self, setup: ScanSetup, kin: Optional[np.ndarray]=None,
                       idxs: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
@@ -601,8 +563,8 @@ class ScanSamples():
             Array of sample coordinates.
         """
         if kin is None:
-            kin = np.tile(setup.kin_center[None], (len(self), 1))
-            idxs = np.arange(len(self), dtype=np.uint32)
+            kin = np.tile(setup.kin_center[None], (len(self.samples), 1))
+            idxs = np.arange(len(self.samples), dtype=np.uint32)
         return setup.kin_to_sample(kin, self.z, idxs, num_threads=num_threads)
 
     def detector_to_kout(self, x: np.ndarray, y: np.ndarray, setup: ScanSetup, idxs: np.ndarray,
@@ -667,53 +629,6 @@ class ScanSamples():
         rmats = np.swapaxes(self.rmats, 1, 2) if reciprocate else self.rmats
         return rotate(vectors, rmats, idxs, num_threads)
 
-    def regularise(self, kernel_bandwidth: Tuple[int, int]) -> ScanSamples:
-        """Regularise sample positions by applying a Gaussian Process with a gaussian kernel
-        bandwidth in the given interval.
-
-        Args:
-            kernel_bandwidth : Inverval of gaussian kernel bandwidths to use.
-
-        Returns:
-            A new :class:`ScanSamples` container with regularised sample positions.
-        """
-        obj = deepcopy(self)
-        kernel = ConstantKernel(0.1, (1e-3, 0.5)) * RBF(kernel_bandwidth[0], kernel_bandwidth) + \
-                 WhiteKernel(0.9, (0.5, 1.0))
-        model = GaussianProcessRegressor(kernel, n_restarts_optimizer=10, normalize_y=True)
-        frames = np.array(list(self.keys()))[:, None]
-        model.fit(frames, np.array([sample.z for sample in self.values()]))
-        for frame, z in zip(obj, model.predict(frames)):
-            obj[frame] = obj[frame].replace(z=z)
-        return obj
-
-    def find_rotations(self, from_frames: Union[int, Sequence[int]],
-                       to_frames: Union[int, Sequence[int]]) -> Union[Rotation, List[Rotation]]:
-        """Find a rotation that rotates ``from_frames`` samples to ``to_frames``.
-
-        Args:
-            from_frames : A set of indices of the samples from which rotations are calculated.
-            to_frames : A set of indices of the sample to which rotations are calculated.
-
-        Returns:
-            A set of rotations.
-        """
-        from_frames, to_frames = np.atleast_1d(from_frames), np.atleast_1d(to_frames)
-        rotations = []
-        for f1, f2 in zip(from_frames, to_frames):
-            rotations.append(self[f2].rotation * self[f1].rotation.reciprocate())
-        if len(rotations) == 1:
-            return rotations[0]
-        return rotations
-
-    def to_dict(self) -> Dict[str, Sample]:
-        """Export the sample container to a :class:`dict`.
-
-        Returns:
-            A dictionary of :class:`Sample` objects.
-        """
-        return dict(self._dct)
-
     def to_dataframe(self) -> pd.DataFrame:
         """Export the sample object to a :class:`pandas.DataFrame` table.
 
@@ -724,10 +639,89 @@ class ScanSamples():
               matrix.
             * `z` : z coordinate [m].
         """
-        return pd.DataFrame((sample.to_dataframe() for sample in self.values()), index=self.keys())
+        return pd.DataFrame((sample.to_dataframe() for sample in self.samples.values()), index=self.samples.keys())
+
+class StreaksAbc:
+    def pattern_dataframe(self, width: float, shape: Optional[Tuple[int, int]]=None,
+                          kernel: str='rectangular', reduce: bool=True) -> pd.DataFrame:
+        """Draw a pattern in the :class:`pandas.DataFrame` format.
+
+        Args:
+            width : Lines width in pixels.
+            shape : Detector grid shape.
+            kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+                are available:
+
+                * 'biweigth' : Quartic (biweight) kernel.
+                * 'gaussian' : Gaussian kernel.
+                * 'parabolic' : Epanechnikov (parabolic) kernel.
+                * 'rectangular' : Uniform (rectangular) kernel.
+                * 'triangular' : Triangular kernel.
+
+            reduce : Discard the pixel data with reflection profile values equal to
+                zero.
+
+        Returns:
+            A pattern in :class:`pandas.DataFrame` format.
+        """
+        df = pd.DataFrame(self.pattern_dict(width=width, shape=shape, kernel=kernel))
+        if reduce:
+            return df[df['rp'] > 0.0]
+        return df
+
+    def pattern_dict(self, width: float, shape: Optional[Tuple[int, int]]=None,
+                     kernel: str='rectangular') -> Dict[str, np.ndarray]:
+        raise NotImplementedError
+
+    def pattern_image(self, width: float, shape: Tuple[int, int],
+                      kernel: str='gaussian') -> np.ndarray:
+        """Draw a pattern in the :class:`numpy.ndarray` format.
+
+        Args:
+            width : Lines width in pixels.
+            shape : Detector grid shape.
+            kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+                are available:
+
+                * 'biweigth' : Quartic (biweight) kernel.
+                * 'gaussian' : Gaussian kernel.
+                * 'parabolic' : Epanechnikov (parabolic) kernel.
+                * 'rectangular' : Uniform (rectangular) kernel.
+                * 'triangular' : Triangular kernel.
+
+        Returns:
+            A pattern in :class:`numpy.ndarray` format.
+        """
+        return draw_line_image(self.to_lines(width), shape=shape, kernel=kernel)
+
+    def pattern_mask(self, width: float, shape: Tuple[int, int], max_val: int=1,
+                     kernel: str='rectangular') -> np.ndarray:
+        """Draw a pattern mask.
+
+        Args:
+            width : Lines width in pixels.
+            shape : Detector grid shape.
+            max_val : Mask maximal value.
+            kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+                are available:
+
+                * 'biweigth' : Quartic (biweight) kernel.
+                * 'gaussian' : Gaussian kernel.
+                * 'parabolic' : Epanechnikov (parabolic) kernel.
+                * 'rectangular' : Uniform (rectangular) kernel.
+                * 'triangular' : Triangular kernel.
+
+        Returns:
+            A pattern mask.
+        """
+        return draw_line_mask(self.to_lines(width), shape=shape, max_val=max_val,
+                              kernel=kernel)
+
+    def to_lines(self, width: float) -> np.ndarray:
+        raise NotImplementedError
 
 @dataclass
-class Streaks(DataContainer):
+class Streaks(StreaksAbc, DataContainer):
     """Detector streak lines container. Provides an interface to draw a pattern for a set of
     lines.
 
@@ -736,23 +730,31 @@ class Streaks(DataContainer):
         y0 : y coordinates of the first point of a line.
         x1 : x coordinates of the second point of a line.
         y1 : y coordinates of the second point of a line.
-        width : Line's width in pixels.
         length: Line's length in pixels.
         h : First Miller index.
         k : Second Miller index.
         l : Third Miller index.
         hkl_id : Bragg reflection index.
     """
+    columns     : ClassVar[Set[str]] = {'x0', 'y0', 'x1', 'y1', 'length', 'h', 'k', 'l', 'hkl_id'}
+
     x0          : np.ndarray
     y0          : np.ndarray
     x1          : np.ndarray
     y1          : np.ndarray
-    width       : np.ndarray
     length      : Optional[np.ndarray] = None
     h           : Optional[np.ndarray] = None
     k           : Optional[np.ndarray] = None
     l           : Optional[np.ndarray] = None
     hkl_id      : Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        if self.length is None:
+            self.length = np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
+
+    @classmethod
+    def import_dataframe(cls, data: pd.DataFrame) -> Streaks:
+        return cls(**{key: data[key] for key in cls.columns.intersection(data.columns)})
 
     @property
     def hkl(self) -> Optional[np.ndarray]:
@@ -760,12 +762,17 @@ class Streaks(DataContainer):
             return None
         return np.stack((self.h, self.k, self.l), axis=1)
 
-    def __post_init__(self):
-        if self.length is None:
-            self.length = np.sqrt((self.x1 - self.x0)**2 + (self.y1 - self.y0)**2)
 
     def __len__(self) -> int:
-        return self.width.shape[0]
+        return self.length.shape[0]
+
+    def keys(self) -> List[str]:
+        keys = ['index', 'x' , 'y', 'rp']
+        if self.hkl is not None:
+            keys.extend(['h', 'k', 'l'])
+        if self.hkl_id is not None:
+            keys.append('hkl_id')
+        return keys
 
     def mask_streaks(self, idxs: Indices) -> Streaks:
         """Return a new streaks container with a set of streaks discarded.
@@ -778,50 +785,27 @@ class Streaks(DataContainer):
         """
         return Streaks(**{attr: self[attr][idxs] for attr in self.contents()})
 
-    def pattern_dataframe(self, shape: Optional[Tuple[int, int]]=None, dilation: float=0.0,
-                          profile: str='tophat', reduce: bool=True) -> pd.DataFrame:
-        """Draw a pattern in the :class:`pandas.DataFrame` format.
-
-        Args:
-            shape : Detector grid shape.
-            dilation : Line mask dilation in pixels.
-            profile : Line width profiles. The following keyword values are allowed:
-
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
-
-            reduce : Discard the pixel data with reflection profile values equal to
-                zero.
-
-        Returns:
-            A pattern in :class:`pandas.DataFrame` format.
-        """
-        df = pd.DataFrame(self.pattern_dict(shape, dilation=dilation, profile=profile))
-        if reduce:
-            return df[df['rp'] > 0.0]
-        return df
-
-    def pattern_dict(self, shape: Optional[Tuple[int, int]]=None, dilation: float=0.0,
-                     profile: str='tophat') -> Dict[str, np.ndarray]:
+    def pattern_dict(self, width: float, shape: Optional[Tuple[int, int]]=None,
+                     kernel: str='rectangular') -> Dict[str, np.ndarray]:
         """Draw a pattern in the :class:`dict` format.
 
         Args:
+            width : Lines width in pixels.
             shape : Detector grid shape.
-            dilation : Line mask dilation in pixels.
-            profile : Line width profiles. The following keyword values are allowed:
+            kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+                are available:
 
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
+                * 'biweigth' : Quartic (biweight) kernel.
+                * 'gaussian' : Gaussian kernel.
+                * 'parabolic' : Epanechnikov (parabolic) kernel.
+                * 'rectangular' : Uniform (rectangular) kernel.
+                * 'triangular' : Triangular kernel.
 
         Returns:
             A pattern in dictionary format.
         """
-        idx, x, y, rp = draw_line_table(lines=self.to_lines(), shape=shape, dilation=dilation,
-                                        profile=profile)
+        idx, x, y, rp = draw_line_table(lines=self.to_lines(width), shape=shape,
+                                        kernel=kernel)
         pattern = {'index': idx, 'x': x, 'y': y, 'rp': rp}
         if self.hkl is not None:
             pattern.update(h=self.h[idx], k=self.k[idx], l=self.l[idx])
@@ -829,56 +813,15 @@ class Streaks(DataContainer):
             pattern['hkl_id'] = self.hkl_id[idx]
         return pattern
 
-    def pattern_image(self, shape: Tuple[int, int], dilation: float=0.0,
-                      profile: str='gauss') -> np.ndarray:
-        """Draw a pattern in the :class:`numpy.ndarray` format.
-
-        Args:
-            shape : Detector grid shape.
-            dilation : Line mask dilation in pixels.
-            profile : Line width profiles. The following keyword values are allowed:
-
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
-
-        Returns:
-            A pattern in :class:`numpy.ndarray` format.
-        """
-        return draw_line_image(shape, lines=self.to_lines(), dilation=dilation,
-                               profile=profile)
-
-    def pattern_mask(self, shape: Tuple[int, int], max_val: int=1, dilation: float=0.0,
-                     profile: str='tophat') -> np.ndarray:
-        """Draw a pattern mask.
-
-        Args:
-            shape : Detector grid shape.
-            max_val : Mask maximal value.
-            dilation : Line mask dilation in pixels.
-            profile : Line width profiles. The following keyword values are allowed:
-
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
-
-        Returns:
-            A pattern mask.
-        """
-        return draw_line_mask(shape, lines=self.to_lines(), max_val=max_val,
-                              dilation=dilation, profile=profile)
-
     def to_dataframe(self) -> pd.DataFrame:
         """Export a streaks container into :class:`pandas.DataFrame`.
 
         Returns:
             A dataframe with all the data specified in :class:`cbclib.Streaks`.
         """
-        return pd.DataFrame(dict(self))
+        return pd.DataFrame({attr: self[attr] for attr in self.contents()})
 
-    def to_lines(self) -> np.ndarray:
+    def to_lines(self, width: float) -> np.ndarray:
         """Export a streaks container into line parameters ``x0, y0, x1, y1, width``:
 
         * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
@@ -887,10 +830,62 @@ class Streaks(DataContainer):
         Returns:
             An array of line parameters.
         """
-        return np.stack((self.x0, self.y0, self.x1, self.y1, self.width), axis=1)
+        widths = width * np.ones(len(self))
+        return np.stack((self.x0, self.y0, self.x1, self.y1, widths), axis=1)
 
 @dataclass
-class CBDModel():
+class ScanStreaks(StreaksAbc):
+    columns : ClassVar[Set[str]] = Streaks.columns
+    streaks : Dict[int, Streaks]
+
+    def __getitem__(self, idxs: Indices) -> ScanStreaks:
+        return ScanStreaks(self.streaks[idxs])
+
+    @classmethod
+    def import_dataframe(cls, df: pd.DataFrame) -> ScanStreaks:
+        frames, fidxs, _ = unique_indices(df['frames'].to_numpy())
+        return cls({frames[index]: Streaks.import_dataframe(df[fidxs[index]:fidxs[index + 1]])
+                    for index in range(frames.size)})
+
+    @classmethod
+    def import_dict(cls, dct: Dict[str, np.ndarray]) -> ScanStreaks:
+        frames, fidxs, _ = unique_indices(dct['frames'])
+
+        result = {}
+        for index in range(frames.size):
+            result[frames[index]] = Streaks(**{key: dct[key][fidxs[index]:fidxs[index + 1]]
+                                               for key in cls.columns.intersection(dct.keys())})
+
+        return cls(result)
+
+    def keys(self) -> List[str]:
+        return self.streaks[0].keys()
+
+    def pattern_dict(self, width: float, shape: Optional[Tuple[int, int]]=None,
+                     kernel: str='rectangular') -> Dict[str, np.ndarray]:
+        n_streaks = 0
+        result = {key: [] for key in self.keys()}
+
+        for idx, streaks in self.streaks.items():
+            dct = streaks.pattern_dict(width, shape, kernel)
+
+            dct['index'] += n_streaks
+            dct['frames'] = idx * np.ones(len(streaks), dtype=int)
+            n_streaks += len(streaks)
+
+            for attr, val in dct.items():
+                result[attr].append(val)
+
+        for attr in result:
+            result[attr] = np.concatenate(result[attr])
+
+        return result
+
+    def to_lines(self, width: float) -> Dict[int, np.ndarray]:
+        return {idx: val.to_lines(width) for idx, val in self.streaks.items()}
+
+@dataclass
+class CBDModel(DataContainer):
     """Prediction model for Convergent Beam Diffraction (CBD) pattern. The method uses the
     geometrical schematic of CBD diffraction in the reciprocal space [CBM]_ to predict a CBD
     pattern for the given crystalline sample.
@@ -908,16 +903,23 @@ class CBDModel():
                  (2002): 2087-95, https://doi.org/10.1107/s0907444902017511.
     """
     basis       : Basis
-    sample      : Sample
+    samples     : ScanSamples
     setup       : ScanSetup
     transform   : Optional[Transform] = None
     shape       : Optional[Tuple[int, int]] = None
+    num_threads : int = cpu_count()
 
     def __post_init__(self):
-        self.basis = self.sample.rotate_basis(self.basis)
         if isinstance(self.transform, Crop):
             self.shape = (self.transform.roi[1] - self.transform.roi[0],
                           self.transform.roi[3] - self.transform.roi[2])
+
+    def __getitem__(self, idxs: Indices) -> CBDModel:
+        return self.replace(samples=self.samples[idxs])
+
+    def bases(self) -> Iterator[Basis]:
+        for sample in self.samples.samples.values():
+            yield sample.rotate_basis(self.basis)
 
     def filter_hkl(self, hkl: np.ndarray) -> np.ndarray:
         """Return a set of reciprocal lattice points that lie in the region of reciprocal space
@@ -929,13 +931,16 @@ class CBDModel():
         Returns:
             A set of Miller indices.
         """
-        rec_vec = hkl.dot(self.basis.mat)
-        rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
-        rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
-        src_th = rec_th - np.arccos(0.5 * rec_abs)
-        return np.abs(np.sin(src_th)) < np.arccos(self.setup.kin_max[2])
+        mask = np.ones(hkl.shape[0], dtype=bool)
+        for basis in self.bases():
+            rec_vec = hkl.dot(basis.mat)
+            rec_abs = np.sqrt((rec_vec**2).sum(axis=-1))
+            rec_th = np.arccos(-rec_vec[..., 2] / rec_abs)
+            src_th = rec_th - np.arccos(0.5 * rec_abs)
+            mask &= np.abs(np.sin(src_th)) < np.arccos(self.setup.kin_max[2])
+        return mask
 
-    def generate_streaks(self, hkl: np.ndarray, width: float, hkl_index: bool=False) -> Streaks:
+    def generate_streaks(self, hkl: np.ndarray, hkl_index: bool=False) -> ScanStreaks:
         """Generate a CBD pattern. Return a set of streaks in :class:`cbclib.Streaks` container.
 
         Args:
@@ -946,41 +951,27 @@ class CBDModel():
         Returns:
             A set of streaks, that constitute the predicted CBD pattern.
         """
-        kin, mask = calc_source_lines(basis=self.basis.mat, hkl=hkl, kin_min=self.setup.kin_min,
-                                      kin_max=self.setup.kin_max)
-        idxs = np.arange(hkl.shape[0])[mask]
-        rec_vec = hkl[idxs].dot(self.basis.mat)[:, None]
+        bases = np.array([basis.mat for basis in self.bases()])
+        kin, mask = source_lines(basis=bases, hkl=hkl, kin_min=self.setup.kin_min,
+                                 kin_max=self.setup.kin_max, num_threads=self.num_threads)
 
-        x, y = self.sample.kout_to_detector(kin + rec_vec, self.setup, rec_vec)
+        frames = np.repeat(np.arange(bases.shape[0]), hkl.shape[0])[mask]
+        idxs = np.tile(np.arange(hkl.shape[0]), bases.shape[0])[mask]
+        rec_vec = np.tensordot(hkl, bases, axes=(-1, -2)).reshape(-1, 3)[mask]
+
+        x, y = self.samples.kout_to_detector(kin + rec_vec, self.setup, idxs=frames,
+                                             rec_vec=rec_vec, num_threads=self.num_threads)
         if self.transform:
             x, y = self.transform.forward_points(x, y)
 
         if self.shape:
             mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
                    (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
-            x, y, idxs = x[mask], y[mask], idxs[mask]
-        return Streaks(x0=x[:, 0], y0=y[:, 0], x1=x[:, 1], y1=y[:, 1], h=hkl[idxs][:, 0],
-                       k=hkl[idxs][:, 1], l=hkl[idxs][:, 2], width=width * np.ones(x.shape[0]),
-                       hkl_id=idxs if hkl_index else None)
+            x, y, frames, idxs = x[mask], y[mask], frames[mask], idxs[mask]
 
-    def pattern_dataframe(self, hkl: np.ndarray, width: float, profile: str='gauss',
-                          hkl_index: bool=False) -> pd.DataFrame:
-        """Predict a CBD pattern and return in the :class:`pandas.DataFrame` format.
+        result = {'frames': frames, 'x0': x[:, 0], 'y0': y[:, 0], 'x1': x[:, 1], 'y1': y[:, 1],
+                  'h': hkl[idxs][:, 0], 'k': hkl[idxs][:, 1], 'l': hkl[idxs][:, 2]}
+        if hkl_index:
+            result['hkl_id'] = idxs
 
-        Args:
-            hkl : Set of reciprocal lattice point to use for prediction.
-            width : Difrraction streak width in pixels of a predicted pattern.
-            profile : Line width profiles. The following keyword values are allowed:
-
-                * `tophat` : Top-hat (rectangular) function profile.
-                * `linear` : Linear (triangular) function profile.
-                * `quad` : Quadratic (parabola) function profile.
-                * `gauss` : Gaussian function profile.
-
-            hkl_index : Save ``hkl`` indices in the streaks container if True.
-
-        Returns:
-            A pattern in :class:`pandas.DataFrame` format.
-        """
-        streaks = self.generate_streaks(hkl=hkl, width=width, hkl_index=hkl_index)
-        return streaks.pattern_dataframe(self.shape, profile=profile)
+        return ScanStreaks.import_dict(result)

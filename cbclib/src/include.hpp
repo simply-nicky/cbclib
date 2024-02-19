@@ -218,9 +218,7 @@ public:
         return *this;
     }
 
-    template <class Array, typename V = std::remove_cvref_t<Array>::value_type, typename = std::enable_if_t<
-        std::is_same_v<py::array_t<V>, std::remove_cvref_t<Array>>
-    >>
+    template <class Array, typename = std::enable_if_t<std::is_base_of_v<py::array, std::remove_cvref_t<Array>>>>
     Array && swap_axes(Array && arr) const
     {
         size_t counter = 0;

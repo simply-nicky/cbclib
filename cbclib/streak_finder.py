@@ -1,29 +1,36 @@
+from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import numpy as np
 from .data_container import DataContainer
-from .src import detect_streaks, Structure, Peaks
+from .cbc_setup import Streaks, ScanStreaks
+from .cxi_protocol import Indices
+from .src import detect_peaks, detect_streaks, filter_peaks, Structure, Peaks
 
 Line = Tuple[float, float, float, float]
 
 @dataclass
-class Pattern(DataContainer):
+class CBSDetector(DataContainer):
     data : np.ndarray
     mask: np.ndarray
     structure : Structure
+    num_threads : int
 
     def __post_init__(self):
-        if self.data.ndim != 2:
+        if self.data.ndim < 2:
             raise ValueError(f"Invalid number of dimensions: {self.data.ndim} != 2")
-        if self.data.shape != self.mask.shape:
+        if self.data.shape[-2:] != self.mask.shape:
             raise ValueError("data and mask have incompatible shapes: "\
                              f"{self.data.shape} != {self.mask.shape}")
+
+    def __getitem__(self, idxs: Indices) -> CBSDetector:
+        return self.replace(data=self.data[idxs], mask=self.mask[idxs])
 
     @property
     def shape(self) -> Tuple[int, int]:
         return self.data.shape
 
-    def find_peaks(self, vmin: float, npts: int, connectivity: Structure=Structure(1, 1)) -> Peaks:
+    def find_peaks(self, vmin: float, npts: int, connectivity: Structure=Structure(1, 1)) -> List[Peaks]:
         """Find peaks in a pattern. Returns a sparse set of peaks which values are above a threshold
         ``vmin`` that have a supporing set of a size larger than ``npts``. The minimal distance
         between peaks is ``2 * structure.radius``.
@@ -38,12 +45,13 @@ class Pattern(DataContainer):
         Returns:
             Set of detected peaks.
         """
-        peaks = Peaks(self.data, self.mask, 2 * self.structure.radius, vmin)
-        return peaks.filter(data=self.data, mask=self.mask, structure=connectivity, vmin=vmin,
-                            npts=npts)
+        peaks = detect_peaks(self.data, self.mask, 2 * self.structure.radius, vmin,
+                             num_threads=self.num_threads)
+        return filter_peaks(peaks, self.data, self.mask, connectivity, vmin, npts,
+                            num_threads=self.num_threads)
 
-    def find_streaks(self, peaks: Peaks, xtol: float, vmin: float, log_eps: float=0.0,
-                     max_iter: int=100, lookahead: int=3, min_size: int=5) -> List[Line]:
+    def detect(self, peaks: Union[Peaks, List[Peaks]], xtol: float, vmin: float, log_eps: float=0.0,
+               max_iter: int=100, lookahead: int=3, min_size: int=5) -> Union[Streaks, ScanStreaks]:
         """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
         extended with a connectivity structure.
 
@@ -63,5 +71,15 @@ class Pattern(DataContainer):
         Returns:
             A list of detected streaks.
         """
-        return detect_streaks(peaks, self.data, np.copy(self.mask), self.structure, xtol, vmin,
-                              log_eps, max_iter, lookahead, min_size)
+        if isinstance(peaks, list) and len(peaks) == 1:
+            peaks = peaks[0]
+
+        if isinstance(peaks, Peaks):
+            streaks = np.array(detect_streaks(peaks, self.data, self.mask, self.structure, xtol,
+                                              vmin, log_eps, max_iter, lookahead, min_size))
+            return Streaks(*streaks.T)
+
+        streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, log_eps,
+                                 max_iter, lookahead, min_size, num_threads=self.num_threads)
+
+        return ScanStreaks({idx: Streaks(*np.array(val).T) for idx, val in enumerate(streaks)})

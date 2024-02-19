@@ -5,11 +5,12 @@ container :class:`cbclib.CrystData`. All transform classes are inherited from th
 """
 from __future__ import annotations
 from configparser import ConfigParser
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
 import os
 import re
-from typing import (Any, Callable, Dict, Generic, ItemsView, Iterator, List, Optional, Tuple, Type, Union,
-                    ValuesView, TypeVar)
+from typing import (Any, Callable, ClassVar, Dict, Generic, ItemsView, Iterator, List, Optional, Tuple,
+                    Type, Union, ValuesView, TypeVar, get_args, get_origin)
 import numpy as np
 
 T = TypeVar('T')
@@ -25,6 +26,7 @@ class ReferenceType(Generic[T]):
 
 D = TypeVar('D', bound='DataContainer')
 
+@dataclass
 class DataContainer():
     """Abstract data container class based on :class:`dataclass`. Has :class:`dict` intefrace,
     and :func:`DataContainer.replace` to create a new obj with a set of data attributes replaced.
@@ -60,8 +62,7 @@ class DataContainer():
         Returns:
             List of the attributes available in the container.
         """
-        return [attr for attr, field in self.__dataclass_fields__.items()
-                if str(field._field_type) == '_FIELD']
+        return [field.name for field in fields(self)]
 
     def values(self) -> ValuesView:
         """Return the attributes' data stored in the container.
@@ -90,93 +91,80 @@ class DataContainer():
         """
         return type(self)(**dict(self, **kwargs))
 
-I = TypeVar('I', bound='INIContainer')
+    def to_dict(self) -> Dict[str, Any]:
+        """Export the :class:`Sample` object to a :class:`dict`.
 
-class INIContainer(DataContainer):
-    """Abstract data container class based on :class:`dataclass` with an interface to read from
-    and write to INI files.
-    """
-    __ini_fields__ : Dict[str, Union[str, Tuple[str]]]
+        Returns:
+            A dictionary of :class:`Sample` object's attributes.
+        """
+        return {attr: self.get(attr) for attr in self.contents()}
 
+class StringFormatter:
     @classmethod
-    def _format_list(cls, string: str, f: Callable=str) -> List:
+    def format_list(cls, string: str, dtype: Type=str) -> List:
         is_list = re.search(r'^\[([\s\S]*)\]$', string)
         if is_list:
-            return [f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_list.group(1)) if p]
+            return [dtype(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_list.group(1)) if p]
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
-    def _format_tuple(cls, string: str, f: Callable=str) -> Tuple:
+    def format_tuple(cls, string: str, dtype: Type=str) -> Tuple:
         is_tuple = re.search(r'^\(([\s\S]*)\)$', string)
         if is_tuple:
-            return tuple(f(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p)
+            return tuple(dtype(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p)
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
-    def _format_array(cls, string: str) -> List:
+    def format_array(cls, string: str, dtype: Type=float) -> np.ndarray:
         is_list = re.search(r'^\[([\s\S]*)\]$', string)
         if is_list:
-            return np.fromstring(is_list.group(1), sep=',')
+            return np.fromstring(is_list.group(1), dtype=dtype, sep=',')
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
-    def _format_bool(cls, string: str) -> bool:
+    def format_bool(cls, string: str) -> bool:
         return string in ('yes', 'True', 'true', 'T')
 
     @classmethod
-    def get_formatter(cls, t: str) -> Callable:
-        _f1 = {'list': cls._format_list, 'List': cls._format_list,
-               'tuple': cls._format_tuple, 'Tuple': cls._format_tuple}
-        _f2 = {'ndarray': cls._format_array, 'float': float, 'int': int,
-               'bool': cls._format_bool, 'complex': complex}
-        for k1, f1 in _f1.items():
-            if k1 in t:
-                idx = t.index(k1) + len(k1)
-                for k2, f2 in _f2.items():
-                    if k2 in t[idx:]:
-                        return lambda string: f1(string, f2)
-                return f1
-        for k2, f2 in _f2.items():
-            if k2 in t:
-                return f2
-        return str
+    def get_formatter(cls, type: Type):
+        formatters = {'list': cls.format_list, 'tuple': cls.format_tuple,
+                      'ndarray': cls.format_array, 'float': float, 'int': int,
+                      'bool': cls.format_bool, 'complex': complex}
+
+        if get_origin(type) is None:
+            return formatters.get(type.__name__, str)
+        if get_origin(type) is ClassVar:
+            return formatters.get(get_args(type)[0].__name__, str)
+        if get_origin(type) is dict:
+            return cls.get_formatter(get_args(type)[1])
+
+        origin = get_origin(type)
+        args = get_args(type)
+
+        origin_formatter = formatters.get(origin.__name__, str)
+        arg_formatter = formatters.get(args[0].__name__, str)
+        return lambda string: origin_formatter(string, arg_formatter)
 
     @classmethod
-    def _format_dict(cls, ini_dict: Dict[str, Any]) -> Dict[str, Any]:
-        for attr, val in ini_dict.items():
-            formatter = cls.get_formatter(str(cls.__dataclass_fields__[attr].type))
+    def format_dict(cls, dct: Dict[str, Any], types: Dict[str, Type]) -> Dict[str, Any]:
+        formatted_dct = {}
+        for attr, val in dct.items():
+            formatter = cls.get_formatter(types[attr])
             if isinstance(val, dict):
-                ini_dict[attr] = {k: formatter(v) for k, v in val.items()}
+                formatted_dct[attr] = {k: formatter(v) for k, v in val.items()}
             if isinstance(val, str):
-                ini_dict[attr] = formatter(val)
-        return ini_dict
+                formatted_dct[attr] = formatter(val)
+        return formatted_dct
 
     @classmethod
-    def import_ini(cls: Type[I], ini_file: str) -> I:
-        """Initialize the container object with an INI file ``ini_file``.
-
-        Args:
-            ini_file : Path to the ini file.
-
-        Returns:
-            A new container with all the attributes imported from the ini file.
-        """
-        if not os.path.isfile(ini_file):
-            raise ValueError(f"File {ini_file} doesn't exist")
-        ini_parser = ConfigParser()
-        ini_parser.read(ini_file)
-
-        ini_dict: Dict[str, Any] = {}
-        for section, attrs in cls.__ini_fields__.items():
-            if isinstance(attrs, str):
-                ini_dict[attrs] = dict(ini_parser[section])
-            elif isinstance(attrs, tuple):
-                for attr in attrs:
-                    ini_dict[attr] = ini_parser[section][attr]
-            else:
-                raise TypeError(f"Invalid '__ini_fields__' values: {attrs}")
-
-        return cls(**cls._format_dict(ini_dict))
+    def to_string(cls, node: Any) -> Union[str, Dict[str, str]]:
+        if isinstance(node, dict):
+            return {k: cls.to_string(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [cls.to_string(v) for v in node]
+        if isinstance(node, np.ndarray):
+            return np.array2string(node, separator=',')
+        return str(node)
 
     @staticmethod
     def str_to_list(strings: Union[str, List[str]]) -> List[str]:
@@ -195,36 +183,102 @@ class INIContainer(DataContainer):
 
         raise ValueError('strings must be a string or a list of strings')
 
-    def _get_string(self, attr: Any) -> Union[str, Dict[str, str]]:
-        val = self.get(attr)
-        if isinstance(val, np.ndarray):
-            return np.array2string(val, separator=',')
-        if isinstance(val, dict):
-            return {k: str(v) for k, v in val.items()}
-        return str(val)
+class Parser():
+    fields : Dict[str, Union[str, Tuple[str]]]
 
-    def ini_dict(self) -> Dict[str, Any]:
-        ini_dict: Dict[str, Any] = {}
-        for section, attrs in self.__ini_fields__.items():
-            if isinstance(attrs, str):
-                ini_dict[section] = self._get_string(attrs)
-            if isinstance(attrs, tuple):
-                ini_dict[section] = {attr: self._get_string(attr) for attr in attrs}
-        return ini_dict
+    def read_all(self, file: str) -> Dict[str, Any]:
+        raise NotImplementedError
 
-    def to_ini(self, ini_file: str):
-        """Save all the attributes stored in the container to an INI file ``ini_file``.
+    def read(self, file: str) -> Dict[str, Any]:
+        """Initialize the container object with an INI file ``file``.
 
         Args:
-            ini_file : Path to the ini file.
+            file : Path to the ini file.
+
+        Returns:
+            A new container with all the attributes imported from the ini file.
+        """
+        parser = self.read_all(file)
+
+        result: Dict[str, Any] = {}
+        for section, attrs in self.fields.items():
+            if isinstance(attrs, str):
+                result[attrs] = dict(parser[section])
+            elif isinstance(attrs, tuple):
+                for attr in attrs:
+                    result[attr] = parser[section][attr]
+            elif isinstance(attrs, dict):
+                for key, attr in attrs.items():
+                    result[attr] = parser[section][key]
+            else:
+                raise TypeError(f"Invalid 'fields' values: {attrs}")
+
+        return result
+
+    def to_dict(self, obj: Any) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+        for section, attrs in self.fields.items():
+            if isinstance(attrs, str):
+                result[section] = getattr(obj, attrs)
+            if isinstance(attrs, tuple):
+                result[section] = {attr: getattr(obj, attr) for attr in attrs}
+            if isinstance(attrs, dict):
+                result[section] = {key: getattr(obj, attr) for key, attr in attrs.items()}
+        return result
+
+    def write(self, file: str, obj: Any):
+        raise NotImplementedError
+
+@dataclass
+class INIParser(Parser, DataContainer):
+    """Abstract data container class based on :class:`dataclass` with an interface to read from
+    and write to INI files.
+    """
+    fields : Dict[str, Union[str, Tuple[str]]]
+    types : Dict[str, Type]
+
+    def read_all(self, file: str) -> Dict[str, Any]:
+        if not os.path.isfile(file):
+            raise ValueError(f"File {file} doesn't exist")
+
+        ini_parser = ConfigParser()
+        ini_parser.read(file)
+
+        return {section: dict(ini_parser.items(section)) for section in ini_parser.sections()}
+
+    def read(self, file: str) -> Dict[str, Any]:
+        return StringFormatter.format_dict(super().read(file), self.types)
+
+    def to_dict(self, obj: Any) -> Dict[str, Any]:
+        return StringFormatter.to_string(super().to_dict(obj))
+
+    def write(self, file: str, obj: Any):
+        """Save all the attributes stored in the container to an INI file ``file``.
+
+        Args:
+            file : Path to the ini file.
         """
         ini_parser = ConfigParser()
-        for section, val in self.ini_dict().items():
+        for section, val in self.to_dict(obj).items():
             ini_parser[section] = val
 
         with np.printoptions(precision=None):
-            with open(ini_file, 'w') as out_file:
+            with open(file, 'w') as out_file:
                 ini_parser.write(out_file)
+
+@dataclass
+class JSONParser(Parser, DataContainer):
+    fields: Dict[str, Union[str, Tuple[str]]]
+
+    def read_all(self, file: str) -> Dict[str, Any]:
+        with open(file, 'r') as f:
+            json_dict = json.load(f)
+
+        return json_dict
+
+    def write(self, file: str, obj: Any):
+        with open(file, 'w') as out_file:
+            json.dump(self.to_dict(obj), out_file, sort_keys=True, ensure_ascii=False, indent=4)
 
 class Transform(DataContainer):
     """Abstract transform class."""

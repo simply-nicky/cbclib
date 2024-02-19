@@ -1,9 +1,8 @@
 #include "array.hpp"
-#include "geometry.hpp"
 
 namespace cbclib {
 
-template<typename F, typename>
+template<typename F>
 py::array_t<F> euler_angles(py::array_t<F, py::array::c_style | py::array::forcecast> rmats, unsigned threads)
 {
     assert(PyArray_API);
@@ -49,7 +48,7 @@ py::array_t<F> euler_angles(py::array_t<F, py::array::c_style | py::array::force
     return angles;
 }
 
-template<typename F, typename>
+template<typename F>
 py::array_t<F> euler_matrix(py::array_t<F, py::array::c_style | py::array::forcecast> angles, unsigned threads)
 {
     assert(PyArray_API);
@@ -91,7 +90,7 @@ py::array_t<F> euler_matrix(py::array_t<F, py::array::c_style | py::array::force
     return rmats;
 }
 
-template<typename F, typename>
+template<typename F>
 py::array_t<F> tilt_angles(py::array_t<F, py::array::c_style | py::array::forcecast> rmats, unsigned threads)
 {
     assert(PyArray_API);
@@ -129,7 +128,7 @@ py::array_t<F> tilt_angles(py::array_t<F, py::array::c_style | py::array::forcec
     return angles;
 }
 
-template<typename F, typename>
+template<typename F>
 py::array_t<F> tilt_matrix(py::array_t<F, py::array::c_style | py::array::forcecast> angles, unsigned threads)
 {
     assert(PyArray_API);
@@ -173,7 +172,7 @@ py::array_t<F> tilt_matrix(py::array_t<F, py::array::c_style | py::array::forcec
     return rmats;
 }
 
-template<typename F, typename I, typename>
+template<typename F, typename I>
 py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast> x,
                         py::array_t<F, py::array::c_style | py::array::forcecast> y,
                         py::array_t<F, py::array::c_style | py::array::forcecast> src,
@@ -242,7 +241,7 @@ py::array_t<F> det_to_k(py::array_t<F, py::array::c_style | py::array::forcecast
     return out;
 }
 
-template<typename F, typename I, typename>
+template<typename F, typename I>
 auto k_to_det(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
               py::array_t<F, py::array::c_style | py::array::forcecast> src,
               std::optional<py::array_t<I, py::array::c_style | py::array::forcecast>> idxs,
@@ -306,7 +305,7 @@ auto k_to_det(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
     return std::tuple(x, y);
 }
 
-template<typename F, typename I, typename>
+template<typename F, typename I>
 py::array_t<F> k_to_smp(py::array_t<F, py::array::c_style | py::array::forcecast> karr,
                         py::array_t<F, py::array::c_style | py::array::forcecast> z, std::array<F, 3> src,
                         std::optional<py::array_t<I, py::array::c_style | py::array::forcecast>> idxs,
@@ -391,14 +390,14 @@ auto find_intersection(std::array<F, 3> q, std::array<F, 2> vec,
     F a = f2 * f2 + q[2] * q[2], b = f1 * f2; 
     F c = f1 * f1 - (1 - origin[0] * origin[0] - origin[1] * origin[1]) * q[2] * q[2];
 
-    auto get_point = [&](F t)
+    auto get_point = [origin, vec](F t)
     {
         auto kx = origin[0] + t * vec[0];
         auto ky = origin[1] + t * vec[1];
         auto kz = sqrt(1 - kx * kx - ky * ky);
         return std::array<F, 3>{kx, ky, kz};
     };
-    auto check_point = [&](const std::array<F, 3> & pt, F t)
+    auto check_point = [limits, prod, q](const std::array<F, 3> & pt, F t)
     {
         return isclose(pt[0] * q[0] + pt[1] * q[1] + pt[2] * q[2], prod) && t >= limits[0] && t <= limits[1];
     };
@@ -414,7 +413,7 @@ auto find_intersection(std::array<F, 3> q, std::array<F, 2> vec,
     return std::nullopt;
 }
 
-template<typename F, typename I, typename>
+template<typename F, typename I>
 auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
                   py::array_t<F, py::array::c_style | py::array::forcecast> basis,
                   std::array<F, 2> kmin, std::array<F, 2> kmax,
@@ -521,7 +520,7 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
                     solutions[3] = find_intersection(q, {1, 0}, {0, kmax[1]}, {kmin[0], kmax[0]});
 
                     if (std::transform_reduce(solutions.begin(), solutions.end(), 0, std::plus<int>(),
-                                            [](std::optional<std::array<F, 3>> sol){return int(bool(sol));}) == 2)
+                                              [](std::optional<std::array<F, 3>> sol) -> int {return sol.has_value();}) == 2)
                     {
                         auto oiter = optr + 6 * n;
                         for (auto sol: solutions)
@@ -550,7 +549,7 @@ auto source_lines(py::array_t<I, py::array::c_style | py::array::forcecast> hkl,
     return std::tuple(out, mask);
 }
 
-template<typename F, typename I, typename>
+template<typename F, typename I>
 py::array_t<F> rotate_vec(py::array_t<F, py::array::c_style | py::array::forcecast> vecs,
                           py::array_t<F, py::array::c_style | py::array::forcecast> rmats,
                           std::optional<py::array_t<I, py::array::c_style | py::array::forcecast>> idxs,

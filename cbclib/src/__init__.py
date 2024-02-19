@@ -6,5 +6,5 @@ from .image_proc import draw_line_mask, draw_line_image, draw_line_table
 from .kd_tree import test_tree
 from .label import Points, Structure, Regions, label
 from .median import median, median_filter, maximum_filter, robust_mean, robust_lsq
-from .signal_proc import binterpolate, kr_predict, local_maxima
-from .streak_finder import Peaks, detect_streaks, test_line, test_grow
+from .signal_proc import binterpolate, kr_predict, local_maxima, unique_indices
+from .streak_finder import Peaks, detect_peaks, detect_streaks, filter_peaks

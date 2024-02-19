@@ -7,10 +7,10 @@
 from .cbc_indexing import Map3D, FourierIndexer
 from .cbc_scaling import CBCTable, SampleRefiner, SetupRefiner, IntensityScaler
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks, CBDModel
-from .cxi_protocol import CXIProtocol, CXIStore
+from .cxi_protocol import CXIProtocol, CXIStore, ExtraProtocol, ExtraStore
 from .log_protocol import LogProtocol, LogContainer
 from .data_container import Transform, Crop, Downscale, Mirror, ComposeTransforms
-from .data_processing import CrystData, LSDetector, ModelDetector
-from .streak_finder import Pattern
+from .data_processing import CrystData
+from .streak_finder import CBSDetector
 from . import bin
 from . import src

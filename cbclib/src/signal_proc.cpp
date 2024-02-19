@@ -2,6 +2,42 @@
 
 namespace cbclib {
 
+template <typename I>
+auto unique_indices(py::array_t<I> a)
+{
+    array<I> arr {a.request()};
+
+    if (arr[arr.size - 1] < arr[0])
+        throw std::invalid_argument("Input array must be sorted in ascending order");
+
+    std::vector<I> unq (arr[arr.size - 1] - arr[0] + 1, I());
+    std::vector<size_t> idxs (arr[arr.size - 1] - arr[0] + 2, size_t());
+    std::vector<size_t> inv (arr.size, size_t());
+
+    py::gil_scoped_release release;
+
+    size_t size = 0;
+    for (I i = arr[0]; i <= arr[arr.size - 1]; i++)
+    {
+        idxs[size + 1] = std::distance(arr.begin(), std::lower_bound(arr.begin(), arr.end(), i));
+
+        if (idxs[size + 1] > idxs[size])
+        {
+            unq[size] = i - 1;
+            for (size_t j = idxs[size]; j < idxs[size + 1]; j++) inv[j] = size;
+            size++;
+        }
+    }
+
+    unq[size] = arr[arr.size - 1];
+    for (size_t j = idxs[size]; j < arr.size; j++) inv[j] = size;
+    idxs[size + 1] = arr.size - 1;
+
+    py::gil_scoped_acquire acquire;
+
+    return std::make_tuple(as_pyarray(std::move(unq)), as_pyarray(std::move(idxs)), as_pyarray(std::move(inv)));
+}
+
 template <typename T>
 py::array_t<T> binterpolate(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
                             std::vector<py::array_t<T, py::array::c_style | py::array::forcecast>> grid,
@@ -221,6 +257,11 @@ PYBIND11_MODULE(signal_proc, m)
     {
         return;
     }
+
+    m.def("unique_indices", &unique_indices<unsigned int>, py::arg("array"));
+    m.def("unique_indices", &unique_indices<int>, py::arg("array"));
+    m.def("unique_indices", &unique_indices<unsigned long>, py::arg("array"));
+    m.def("unique_indices", &unique_indices<long>, py::arg("array"));
 
     m.def("binterpolate", &binterpolate<float>, py::arg("inp"), py::arg("grid"), py::arg("coords"), py::arg("num_threads") = 1);
     m.def("binterpolate", &binterpolate<double>, py::arg("inp"), py::arg("grid"), py::arg("coords"), py::arg("num_threads") = 1);

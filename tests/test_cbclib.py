@@ -102,18 +102,18 @@ def test_cxi_protocol(cxi_protocol: cbc.CXIProtocol, temp_dir: str):
 def h5_path(data: np.ndarray, cxi_protocol: cbc.CXIProtocol, temp_dir: str) -> str:
     path = os.path.join(temp_dir, 'data.h5')
     with cbc.CXIStore(path, mode='w', protocol=cxi_protocol) as h5_file:
-        h5_file.save_attribute('data', data)
+        h5_file.save('data', data)
     yield path
     os.remove(path)
 
 def test_cxi_store(data: np.ndarray, cxi_protocol: cbc.CXIProtocol, temp_dir: str):
     path = os.path.join(temp_dir, 'test.h5')
     with cbc.CXIStore(path, mode='a', protocol=cxi_protocol) as h5_file:
-        h5_file.save_attribute('data', data, mode='insert', idxs=np.arange(data.shape[0]))
-        h5_file.save_attribute('data', data, mode='append')
+        h5_file.save('data', data, mode='insert', idxs=np.arange(data.shape[0]))
+        h5_file.save('data', data, mode='append')
     with cbc.CXIStore(path, mode='r', protocol=cxi_protocol) as h5_file:
         file_shape = (len(h5_file.indices()),) + h5_file.read_shape()
-        new_data = h5_file.load_attribute('data', idxs=np.arange(data.shape[0], 2 * data.shape[0]))
+        new_data = h5_file.load('data', idxs=np.arange(data.shape[0], 2 * data.shape[0]))
     data_shape = (2 * data.shape[0], data.shape[1], data.shape[2])
     assert file_shape == data_shape
     assert np.all(new_data == data)

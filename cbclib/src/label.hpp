@@ -215,11 +215,14 @@ struct Moments
 };
 
 // Connectivity structure class
+using point_t = Point<long>;
 
 struct Structure
 {
+    using point_type = point_t;
+
     int radius, rank;
-    std::set<Point<int>> idxs;
+    std::set<point_type> idxs;
 
     Structure(int radius, int rank) : radius(radius), rank(rank)
     {
@@ -227,7 +230,7 @@ struct Structure
         {
             for (int j = -radius; j <= radius; j++)
             {
-                if (std::abs(i) + std::abs(j) <= rank) idxs.emplace_hint(idxs.end(), Point<int>{j, i});
+                if (std::abs(i) + std::abs(j) <= rank) idxs.emplace_hint(idxs.end(), point_type{j, i});
             }
         }
     }
@@ -243,19 +246,21 @@ struct Structure
 
 struct Points
 {
-    std::set<Point<int>> points;
+    using point_type = point_t;
+    std::set<point_type> points;
 
     Points() = default;
 
-    template <typename Pts, typename = std::enable_if_t<std::is_same_v<std::set<Point<int>>, std::remove_cvref_t<Pts>>>>
+    template <typename Pts, typename = std::enable_if_t<std::is_same_v<std::set<point_type>, std::remove_cvref_t<Pts>>>>
     Points(Pts && p) : points(std::forward<Pts>(p)) {}
 
-    Points(Point<size_t> seed, const array<bool> & mask, const Structure & srt)
+    template <typename Func, typename = std::enable_if_t<std::is_invocable_r_v<bool, std::remove_cvref_t<Func>, point_type>>>
+    Points(point_type seed, Func && func, const Structure & srt)
     {
-        if (mask.is_inbound(seed.coordinate()))
+        if (std::forward<Func>(func)(seed))
         {
-            std::vector<Point<int>> last_pixels;
-            std::vector<Point<int>> new_pixels;
+            std::vector<point_type> last_pixels;
+            std::vector<point_type> new_pixels;
 
             last_pixels.push_back(seed);
 
@@ -267,7 +272,7 @@ struct Points
                     {
                         auto pt = point + shift;
 
-                        if (mask.is_inbound(pt.coordinate()) && mask[mask.ravel_index(pt.coordinate())])
+                        if (std::forward<Func>(func)(pt))
                         {
                             auto [iter, is_added] = points.insert(std::move(pt));
                             if (is_added) new_pixels.push_back(*iter);
@@ -281,16 +286,19 @@ struct Points
         }
     }
 
-    operator std::set<Point<int>> && () && { return std::move(points); }
+    Points(Point<size_t> seed, const array<bool> & mask, const Structure & srt) :
+        Points(seed, [&mask](point_type pt){return mask.is_inbound(pt.coordinate()) && mask[mask.ravel_index(pt.coordinate())];}, srt) {}
 
-    std::set<Point<int>> & operator*() {return points;}
-    const std::set<Point<int>> & operator*() const {return points;}
+    operator std::set<point_type> && () && { return std::move(points); }
 
-    std::set<Point<int>> * operator->() {return &(points);}
-    const std::set<Point<int>> * operator->() const {return &(points);}
+    std::set<point_type> & operator*() {return points;}
+    const std::set<point_type> & operator*() const {return points;}
 
-    std::vector<int> x() const {return detail::get_x(points);}
-    std::vector<int> y() const {return detail::get_y(points);}
+    std::set<point_type> * operator->() {return &(points);}
+    const std::set<point_type> * operator->() const {return &(points);}
+
+    std::vector<point_type::value_type> x() const {return detail::get_x(points);}
+    std::vector<point_type::value_type> y() const {return detail::get_y(points);}
 
     Points filter(array<bool> & mask, const Structure & srt, size_t npts) const
     {
@@ -355,13 +363,6 @@ struct Pixels
                        std::inserter(pset, pset.begin()),
                        [&data](auto && point){return make_pixel(std::forward<decltype(point)>(point), data);});
         moments = Moments<T>::from_pset(pset);
-    }
-
-    std::set<Point<int>> points() const
-    {
-        std::set<Point<int>> pts;
-        for (auto [pt, _] : pset) pts.emplace_hint(pts.end(), pt);
-        return pts;
     }
 
     Pixels merge(const Pixels & pixels) const
@@ -448,7 +449,11 @@ struct Regions
         array<bool> mask {shape, reinterpret_cast<bool *>(vec.data())};
 
         Regions result {shape};
-        for (const auto & region : regions) result->emplace_back(region.filter(mask, str, npts));
+        for (const auto & region : regions)
+        {
+            auto new_region = region.filter(mask, str, npts);
+            if (new_region.points.size()) result->emplace_back(std::move(new_region));
+        }
         return result;
     }
 

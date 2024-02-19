@@ -36,16 +36,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple, TypeVar
+from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple, TypeVar, get_type_hints
 import numpy as np
-from .data_container import DataContainer, INIContainer
+from .data_container import DataContainer, Parser, INIParser, JSONParser, StringFormatter
 from .cbc_setup import Sample, ScanSamples, ScanSetup
 
 LOG_PROTOCOL = os.path.join(os.path.dirname(__file__), 'config/log_protocol.ini')
 L = TypeVar('L', bound='LogContainer')
 
 @dataclass
-class LogProtocol(INIContainer):
+class LogProtocol(DataContainer):
     """Log file protocol class. Contains log file keys to retrieve and the data types of the
     corresponding values.
 
@@ -70,10 +70,22 @@ class LogProtocol(INIContainer):
                                                 'percent': 1e-2}
 
     def __post_init__(self):
-        self.log_keys = {attr: self.str_to_list(val)
+        self.log_keys = {attr: StringFormatter.str_to_list(val)
                          for attr, val in self.log_keys.items() if attr in self.datatypes}
         self.part_keys = {attr: val for attr, val in self.part_keys.items()
                           if attr in self.datatypes}
+
+    @classmethod
+    def parser(cls, ext: str='ini') -> Parser:
+        if ext == 'ini':
+            return INIParser({'datatypes': 'datatypes', 'log_keys': 'log_keys', 'part_keys':
+                              'part_keys'},
+                             types=get_type_hints(cls))
+        if ext == 'json':
+            return JSONParser({'datatypes': 'datatypes', 'log_keys': 'log_keys',
+                               'part_keys': 'part_keys'})
+
+        raise ValueError(f"Invalid format: {ext}")
 
     @classmethod
     def import_default(cls) -> LogProtocol:
@@ -82,7 +94,7 @@ class LogProtocol(INIContainer):
         Returns:
             A :class:`LogProtocol` object with the default parameters.
         """
-        return cls.import_ini(LOG_PROTOCOL)
+        return cls(**cls.parser().read(LOG_PROTOCOL))
 
     @classmethod
     def _get_unit(cls, key: str) -> float:
@@ -102,7 +114,7 @@ class LogProtocol(INIContainer):
                 has_unit |= (unit in key)
         return has_unit
 
-    def load_attributes(self, path: str) -> Dict[str, Dict[str, Any]]:
+    def loads(self, path: str) -> Dict[str, Dict[str, Any]]:
         """Return attributes' values from a log file at the given `path`.
 
         Args:
@@ -290,7 +302,7 @@ class LogContainer(DataContainer):
         Returns:
             A new log container with ``log_attr``, ``log_data``, and ``idxs`` updated.
         """
-        log_attr = self.protocol.load_attributes(log_path)
+        log_attr = self.protocol.loads(log_path)
         log_data, idxs = self.protocol.load_data(log_path, idxs=idxs, return_idxs=True)
         return LogContainerFull(**dict(self, log_attr=log_attr, log_data=log_data, idxs=idxs))
 

@@ -15,7 +15,7 @@ Regions label2d(const array<T> & mask, const Structure & str, size_t npts)
         {
             int y = mask.index_along_dim(idx, 0);
             int x = mask.index_along_dim(idx, 1);
-            Points points (Point<int>{x, y}, mask, str);
+            Points points (Points::point_type{x, y}, mask, str);
 
             for (auto pt : *points)
             {
@@ -98,7 +98,7 @@ PYBIND11_MODULE(label, m)
     py::class_<Points>(m, "Points")
         .def(py::init([](std::vector<int> xvec, std::vector<int> yvec)
         {
-            std::set<Point<int>> points;
+            std::set<Points::point_type> points;
             for (auto [x, y] : zip::zip(xvec, yvec)) points.insert({x, y});
             return Points(std::move(points));
         }), py::arg("x"), py::arg("y"))
