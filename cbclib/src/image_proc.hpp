@@ -7,87 +7,110 @@ namespace cbclib {
 // 2D Point class
 
 template <typename T>
-struct Point
+class Point
 {
+public:
     using value_type = T;
 
-    T x, y;
+    using const_iterator = std::array<T, 2>::const_iterator;
+    using iterator = std::array<T, 2>::iterator;
 
-    Point() : x(), y() {}
-    Point(T x, T y) : x(x), y(y) {}
+    using const_reference = std::array<T, 2>::const_reference;
+    using reference = std::array<T, 2>::reference;
 
-    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    operator Point<V>() const {return {static_cast<V>(x), static_cast<V>(y)};}
+    const_iterator begin() const {return pt.begin();}
+    const_iterator end() const {return pt.end();}
+    iterator begin() {return pt.begin();}
+    iterator end() {return pt.end();}
 
-    operator std::array<T, 2>() const {return {x, y};}
+    const_reference operator[](size_t index) const {return pt[index];}
+    reference operator[](size_t index) {return pt[index];}
 
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator+(const Point<V> & rhs) const {return {x + rhs.x, y + rhs.y};}
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator+(V rhs) const {return {x + rhs, y + rhs};}
-    template <typename V>
-    friend Point<std::common_type_t<T, V>> operator+(V lhs, const Point<T> & rhs) {return {lhs + rhs.x, lhs + rhs.y};}
+    const_reference x() const {return pt[0];}
+    const_reference y() const {return pt[1];}
+    reference x() {return pt[0];}
+    reference y() {return pt[1];}
 
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator-(const Point<V> & rhs) const {return {x - rhs.x, y - rhs.y};}
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator-(V rhs) const {return {x - rhs, y - rhs};}
-    template <typename V>
-    friend Point<std::common_type_t<T, V>> operator-(V lhs, const Point<T> & rhs) {return {lhs - rhs.x, lhs - rhs.y};}
+    size_t size() const {return pt.size();}
 
-
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator*(V rhs) const {return {rhs * x, rhs * y};}
-    template <typename V>
-    friend Point<std::common_type_t<T, V>> operator*(V lhs, const Point<T> & rhs) {return {lhs * rhs.x, lhs * rhs.y};}
-
-    template <typename V>
-    Point<std::common_type_t<T, V>> operator/(V rhs) const {return {x / rhs, y / rhs};}
+    Point() : pt() {}
+    Point(T x, T y) : pt({x, y}) {}
 
     template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    Point<T> & operator+=(const Point<V> & rhs) {x += rhs.x; y += rhs.y; return *this;}
-    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    Point<T> & operator+=(V rhs) {x += rhs; y += rhs; return *this;}
-    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    Point<T> & operator-=(const Point<V> & rhs) {x -= rhs.x; y -= rhs.y; return *this;}
-    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    Point<T> & operator-=(V rhs) {x -= rhs; y -= rhs; return *this;}
-    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
-    Point<T> operator/=(V rhs) {x /= rhs; y /= rhs; return *this;}
+    operator Point<V>() const {return {static_cast<V>(x()), static_cast<V>(y())};}
+
+    operator std::array<T, 2>() const {return pt;}
 
     template <typename V>
-    std::common_type_t<T, V> dot(const Point<V> & rhs) const {return x * rhs.x + y * rhs.y;}
+    Point<std::common_type_t<T, V>> operator+(const Point<V> & rhs) const {return {x() + rhs.x(), y() + rhs.y()};}
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator+(V rhs) const {return {x() + rhs, y() + rhs};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator+(V lhs, const Point<T> & rhs) {return {lhs + rhs.x(), lhs + rhs.y()};}
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator-(const Point<V> & rhs) const {return {x() - rhs.x(), y() - rhs.y()};}
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator-(V rhs) const {return {x() - rhs, y() - rhs};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator-(V lhs, const Point<T> & rhs) {return {lhs - rhs.x(), lhs - rhs.y()};}
+
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator*(V rhs) const {return {rhs * x(), rhs * y()};}
+    template <typename V>
+    friend Point<std::common_type_t<T, V>> operator*(V lhs, const Point<T> & rhs) {return {lhs * rhs.x(), lhs * rhs.y()};}
+
+    template <typename V>
+    Point<std::common_type_t<T, V>> operator/(V rhs) const {return {x() / rhs, y() / rhs};}
+
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator+=(const Point<V> & rhs) {x() += rhs.x(); y() += rhs.y(); return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator+=(V rhs) {x() += rhs; y() += rhs; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator-=(const Point<V> & rhs) {x() -= rhs.x(); y() -= rhs.y(); return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> & operator-=(V rhs) {x() -= rhs; y() -= rhs; return *this;}
+    template <typename V, typename = std::enable_if_t<std::is_convertible_v<T, V>>>
+    Point<T> operator/=(V rhs) {x() /= rhs; y() /= rhs; return *this;}
+
+    template <typename V>
+    std::common_type_t<T, V> dot(const Point<V> & rhs) const {return x() * rhs.x() + y() * rhs.y();}
 
     bool operator<(const Point<T> & rhs) const
     {
-        if (x < rhs.x) return true;
-        if (rhs.x < x) return false;
-        if (y < rhs.y) return true;
-        if (rhs.y < y) return false;
+        if (x() < rhs.x()) return true;
+        if (rhs.x() < x()) return false;
+        if (y() < rhs.y()) return true;
+        if (rhs.y() < y()) return false;
         return false;
     }
-    bool operator==(const Point<T> & rhs) const {return x == rhs.x && y == rhs.y;}
+    bool operator==(const Point<T> & rhs) const {return x() == rhs.x() && y() == rhs.y();}
     bool operator!=(const Point<T> & rhs) const {return !operator==(rhs);}
 
     friend std::ostream & operator<<(std::ostream & os, const Point<T> & pt)
     {
-        os << "{" << pt.x << ", " << pt.y << "}";
+        os << "{" << pt.x() << ", " << pt.y() << "}";
         return os;
     }
 
     template <typename V, typename U, typename = std::enable_if_t<std::is_convertible_v<V, T> && std::is_convertible_v<U, T>>>
     Point<T> clamp(const Point<V> & lo, const Point<U> & hi) const
     {
-        return {std::clamp<T>(x, lo.x, hi.x), std::clamp<T>(y, lo.y, hi.y)};
+        return {std::clamp<T>(x(), lo.x(), hi.x()), std::clamp<T>(y(), lo.y(), hi.y())};
     }
 
     std::array<T, 2> coordinate() const
     {
-        return {y, x};
+        return {y(), x()};
     }
 
-    T magnitude() const {return x * x + y * y;}
-    Point<T> round() const {return {std::round(x), std::round(y)};}
+    T magnitude() const {return x() * x() + y() * y();}
+    Point<T> round() const {return {std::round(x()), std::round(y())};}
+
+private:
+    std::array<T, 2> pt;
 };
 
 template <typename Pt, typename = void>
@@ -109,20 +132,22 @@ struct Line
     Point<T> pt0, pt1;
     Point<T> tau;
 
-    operator std::array<T, 4>() const {return {pt0.x, pt0.y, pt1.x, pt1.y};}
+    operator std::array<T, 4>() const {return {pt0.x(), pt0.y(), pt1.x(), pt1.y()};}
 
-    template <typename Pt, typename = std::enable_if_t<std::is_base_of_v<Point<T>, std::remove_cvref_t<Pt>>>>
-    Line(Pt && pt0, Pt && pt1) : pt0(std::forward<Pt>(pt0)), pt1(std::forward<Pt>(pt1)), tau(pt1 - pt0) {}
+    template <typename Pt0, typename Pt1, typename = std::enable_if_t<
+        std::is_base_of_v<Point<T>, std::remove_cvref_t<Pt0>> && std::is_base_of_v<Point<T>, std::remove_cvref_t<Pt1>>
+    >>
+    Line(Pt0 && pt0, Pt1 && pt1) : pt0(std::forward<Pt0>(pt0)), pt1(std::forward<Pt1>(pt1)), tau(pt1 - pt0) {}
 
     Line(T x0, T y0, T x1, T y1) : Line(Point<T>{x0, y0}, Point<T>{x1, y1}) {}
 
     T magnitude() const {return tau.magnitude();}
 
-    Point<T> norm() const {return {tau.y, -tau.x};}
+    Point<T> norm() const {return {tau.y(), -tau.x()};}
 
-    T perimeter() const {return std::abs(tau.x) + std::abs(tau.y);}
+    T perimeter() const {return std::abs(tau.x()) + std::abs(tau.y());}
 
-    T theta() const {return std::atan(tau.y, tau.x);}
+    T theta() const {return std::atan(tau.y(), tau.x());}
 
     T distance(const Point<T> & point) const
     {
@@ -162,14 +187,14 @@ void draw_pixel(array<Out> & image, const Point<int> & pt, T val)
         auto index = image.ravel_index(pt.coordinate());
         image[index] = std::max(image[index], static_cast<Out>(val));
     }
-    else throw std::runtime_error("Invalid pixel index: {" + std::to_string(pt.y) + ", " + std::to_string(pt.x) + "}");
+    else throw std::runtime_error("Invalid pixel index: {" + std::to_string(pt.y()) + ", " + std::to_string(pt.x()) + "}");
 }
 
 template <typename T, typename Out>
 void draw_pixel(table_t<Out> & table, const Point<int> & pt, T val)
 {
-    std::get<0>(table).push_back(pt.x);
-    std::get<1>(table).push_back(pt.y);
+    std::get<0>(table).push_back(pt.x());
+    std::get<1>(table).push_back(pt.y());
     std::get<2>(table).push_back(static_cast<Out>(val));
 }
 
@@ -211,49 +236,49 @@ struct BhmIterator
     BhmIterator move(const Point<J> & step) const
     {
         auto pix = *this;
-        pix.xstep(step.x); pix.ystep(step.y);
+        pix.xstep(step.x()); pix.ystep(step.y());
         return pix;
     }
 
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     BhmIterator & step(const Point<J> & step)
     {
-        xstep(step.x); ystep(step.y);
+        xstep(step.x()); ystep(step.y());
         return *this;
     }
 
     BhmIterator & xstep(I step)
     {
-        point.x += step; error += step * tau.x;
+        point.x() += step; error += step * tau.x();
         return *this;
     }
 
     BhmIterator & ystep(I step)
     {
-        point.y += step; error += step * tau.y;
+        point.y() += step; error += step * tau.y();
         return *this;
     }
 
     // Increment x if:
-    //      e(x + sx, y + sy) + e(x, y + sy) < 0    if sx * tau.x > 0
-    //      e(x + sx, y + sy) + e(x, y + sy) > 0    if sx * tau.x < 0
+    //      e(x + sx, y + sy) + e(x, y + sy) < 0    if sx * tau.x() > 0
+    //      e(x + sx, y + sy) + e(x, y + sy) > 0    if sx * tau.x() < 0
 
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     bool is_xnext(const Point<J> & step) const
     {
-        if (step.x * tau.x > 0) return 2 * e_xy(step) <= step.x * tau.x;
-        return 2 * e_xy(step) >= step.x * tau.x;
+        if (step.x() * tau.x() > 0) return 2 * e_xy(step) <= step.x() * tau.x();
+        return 2 * e_xy(step) >= step.x() * tau.x();
     }
 
     // Increment y if:
-    //      e(x + sx, y + sy) + e(x + sx, y) < 0    if sy * tau.y > 0
-    //      e(x + sx, y + sy) + e(x + sx, y) > 0    if sy * tau.y < 0
+    //      e(x + sx, y + sy) + e(x + sx, y) < 0    if sy * tau.y() > 0
+    //      e(x + sx, y + sy) + e(x + sx, y) > 0    if sy * tau.y() < 0
 
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     bool is_ynext(const Point<J> & step) const
     {
-        if (step.y * tau.y > 0) return 2 * e_xy(step) <= step.y * tau.y;
-        return 2 * e_xy(step) >= step.y * tau.y;
+        if (step.y() * tau.y() > 0) return 2 * e_xy(step) <= step.y() * tau.y();
+        return 2 * e_xy(step) >= step.y() * tau.y();
     }
 
 private:
@@ -263,7 +288,7 @@ private:
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     T e_xy(const Point<J> & step) const
     {
-        return error + step.x * tau.x + step.y * tau.y;
+        return error + step.x() * tau.x() + step.y() * tau.y();
     }
 };
 
@@ -285,13 +310,13 @@ Point<int> bresenham_step(const Point<T> & tau, direction dir)
     switch (dir)
     {
         case direction::forward:
-            xstep = tau.x > T() ? 1 : -1;
-            ystep = tau.y > T() ? 1 : -1;
+            xstep = tau.x() > T() ? 1 : -1;
+            ystep = tau.y() > T() ? 1 : -1;
             break;
 
         case direction::backward:
-            xstep = tau.x > T() ? -1 : 1;
-            ystep = tau.y > T() ? -1 : 1;
+            xstep = tau.x() > T() ? -1 : 1;
+            ystep = tau.y() > T() ? -1 : 1;
             break;
 
         default:
@@ -338,30 +363,30 @@ void draw_bresenham(Data & image, const Point<size_t> & ubound, const Line<T> & 
         if (lpix.is_xnext(step))
         {
             // x step
-            for (auto liter = lpix.move(Point<int>{0, step.y}), eiter = epix.move(Point<int>{0, step.y});
-                 std::abs(liter.error) < length * wd && liter.point.y != bnd1.y + step.y;
-                 liter.ystep(step.y), eiter.ystep(step.y))
+            for (auto liter = lpix.move(Point<int>{0, step.y()}), eiter = epix.move(Point<int>{0, step.y()});
+                 std::abs(liter.error) < length * wd && liter.point.y() != bnd1.y() + step.y();
+                 liter.ystep(step.y()), eiter.ystep(step.y()))
             {
                 auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, liter.point, val);
             }
-            if (lpix.point.x == bnd1.x) break;
-            new_step.x = step.x;
+            if (lpix.point.x() == bnd1.x()) break;
+            new_step.x() = step.x();
         }
         if (lpix.is_ynext(step))
         {
             // y step
-            for (auto liter = lpix.move(Point<int>{step.x, 0}), eiter = epix.move(Point<int>{step.x, 0});
-                 std::abs(liter.error) < length * wd && liter.point.x != bnd1.x + step.x;
-                 liter.xstep(step.x), eiter.xstep(step.x))
+            for (auto liter = lpix.move(Point<int>{step.x(), 0}), eiter = epix.move(Point<int>{step.x(), 0});
+                 std::abs(liter.error) < length * wd && liter.point.x() != bnd1.x() + step.x();
+                 liter.xstep(step.x()), eiter.xstep(step.x()))
             {
                 auto r1 = liter.error / length, r2 = std::min(eiter.error / length, T()), r3 = std::max(eiter.error / length - length, T());
                 auto val = max_val * kernel(std::sqrt(r1 * r1 + r2 * r2 + r3 * r3), wd);
                 detail::draw_pixel(image, liter.point, val);
             }
-            if (lpix.point.y == bnd1.y) break;
-            new_step.y = step.y;
+            if (lpix.point.y() == bnd1.y()) break;
+            new_step.y() = step.y();
         }
     }
 }

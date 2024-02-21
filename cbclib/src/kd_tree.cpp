@@ -87,6 +87,21 @@ void test_tree(size_t npts, F range)
         std::copy(query.first->point().begin(), query.first->point().end(), std::experimental::make_ostream_joiner(std::cout, ", "));
         std::cout << "), dist = " << query.second << std::endl;
     }
+
+    tree.clear();
+
+    KDTree<std::array<F, ndim>, int> new_tree;
+    new_tree.insert(std::make_pair(point, 0));
+
+    std::cout << "New tree:\n";
+    for (auto node : new_tree)
+    {
+        std::cout << "{";
+        std::copy(node.point().begin(), node.point().end(), std::experimental::make_ostream_joiner(std::cout, ", "));
+        std::cout << "} ";
+    }
+
+    tree = new_tree;
 }
 
 }

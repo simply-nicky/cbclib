@@ -21,7 +21,9 @@ class Peaks:
         x : x coordinates of peak locations.
         y : y coordinates of peak locations.
     """
-    points : Points
+    x : List[int]
+    y : List[int]
+    size : int
 
     def __init__(self, data: np.ndarray, mask: np.ndarray, radius: int, vmin: float):
         ...
@@ -55,7 +57,7 @@ class Peaks:
         """
         ...
 
-def detect_peaks(data: np.ndarray, mask: np.ndarra, radius: int, vmin: float,
+def detect_peaks(data: np.ndarray, mask: np.ndarray, radius: int, vmin: float,
                  axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[Peaks]:
     ...
 

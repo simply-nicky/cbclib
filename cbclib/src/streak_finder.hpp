@@ -2,6 +2,7 @@
 #define STREAK_FINDER_
 #include "array.hpp"
 #include "label.hpp"
+#include "kd_tree.hpp"
 #include "signal_proc.hpp"
 
 namespace cbclib {
@@ -31,8 +32,8 @@ struct PointHasher
     {
         std::size_t h = 0;
 
-        h ^= std::hash<T>{}(point.x) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        h ^= std::hash<T>{}(point.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<T>{}(point.x()) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        h ^= std::hash<T>{}(point.y()) + 0x9e3779b9 + (h << 6) + (h >> 2);
         return h;
     }
 };
@@ -64,12 +65,24 @@ T logbinom(I n, I k, T p)
 
 // Sparse 2D peaks
 
-struct Peaks
+struct Peaks : public PointsList
 {
-    using point_type = Points::point_type;
-    std::vector<point_type> points;
+    using tree_type = KDTree<point_type, std::nullptr_t>;
+
+    using iterator = container_type::iterator;
+    using const_iterator = container_type::const_iterator;
+
+    tree_type tree;
 
     Peaks() = default;
+
+    template <typename Pts, typename = std::enable_if_t<std::is_same_v<container_type, std::remove_cvref_t<Pts>>>>
+    Peaks(Pts && pts) : PointsList(std::forward<Pts>(pts))
+    {
+        std::vector<std::pair<point_type, std::nullptr_t>> items;
+        std::transform(points.begin(), points.end(), std::back_inserter(items), [](point_type pt){return std::make_pair(pt, nullptr);});
+        tree = tree_type(std::move(items));
+    }
 
     template <typename T>
     Peaks(const array<T> & data, const array<bool> & good, size_t radius, T vmin)
@@ -103,34 +116,33 @@ struct Peaks
                        std::back_inserter(points),
                        [](std::pair<point_type, point_type> && elem){return std::move(elem.second);});
 
-        // Sorting peaks in ascending order
-        std::sort(points.begin(), points.end(), [&data](point_type a, point_type b)
-        {
-            return data[data.ravel_index(a.coordinate())] < data[data.ravel_index(b.coordinate())];
-        });
+        std::vector<std::pair<point_type, std::nullptr_t>> items;
+        std::transform(points.begin(), points.end(), std::back_inserter(items), [](point_type pt){return std::make_pair(pt, nullptr);});
+        tree = tree_type(std::move(items));
     }
 
     template <typename T>
     Peaks(py::array_t<T> d, py::array_t<bool> g, size_t radius, T vmin)
         : Peaks(array<T>(d.request()), array<bool>(g.request()), radius, vmin) {}
 
-    operator std::vector<point_type> && () && { return std::move(points); }
+    const_iterator begin() const {return points.begin();}
+    const_iterator end() const {return points.end();}
+    iterator begin() {return points.begin();}
+    iterator end() {return points.end();}
 
-    std::vector<point_type> & operator*() {return points;}
-    const std::vector<point_type> & operator*() const {return points;}
-
-    std::vector<point_type> * operator->() {return &(points);}
-    const std::vector<point_type> * operator->() const {return &(points);}
-
-    std::vector<point_type::value_type> x() const {return detail::get_x(points);}
-    std::vector<point_type::value_type> y() const {return detail::get_y(points);}
+    iterator erase(iterator pos)
+    {
+        auto iter = tree.find(*pos);
+        if (iter != tree.end()) tree.erase(iter);
+        return points.erase(pos);
+    }
 
     template <typename T>
     Peaks filter(const array<T> & data, const array<bool> & good, const Structure & srt, T vmin, size_t npts) const
     {
         check_data(data, good);
 
-        Peaks result;
+        container_type result;
 
         auto func = [&data, &good, vmin](point_type pt)
         {
@@ -144,24 +156,34 @@ struct Peaks
 
         for (const auto & point : points)
         {
-            Points support {point, func, srt};
+            PointsSet support {point, func, srt};
 
-            if (support->size() >= npts) result->push_back(point);
+            if (support->size() >= npts) result.push_back(point);
         }
 
-        return result;
+        return Peaks(std::move(result));
     }
 
     Peaks mask(const array<bool> & good) const
     {
-        Peaks result;
+        container_type result;
 
         for (const auto & point : points)
         {
-            if (good[good.ravel_index(point.coordinate())]) result->push_back(point);
+            if (good[good.ravel_index(point.coordinate())]) result.push_back(point);
         }
 
-        return result;
+        return Peaks(std::move(result));
+    }
+
+    template <typename T>
+    void sort(const array<T> & data) 
+    {
+        // Sorting peaks in descending order
+        std::sort(points.begin(), points.end(), [&data](point_type a, point_type b)
+        {
+            return data[data.ravel_index(a.coordinate())] > data[data.ravel_index(b.coordinate())];
+        });
     }
 
     std::string info() const
@@ -183,45 +205,83 @@ private:
     }
 };
 
-// Final streak class
+// Streak class
 
 template <typename T>
 struct Streak
 {
     Pixels<T> pixels;
-    std::vector<Line<T>> linelets;
-    Line<T> line;
+    std::map<T, Point<T>> centers;
+    std::map<T, Point<T>> points;
+    Point<T> tau, center;
 
-    Streak(const pset_t<T> & pset) : pixels(pset), line(pixels.get_line(std::numeric_limits<T>::lowest()))
+    template <typename PSet, typename = std::enable_if_t<std::is_same_v<pset_t<T>, std::remove_cvref_t<PSet>>>>
+    Streak(PSet && pset) : pixels(std::forward<PSet>(pset))
     {
-        linelets.push_back(line);
-    }
+        auto line = pixels.get_line();
+        center = pixels.moments.central_moments().center_of_mass(pixels.moments.pt0);
+        tau = line.tau;
 
-    Streak(pset_t<T> && pset) : pixels(std::move(pset)), line(pixels.get_line(std::numeric_limits<T>::lowest()))
-    {
-        linelets.push_back(line);
+        centers.emplace(make_pair(center));
+        points.emplace(make_pair(line.pt0));
+        points.emplace(make_pair(line.pt1));
     }
 
     void insert(Streak && streak)
     {
         pixels.insert(std::move(streak.pixels));
-        linelets.insert(linelets.end(), std::make_move_iterator(streak.linelets.begin()),
-                                        std::make_move_iterator(streak.linelets.end()));
+        for (auto && [_, pt] : streak.centers) centers.emplace(make_pair(std::forward<decltype(pt)>(pt)));
+        for (auto && [_, pt] : streak.points) points.emplace(make_pair(std::forward<decltype(pt)>(pt)));
+    }
+
+    Line<T> central_line() const
+    {
+        if (centers.size()) return Line<T>{centers.begin()->second, std::prev(centers.end())->second};
+        return pixels.get_line();
+    }
+
+    Line<T> line() const
+    {
+        if (points.size()) return Line<T>{points.begin()->second, std::prev(centers.end())->second};
+        return pixels.get_line();
+    }
+
+    T line_median(T dist, T default_value) const
+    {
+        auto ln = line();
+        std::vector<T> vals;
+        for (auto && [pt, val] : pixels.pset)
+        {
+            if (ln.distance(pt) <= dist) vals.emplace_back(val);
+        }
+        if (vals.size()) return *wirthmedian(vals.begin(), vals.end(), std::less<T>());
+        return default_value;
     }
 
     T log_nfa(unsigned min_size, T xtol, T p) const
     {
+        auto ln = pixels.get_line();
         size_t k = 0;
-        for (auto ll: linelets)
-        {
-            if (line.distance(ll.pt0) < xtol && line.distance(ll.pt1) < xtol) k++;
-        }
-        return -static_cast<int>(min_size) * std::log(p) + detail::logbinom(linelets.size(), k, p);
+        for (auto [_, pt]: points) if (ln.distance(pt) < xtol) k++;
+        for (auto [_, pt]: centers) if (ln.distance(pt) < xtol) k++;
+        return -static_cast<int>(min_size) * std::log(p) + detail::logbinom(points.size() + centers.size(), k, p);
     }
 
-    void update_line(T vmin)
+    Line<T> extend_line(const Point<T> & pt) const
     {
-        line = pixels.get_line(vmin);
+        if (centers.size())
+        {
+            if (make_pair(pt).first < centers.begin()->first) return Line<T>{pt, std::prev(centers.end())->second};
+            if (make_pair(pt).first > std::prev(centers.end())->first) return Line<T>{centers.begin()->second, pt};
+        }
+        return central_line();
+    }
+
+private:
+    template <typename Pt, typename = std::enable_if_t<std::is_same_v<Point<T>, std::remove_cvref_t<Pt>>>>
+    auto make_pair(Pt point) const
+    {
+        return std::make_pair(tau.dot(point - center), std::forward<Pt>(point));
     }
 };
 
@@ -265,53 +325,51 @@ struct Pattern
     {
         std::vector<std::array<T, 4>> lines;
 
-        while (peaks->size())
+        while (peaks.points.size())
         {
-            Streak<T> streak = get_streak(peaks->back(), xtol, vmin, max_iter, lookahead);
+            auto seed = get_pset(peaks.points.begin()->x(), peaks.points.begin()->y());
 
-            if (streak.log_nfa(min_size, xtol, xtol / (structure.radius + 0.5)) < log_eps)
+            if (seed.size() >= structure.points.size())
             {
-                update(streak.pixels.pset);
-                peaks = peaks.mask(good);
-                lines.emplace_back(streak.line);
+                Streak<T> streak = get_streak(std::move(seed), peaks, xtol, vmin, max_iter, lookahead);
+
+                if (streak.log_nfa(min_size, xtol, xtol / (structure.radius + 0.5)) < log_eps)
+                {
+                    update(streak.pixels.pset);
+                    peaks = peaks.mask(good);
+                    lines.emplace_back(streak.pixels.get_line());
+                }
+                else peaks.erase(peaks.points.begin());
             }
-            else {peaks->pop_back();}
+            else peaks.erase(peaks.points.begin());
         }
 
         return lines;
     }
 
-    Streak<T> get_streak(int x, int y, T xtol, T vmin, unsigned max_iter, unsigned lookahead) const
+    Streak<T> get_streak(pset_t<T> && seed, Peaks peaks, T xtol, T vmin, unsigned max_iter, unsigned lookahead) const
     {
-        Streak<T> streak {get_pset(x, y)};
+        Streak<T> streak {std::move(seed)};
+
         for (unsigned i = 0; i < max_iter; i++)
         {
-            auto old_size = streak.linelets.size();
+            auto old_size = streak.points.size();
 
-            streak = grow_step(std::move(streak), streak.line.pt0, direction::backward, xtol, vmin, lookahead);
-            streak = grow_step(std::move(streak), streak.line.pt1, direction::forward, xtol, vmin, lookahead);
+            streak = grow_step(std::move(streak), streak.central_line().pt0, peaks, direction::backward, xtol, vmin, lookahead);
+            streak = grow_step(std::move(streak), streak.central_line().pt1, peaks, direction::forward, xtol, vmin, lookahead);
 
-            if (streak.linelets.size() == old_size) break;
-
-            streak.update_line(T());
+            if (streak.points.size() == old_size) break;
         }
 
-        streak.update_line(vmin);
         return streak;
-    }
-
-    template <typename I, typename = std::enable_if_t<std::is_integral_v<I>>>
-    Streak<T> get_streak(const Point<I> & point, T xtol, T vmin, unsigned max_iter, unsigned lookahead) const
-    {
-        return get_streak(point.x, point.y, xtol, vmin, max_iter, lookahead);
     }
 
     pset_t<T> get_pset(int x, int y) const
     {
         pset_t<T> pset;
-        for (auto shift : structure.idxs)
+        for (auto shift : structure.points)
         {
-            point_type pt {x + shift.x, y + shift.y};
+            point_type pt {x + shift.x(), y + shift.y()};
 
             if (data.is_inbound(pt.coordinate()) && good[good.ravel_index(pt.coordinate())])
             {
@@ -324,7 +382,7 @@ struct Pattern
     template <typename I, typename = std::enable_if_t<std::is_integral_v<I>>>
     pset_t<T> get_pset(const Point<I> & point) const
     {
-        return get_pset(point.x, point.y);
+        return get_pset(point.x(), point.y());
     }
 
     std::string info() const
@@ -345,61 +403,78 @@ struct Pattern
 private:
     std::pair<bool, Streak<T>> add_streak(Streak<T> && streak, const point_type & pt, T xtol, T vmin) const
     {
-        Streak new_streak {get_pset(pt.x, pt.y)};
-        if (new_streak.line.magnitude())
-        {
-            T d0 = streak.line.distance(new_streak.line.pt0);
-            T d1 = streak.line.distance(new_streak.line.pt1);
+        Streak<T> new_streak {get_pset(pt)};
+        Line<T> new_line {streak.extend_line(new_streak.center)};
 
-            if (d0 < xtol && d1 < xtol)
+        auto is_close = [&new_line, xtol](const std::pair<T, Point<T>> & item)
+        {
+            return new_line.distance(item.second) < xtol;
+        };
+        if (std::all_of(new_streak.points.begin(), new_streak.points.end(), is_close))
+        {
+            if (data.is_inbound(pt.coordinate()))
             {
-                point_type pt {new_streak.pixels.moments.pt0.round()};
-                if (data.is_inbound(pt.coordinate()))
+                if (new_streak.line_median(M_SQRT2, vmin) > vmin)
                 {
-                    if (data[data.ravel_index(pt.coordinate())] > vmin)
-                    {
-                        streak.insert(std::move(new_streak));
-                        return std::make_pair(true, std::move(streak));
-                    }
+                    streak.insert(std::move(new_streak));
+                    return std::make_pair(true, std::move(streak));
                 }
             }
         }
+
         return std::make_pair(false, std::move(streak));
     }
 
     point_type find_next_step(const Streak<T> & streak, const Point<T> & point, int max_cnt, direction dir) const
     {
-        BhmIterator<T, point_type::value_type> pix {point.round(), streak.line.norm(), point};
-        auto step = bresenham_step(streak.line.tau, dir);
+        auto line = streak.line();
 
+        BhmIterator<T, point_type::value_type> pix {point.round(), line.norm(), point};
+        auto step = bresenham_step(line.tau, dir);
         point_type new_step;
 
-        for (int cnt = 0; cnt <= max_cnt; cnt++)
+        for (int i = 0, cnt = 0; i < max_cnt; i++)
         {
             pix.step(new_step);
             new_step = point_type();
 
-            if (pix.is_xnext(step)) new_step.x = step.x;
-            if (pix.is_ynext(step)) new_step.y = step.y;
+            if (pix.is_xnext(step))
+            {
+                new_step.x() = step.x(); cnt++;
+                if (cnt > max_cnt) break;
+            }
+            if (pix.is_ynext(step))
+            {
+                new_step.y() = step.y(); cnt++;
+            }
         }
-
+    
         return pix.point;
     }
 
-    Streak<T> grow_step(Streak<T> && streak, Point<T> point, direction dir, T xtol, T vmin, unsigned lookahead) const
+    Streak<T> grow_step(Streak<T> && streak, Point<T> point, const Peaks & peaks, direction dir, T xtol, T vmin, unsigned lookahead) const
     {
-        unsigned max_gap = std::sqrt(streak.line.magnitude()) / structure.radius;
+        unsigned max_gap = std::sqrt(streak.line().magnitude()) / structure.radius;
         unsigned tries = 0, gap = 0;
+        T threshold;
 
-        while (tries < lookahead && gap < max_gap)
+        while (tries < lookahead && gap <= max_gap)
         {
-            point_type pt = find_next_step(streak, point, structure.radius, dir);
+            point_type pt = find_next_step(streak, point, 2 * structure.radius + 1, dir);
+
+            auto query = peaks.tree.find_nearest(pt);
+            if (query.second < structure.radius)
+            {
+                pt = query.first->point();
+                threshold = std::numeric_limits<T>::lowest();
+            }
+            else threshold = vmin;
 
             if (!data.is_inbound(pt.coordinate())) break;
 
             if (good[good.ravel_index(pt.coordinate())])
             {
-                auto [is_add, new_streak] = add_streak(std::move(streak), pt, xtol, vmin);
+                auto [is_add, new_streak] = add_streak(std::move(streak), pt, xtol, threshold);
 
                 if (is_add) return new_streak;
                 else
@@ -421,7 +496,7 @@ template <typename T>
 std::array<T, 4> test_line(std::array<int, 4> pts, py::array_t<T> data, py::array_t<bool> mask, Structure srt);
 
 template <typename T>
-std::array<T, 4> test_grow(int x, int y, py::array_t<T> data, py::array_t<bool> mask, Structure srt,
+std::array<T, 4> test_grow(size_t index, Peaks peaks, py::array_t<T> data, py::array_t<bool> mask, Structure srt,
                            T xtol, T vmin, unsigned max_iter, unsigned lookahead);
 
 }

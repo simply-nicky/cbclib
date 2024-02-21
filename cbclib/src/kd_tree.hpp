@@ -255,14 +255,36 @@ public:
     using query_t = std::pair<const_iterator, F>;
     using stack_t = std::vector<std::pair<const_iterator, F>>;
 
-    KDTree(std::vector<item_type> && items)
+    KDTree() : root(nullptr), rect(nullptr) {}
+
+    KDTree(std::vector<item_type> && items) : KDTree()
     {
         root = build_tree(std::make_move_iterator(items.begin()),
                           std::make_move_iterator(items.end()), nullptr, 0);
         if (root) rect = new rect_t{*this};
     }
-    
+
+    KDTree(const KDTree<Point, Data> & rhs) : root(clone_node(rhs.root)), rect(clone_rect(rhs.rect)) {}
+    KDTree(KDTree<Point, Data> && rhs) : root(rhs.root), rect(rhs.rect)
+    {
+        rhs.root = nullptr; rhs.rect = nullptr;
+    }
+
     ~KDTree() {clear();}
+
+    KDTree<Point, Data> & operator=(const KDTree<Point, Data> & rhs)
+    {
+        KDTree<Point, Data> copy = rhs;
+        std::swap(*this, copy);
+        return *this;
+    }
+
+    KDTree<Point, Data> & operator=(KDTree<Point, Data> && rhs)
+    {
+        std::swap(root, rhs.root);
+        std::swap(rect, rhs.rect);
+        return *this;
+    }
 
     auto ndim() const -> decltype(std::declval<Point &>().size())
     {
@@ -275,7 +297,7 @@ public:
     void clear()
     {
         root = clear_node(root);
-        clear_rect();
+        rect = clear_rect(rect);
     }
 
     const_iterator begin() const
@@ -291,7 +313,8 @@ public:
     const_iterator insert(item_type && item)
     {
         const_iterator inserted;
-        std::tie(root, inserted) = insert_node(root, std::move(item), root, root->cut_dim);
+        if (root) std::tie(root, inserted) = insert_node(root, std::move(item), root, root->cut_dim);
+        else std::tie(root, inserted) = insert_node(root, std::move(item), root, 0);
 
         if (inserted != end())
         {
@@ -317,7 +340,7 @@ public:
                     if (pt[i] == rect->high[i]) rect->high[i] = find_max(i)->point()[i];
                 }
             }
-            else clear_rect();
+            else rect = clear_rect(rect);
         }
 
         return removed;
@@ -389,12 +412,10 @@ private:
         }
     }
 
-    void clear_rect()
+    rect_t * clear_rect(rect_t * r)
     {
-        if (rect != nullptr)
-        {
-            delete rect; rect = nullptr;
-        }
+        delete r;
+        return nullptr;
     }
 
     node_t * clear_node(node_t * node)
@@ -403,11 +424,27 @@ private:
         {
             node->left = clear_node(node->left);
             node->right = clear_node(node->right);
-
-            delete node; node = nullptr;
+            delete node;
         }
-        
-        return node;
+
+        return nullptr;
+    }
+
+    node_t * clone_node(node_t * node)
+    {
+        if (node == nullptr)
+        {
+            return node;
+        }
+        else
+        {
+            return new node_t{node->item, node->cut_dim, clone_node(node->left), clone_node(node->right), node->parent};
+        }
+    }
+
+    rect_t * clone_rect(rect_t * r)
+    {
+        return new rect_t(*r);
     }
 
     std::tuple<node_t *, const_iterator> insert_node(node_t * node, item_type && item, node_t * par, int dir)

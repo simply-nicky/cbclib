@@ -10,17 +10,17 @@ std::array<T, 4> test_line(std::array<int, 4> pts, py::array_t<T> data, py::arra
 
     Streak<T> streak {pattern.get_pset(x0, y0)};
     streak.insert(pattern.get_pset(x1, y1));
-    streak.update_line(T());
-    return streak.line;
+    return streak.pixels.get_line();
 }
 
 template <typename T>
-std::array<T, 4> test_grow(int x, int y, py::array_t<T> data, py::array_t<bool> mask, Structure srt,
+std::array<T, 4> test_grow(size_t index, Peaks peaks, py::array_t<T> data, py::array_t<bool> mask, Structure srt,
                            T xtol, T vmin, unsigned max_iter, unsigned lookahead)
 {
     Pattern<T> pattern {data, mask, srt};
+    auto seed = pattern.get_pset(peaks.points[index].x(), peaks.points[index].y());
 
-    return pattern.get_streak(x, y, xtol, vmin, max_iter, lookahead).line;
+    return pattern.get_streak(std::move(seed), peaks, xtol, vmin, max_iter, lookahead).pixels.get_line();
 }
 
 template <typename T>
@@ -57,7 +57,10 @@ std::vector<Peaks> detect_peaks(py::array_t<T> data, py::array_t<bool> mask, siz
         #pragma omp for schedule(static) nowait
         for (size_t i = 0; i < repeats; i++)
         {
-            buffer.emplace_back(darr.slice(i, axes), marr, radius, vmin);
+            e.run([&]
+            {
+                buffer.emplace_back(darr.slice(i, axes), marr, radius, vmin);
+            });
         }
 
         #pragma omp for schedule(static) ordered
@@ -119,7 +122,10 @@ auto filter_peaks_vec(std::vector<Peaks> peaks, py::array_t<T> data, py::array_t
         #pragma omp for schedule(static) nowait
         for (size_t i = 0; i < repeats; i++)
         {
-            buffer.emplace_back(peaks[i].filter(darr.slice(i, axes), marr, structure, vmin, npts));
+            e.run([&]
+            {
+                buffer.emplace_back(peaks[i].filter(darr.slice(i, axes), marr, structure, vmin, npts));
+            });
         }
 
         #pragma omp for schedule(static) ordered
@@ -185,8 +191,11 @@ auto detect_streaks_vec(std::vector<Peaks> peaks, py::array_t<T> data, py::array
         #pragma omp for schedule(static) nowait
         for (size_t i = 0; i < repeats; i++)
         {
-            Pattern<T> pattern {darr.slice(i, axes), marr, structure};
-            buffer.emplace_back(pattern.find_streaks(std::move(peaks[i]), xtol, vmin, log_eps, max_iter, lookahead, min_size));
+            e.run([&]
+            {
+                Pattern<T> pattern {darr.slice(i, axes), marr, structure};
+                buffer.emplace_back(pattern.find_streaks(std::move(peaks[i]), xtol, vmin, log_eps, max_iter, lookahead, min_size));
+            });
         }
 
         #pragma omp for schedule(static) ordered
@@ -240,17 +249,23 @@ PYBIND11_MODULE(streak_finder, m)
                 return peaks.mask(array<bool>(mask.request()));
             },
             py::arg("mask"))
-        .def_property("points",
-            [](Peaks & peaks)
+        .def("sort",
+            [](Peaks & peaks, py::array_t<float> data)
             {
-                Points pts;
-                pts->insert(peaks->begin(), peaks->end());
-                return pts;
-            }, nullptr, py::keep_alive<0, 1>())
+                return peaks.sort(array<float>(data.request()));
+            }, py::arg("data"))
+        .def("sort",
+            [](Peaks & peaks, py::array_t<double> data)
+            {
+                return peaks.sort(array<double>(data.request()));
+            }, py::arg("data"))
+        .def_property("size", [](const Peaks & peaks){return peaks.points.size();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("x", [](const Peaks & peaks){return peaks.x();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("y", [](const Peaks & peaks){return peaks.y();}, nullptr, py::keep_alive<0, 1>())
         .def("__repr__", &Peaks::info);
 
     m.def("test_line", &test_line<double>, py::arg("pts"), py::arg("data"), py::arg("mask"), py::arg("structure"));
-    m.def("test_grow", &test_grow<double>, py::arg("x"), py::arg("y"), py::arg("data"), py::arg("mask"), py::arg("structure"), py::arg("xtol"), py::arg("vmin"), py::arg("max_iter"), py::arg("lookahead"));
+    m.def("test_grow", &test_grow<double>, py::arg("index"), py::arg("peaks"), py::arg("data"), py::arg("mask"), py::arg("structure"), py::arg("xtol"), py::arg("vmin"), py::arg("max_iter"), py::arg("lookahead"));
 
     m.def("detect_peaks", &detect_peaks<double>, py::arg("data"), py::arg("mask"), py::arg("radius"), py::arg("vmin"), py::arg("axes")=std::nullopt, py::arg("num_threads")=1);
     m.def("detect_peaks", &detect_peaks<float>, py::arg("data"), py::arg("mask"), py::arg("radius"), py::arg("vmin"), py::arg("axes")=std::nullopt, py::arg("num_threads")=1);

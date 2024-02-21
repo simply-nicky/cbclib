@@ -117,10 +117,10 @@ auto draw_line_table(py::array_t<T, py::array::c_style | py::array::forcecast> l
     if (shape)
     {
         check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() != 2;});
-        ubound.x = shape.value()[shape.value().size() - 1] - 1;
-        ubound.y = shape.value()[shape.value().size() - 2] - 1;
+        ubound.x() = shape.value()[shape.value().size() - 1] - 1;
+        ubound.y() = shape.value()[shape.value().size() - 2] - 1;
     }
-    else {ubound.x = INT_MAX; ubound.y = INT_MAX;}
+    else {ubound.x() = INT_MAX; ubound.y() = INT_MAX;}
 
     table_t<Out> result;
 
@@ -159,10 +159,10 @@ auto draw_line_table_vec(std::vector<py::array_t<T, py::array::c_style | py::arr
     if (shape)
     {
         check_shape(shape.value(), [](const std::vector<size_t> & shape){return shape.size() < 3;});
-        ubound.x = shape.value()[shape.value().size() - 1] - 1;
-        ubound.y = shape.value()[shape.value().size() - 2] - 1;
+        ubound.x() = shape.value()[shape.value().size() - 1] - 1;
+        ubound.y() = shape.value()[shape.value().size() - 2] - 1;
     }
-    else {ubound.x = INT_MAX; ubound.y = INT_MAX;}
+    else {ubound.x() = INT_MAX; ubound.y() = INT_MAX;}
 
     std::vector<array<T>> lvec;
     for (const auto & obj : lines)

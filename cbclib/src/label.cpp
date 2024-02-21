@@ -6,7 +6,7 @@ namespace cbclib {
 template <typename T>
 Regions label2d(const array<T> & mask, const Structure & str, size_t npts)
 {
-    std::vector<Points> regions;
+    std::vector<PointsSet> regions;
     std::vector<unsigned char> used (mask.size, false);
 
     for (size_t idx = 0; idx < mask.size; idx++)
@@ -15,7 +15,7 @@ Regions label2d(const array<T> & mask, const Structure & str, size_t npts)
         {
             int y = mask.index_along_dim(idx, 0);
             int x = mask.index_along_dim(idx, 1);
-            Points points (Points::point_type{x, y}, mask, str);
+            PointsSet points (PointsSet::point_type{x, y}, mask, str);
 
             for (auto pt : *points)
             {
@@ -95,23 +95,25 @@ PYBIND11_MODULE(label, m)
         return;
     }
 
-    py::class_<Points>(m, "Points")
+    py::class_<PointsSet>(m, "PointsSet")
         .def(py::init([](std::vector<int> xvec, std::vector<int> yvec)
         {
-            std::set<Points::point_type> points;
-            for (auto [x, y] : zip::zip(xvec, yvec)) points.insert({x, y});
-            return Points(std::move(points));
+            PointsSet::container_type points;
+            for (auto [x, y] : zip::zip(xvec, yvec)) points.emplace(PointsSet::point_type{x, y});
+            return PointsSet(std::move(points));
         }), py::arg("x"), py::arg("y"))
-        .def_property("size", [](const Points & points){return points.points.size();}, nullptr, py::keep_alive<0, 1>())
-        .def_property("x", [](const Points & points){return points.x();}, nullptr, py::keep_alive<0, 1>())
-        .def_property("y", [](const Points & points){return points.y();}, nullptr, py::keep_alive<0, 1>())
-        .def("__repr__", &Points::info);
+        .def_property("size", [](const PointsSet & points){return points.points.size();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("x", [](const PointsSet & points){return points.x();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("y", [](const PointsSet & points){return points.y();}, nullptr, py::keep_alive<0, 1>())
+        .def("__repr__", &PointsSet::info);
 
     py::class_<Structure>(m, "Structure")
         .def(py::init<int, int>(), py::arg("radius"), py::arg("rank"))
         .def_readonly("radius", &Structure::radius)
         .def_readonly("rank", &Structure::rank)
-        .def_property("points", [](const Structure & srt){return Points{srt.idxs};}, nullptr, py::keep_alive<0, 1>())
+        .def_property("size", [](const Structure & srt){return srt.points.size();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("x", [](const Structure & srt){return srt.x();}, nullptr, py::keep_alive<0, 1>())
+        .def_property("y", [](const Structure & srt){return srt.y();}, nullptr, py::keep_alive<0, 1>())
         .def("__repr__", &Structure::info);
 
     py::class_<Regions>(m, "Regions")
@@ -127,7 +129,7 @@ PYBIND11_MODULE(label, m)
                  if (i >= regions.regions.size()) throw py::index_error();
                  return regions.regions[i];
         })
-        .def("__setitem__", [](Regions & regions, size_t i, Points region)
+        .def("__setitem__", [](Regions & regions, size_t i, PointsSet region)
         {
             if (i >= regions.regions.size()) throw py::index_error();
             regions.regions[i] = std::move(region);
@@ -173,7 +175,7 @@ PYBIND11_MODULE(label, m)
         }, py::keep_alive<0, 1>())
         .def("__len__", [](Regions & regions){return regions.regions.size();})
         .def("__repr__", &Regions::info)
-        .def("append", [](Regions & regions, Points region){regions.regions.emplace_back(std::move(region));}, py::keep_alive<1, 2>())
+        .def("append", [](Regions & regions, PointsSet region){regions.regions.emplace_back(std::move(region));}, py::keep_alive<1, 2>())
         .def("filter", &Regions::filter, py::arg("structure"), py::arg("npts"))
         .def("mask", [](Regions & regions) -> py::array_t<bool>
         {

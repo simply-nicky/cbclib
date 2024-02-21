@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Iterator, List, Optional, Tuple, Union
 import numpy as np
 
-class Points:
+class PointsSet:
     x : List[int]
     y : List[int]
     size : int
@@ -30,7 +30,9 @@ class Structure:
     """
     radius : int
     rank : int
-    points : Points
+    size : int
+    x : List[int]
+    y : List[int]
 
     def __init__(self, radius: int, rank: int):
         ...
@@ -44,19 +46,19 @@ class Regions:
     def __delitem__(self, idxs: Union[int, slice]):
         ...
 
-    def __getitem__(self, idxs: Union[int, slice]) -> Union[Points, Regions]:
+    def __getitem__(self, idxs: Union[int, slice]) -> Union[PointsSet, Regions]:
         ...
 
-    def __iter__(self) -> Iterator[Points]:
+    def __iter__(self) -> Iterator[PointsSet]:
         ...
 
     def __len__(self) -> int:
         ...
 
-    def __setitem__(self, idxs: Union[int, slice], value: Union[Points, Regions]):
+    def __setitem__(self, idxs: Union[int, slice], value: Union[PointsSet, Regions]):
         ...
 
-    def append(self, value: Points):
+    def append(self, value: PointsSet):
         ...
 
     def filter(self, structure: Structure, npts: int) -> Regions:

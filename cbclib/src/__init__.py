@@ -4,7 +4,7 @@ from .geometry import (euler_angles, euler_matrix, tilt_angles, tilt_matrix, det
                        k_to_det, k_to_smp, rotate, source_lines)
 from .image_proc import draw_line_mask, draw_line_image, draw_line_table
 from .kd_tree import test_tree
-from .label import Points, Structure, Regions, label
+from .label import PointsSet, Structure, Regions, label
 from .median import median, median_filter, maximum_filter, robust_mean, robust_lsq
 from .signal_proc import binterpolate, kr_predict, local_maxima, unique_indices
-from .streak_finder import Peaks, detect_peaks, detect_streaks, filter_peaks
+from .streak_finder import Peaks, detect_peaks, detect_streaks, filter_peaks, test_grow, test_line

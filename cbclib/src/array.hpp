@@ -6,14 +6,23 @@ namespace cbclib {
 
 namespace detail{
 
-template <typename T, typename U>
+/* Returns a positive remainder of division */
+template <typename T, typename U, typename = std::enable_if_t<std::is_integral_v<T> && std::is_integral_v<U>>>
 constexpr auto modulo(T a, U b) -> decltype(a % b)
 {
     return (a % b + b) % b;
 }
 
+/* Returns a positive remainder of division */
+template <typename T, typename U, typename = std::enable_if_t<std::is_floating_point_v<T> || std::is_floating_point_v<U>>>
+constexpr auto modulo(T a, U b) -> decltype(std::fmod(a, b))
+{
+    return std::fmod(std::fmod(a, b) + b, b);
+}
+
+/* Returns a quotient: a = quotient * b + modulo(a, b) */
 template <typename T, typename U>
-constexpr auto remainder(T a, U b) -> decltype(modulo(a, b))
+constexpr auto quotient(T a, U b) -> decltype(modulo(a, b))
 {
     return (a - modulo(a, b)) / b;
 }
@@ -24,7 +33,7 @@ constexpr std::make_signed_t<T> mirror(T a, U min, V max)
     using F = std::make_signed_t<T>;
     F val = std::minus<F>()(a, min);
     F period = std::minus<F>()(max, min) - 1;
-    if (modulo(remainder(val, period), 2)) return period - modulo(val, period) + min;
+    if (modulo(quotient(val, period), 2)) return period - modulo(val, period) + min;
     else return modulo(val, period) + min;
 }
 
@@ -34,7 +43,7 @@ constexpr std::make_signed_t<T> reflect(T a, U min, V max)
     using F = std::make_signed_t<T>;
     F val = std::minus<F>()(a, min);
     F period = std::minus<F>()(max, min);
-    if (modulo(remainder(val, period), 2)) return period - 1 - modulo(val, period) + min;
+    if (modulo(quotient(val, period), 2)) return period - 1 - modulo(val, period) + min;
     else return modulo(val, period) + min;
 }
 
