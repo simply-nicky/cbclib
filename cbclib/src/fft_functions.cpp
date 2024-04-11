@@ -105,7 +105,7 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
     {
         std::copy(std::next(iarr.shape.begin(), ax), iarr.shape.end(), std::back_inserter(*shape_seq));
     }
-    check_shape(*shape_seq, [&seq](const std::vector<size_t> & shape){return shape.size() != seq.size();});
+    if (shape_seq->size() != seq.size()) fail_container_check("wrong number of dimensions", *shape_seq);
 
     std::vector<size_t> oshape (iarr.shape.begin(), std::next(iarr.shape.begin(), ax));
     oshape.insert(oshape.end(), shape_seq->begin(), shape_seq->end());
@@ -113,7 +113,6 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
     auto out = py::array_t<Out>(oshape);
     auto oarr = array<Out>(out.request());
 
-    std::vector<size_t> org (seq.size());
     std::vector<size_t> axes (seq.size());
     std::iota(axes.begin(), axes.end(), ax);
     size_t repeats = std::reduce(iarr.shape.begin(), std::next(iarr.shape.begin(), ax), 1, std::multiplies());
@@ -156,10 +155,10 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
         {
             e.run([&]
             {
-                write_buffer(ibuffer, iarr.slice(i, axes), fshape, org);
+                write_buffer(ibuffer, iarr.slice(i, axes), fshape);
                 fftw_execute(fft_plan, ibuf_inp, ibuf_out);
                 for (size_t j = 0; j < ibuffer.size; j++) ibuf_out[j] *= factor;
-                read_buffer(ibuffer, oarr.slice(i, axes), fshape, org);
+                read_buffer(ibuffer, oarr.slice(i, axes), fshape);
             });
         }
     }
@@ -208,9 +207,10 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     size_t repeats = std::reduce(iarr.shape.begin(), std::next(iarr.shape.begin(), ax), 1, std::multiplies());
     threads = (threads > repeats) ? repeats : threads;
 
-    std::vector<size_t> fshape;
-    std::transform(karr.shape.begin(), karr.shape.end(), ishape.begin(), std::back_inserter(fshape),
-                   [](size_t nk, size_t ni){return next_fast_len(nk + ni);});
+    std::vector<size_t> oshape, fshape;
+    std::transform(karr.shape.begin(), karr.shape.end(), ishape.begin(), std::back_inserter(oshape),
+                   [](size_t nk, size_t ni){return nk + ni - 1;});
+    std::transform(oshape.begin(), oshape.end(), std::back_inserter(fshape), [](size_t n){return next_fast_len(n);});
     auto bshape = fftw_buffer_shape<Out>(fshape);
 
     Out factor = 1.0 / std::reduce(fshape.begin(), fshape.end(), 1, std::multiplies());
@@ -220,7 +220,10 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     py::gil_scoped_release release;
 
     vector_array<Out> kbuffer (bshape);
-    write_buffer(kbuffer, karr, fshape, write_origin(fshape, karr.shape));
+    std::vector<long> w_origin;
+
+    write_origin(oshape.begin(), oshape.end(), karr.shape.begin(), std::back_inserter(w_origin));
+    write_buffer(kbuffer, karr, fshape, w_origin);
 
     auto kbuf_inp = kbuffer.data();
     auto kbuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(kbuffer.data());
@@ -233,24 +236,25 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
     #pragma omp parallel num_threads(threads)
     {
         vector_array<Out> ibuffer (bshape);
+        std::vector<long> w_origin, r_origin;
+
+        write_origin(oshape.begin(), oshape.end(), ishape.begin(), std::back_inserter(w_origin));
+        read_origin(oshape.begin(), oshape.end(), ishape.begin(), std::back_inserter(r_origin));
 
         auto ibuf_inp = ibuffer.data();
         auto ibuf_out = reinterpret_cast<std::complex<remove_complex_t<Out>> *>(ibuffer.data());
         auto buf_size = is_complex_v<Out> ? ibuffer.size : ibuffer.size / 2;
-
-        auto worg = write_origin(fshape, ishape);
-        auto rorg = read_origin(fshape, ishape);
 
         #pragma omp for
         for (size_t i = 0; i < repeats; i++)
         {
             e.run([&]
             {
-                write_buffer(ibuffer, iarr.slice(i, axes), fshape, worg);
+                write_buffer(ibuffer, iarr.slice(i, axes), fshape, w_origin);
                 fftw_execute(fwd_plan, ibuf_inp, ibuf_out);
                 for (size_t j = 0; j < buf_size; j++) ibuf_out[j] *= kbuf_out[j] * factor;
                 fftw_execute(bwd_plan, ibuf_out, ibuf_inp);
-                read_buffer(ibuffer, oarr.slice(i, axes), fshape, rorg);
+                read_buffer(ibuffer, oarr.slice(i, axes), fshape, r_origin);
             });
         }
     }
@@ -263,12 +267,18 @@ auto fft_convolve(py::array_t<Inp> inp, py::array_t<Krn> kernel, std::optional<S
 }
 
 template <typename T>
+auto gauss_radius(T sigma, T truncate)
+{
+    if (sigma * truncate < 0) throw std::invalid_argument("Radius must be a non-negative number");
+    return 2 * size_t(sigma * truncate + 0.5);
+}
+
+template <typename T>
 py::array_t<T> gaussian_kernel(T sigma, unsigned order, T truncate)
 {
-    auto size = 2 * size_t(sigma * truncate) + 1;
-    auto out = py::array_t<T>({py::ssize_t(size)});
-
-    gauss_kernel(array<T>(out.request()).begin(), size, sigma, order);
+    auto radius = gauss_radius(sigma, truncate);
+    auto out = py::array_t<T>(2 * radius + 1);
+    gauss_kernel(array<T>(out.request()).begin(), 2 * radius + 1, radius, sigma, order);
 
     return out;
 }
@@ -283,9 +293,10 @@ py::array_t<T> gaussian_kernel_vec(std::vector<T> sigma, U order, T truncate)
     for (size_t i = 0; i < sigma.size(); i++)
     {
         auto & gauss = gaussians.emplace_back();
-        auto size = 2 * size_t(sigma[i] * truncate) + 1;
-        gauss_kernel(std::back_inserter(gauss), size, sigma[i], orders[i]);
-        shape.push_back(size);
+
+        auto radius = gauss_radius(sigma[i], truncate);
+        gauss_kernel(std::back_inserter(gauss), 2 * radius + 1, radius, sigma[i], orders[i]);
+        shape.push_back(2 * radius + 1);
     }
 
     auto out = py::array_t<T>(shape);
@@ -302,7 +313,7 @@ py::array_t<T> gaussian_kernel_vec(std::vector<T> sigma, U order, T truncate)
 }
 
 template <typename T, typename F>
-void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigmas, const std::vector<unsigned> & orders, F truncate, extend mode, unsigned threads)
+void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigma, const std::vector<unsigned> & order, F truncate, extend mode, unsigned threads)
 {
     thread_exception e;
 
@@ -310,17 +321,22 @@ void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigmas,
 
     for (size_t axis = 0; axis < input.ndim; axis++)
     {
-        if (!isclose(sigmas[axis], F()))
+        if (!isclose(sigma[axis], F()))
         {
             auto repeats = input.size / input.shape[axis];
-            auto t = (threads > repeats) ? repeats : threads;
 
-            std::array<size_t, 1> fshape = {next_fast_len(2 * size_t(sigmas[axis] * truncate) + 1 + input.shape[axis])};
+            auto radius = gauss_radius(sigma[axis], truncate);
+            std::array<size_t, 1> gshape = {2 * radius + 1};
+            std::array<size_t, 1> oshape = {gshape[0] + input.shape[axis] - 1};
+            std::array<size_t, 1> fshape = {next_fast_len(oshape[0])};
             size_t buf_size = fftw_buffer_shape<T>(fshape)[0];
             T factor = 1.0 / fshape[0];
 
             std::vector<T> kbuffer;
-            gauss_kernel(std::back_inserter(kbuffer), buf_size, sigmas[axis], orders[axis]);
+            std::array<long, 1> w_origin;
+
+            write_origin(oshape.begin(), oshape.end(), gshape.begin(), w_origin.begin());
+            gauss_kernel(std::back_inserter(kbuffer), buf_size, w_origin[0] + radius, sigma[axis], order[axis]);
             auto kbuf_inp = kbuffer.data();
             auto kbuf_out = reinterpret_cast<std::complex<F> *>(kbuffer.data());
 
@@ -329,9 +345,13 @@ void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigmas,
 
             fftw_execute(fwd_plan, kbuf_inp, kbuf_out);
 
-            #pragma omp parallel num_threads(t)
+            #pragma omp parallel num_threads(threads)
             {
                 std::vector<T> ibuffer (buf_size, T());
+                std::array<long, 1> w_origin, r_origin;
+
+                write_origin(oshape.begin(), oshape.end(), std::next(input.shape.begin(), axis), w_origin.begin());
+                read_origin(oshape.begin(), oshape.end(), std::next(input.shape.begin(), axis), r_origin.begin());
 
                 auto ibuf_inp = ibuffer.data();
                 auto ibuf_out = reinterpret_cast<std::complex<F> *>(ibuffer.data());
@@ -342,11 +362,11 @@ void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigmas,
                 {
                     e.run([&]
                     {
-                        write_line(ibuffer, fshape[0], input.line_begin(axis, i), input.line_end(axis, i), mode);
+                        write_line(ibuffer, fshape[0], w_origin[0], input.line_begin(axis, i), input.line_end(axis, i), mode);
                         fftw_execute(fwd_plan, ibuf_inp, ibuf_out);
                         for (size_t j = 0; j < buf_size; j++) ibuf_out[j] *= kbuf_out[j] * factor;
                         fftw_execute(bwd_plan, ibuf_out, ibuf_inp);
-                        read_line(ibuffer, fshape[0], out.line_begin(axis, i), out.line_end(axis, i));
+                        read_line(ibuffer, fshape[0], r_origin[0], out.line_begin(axis, i), out.line_end(axis, i));
                     });
                 }
             }
@@ -430,6 +450,8 @@ py::array_t<T> gaussian_gradient_magnitude(py::array_t<T> inp, U sigma, std::str
 PYBIND11_MODULE(fft_functions, m)
 {
     using namespace cbclib;
+    py::options options;
+    options.disable_function_signatures();
 
     try
     {
@@ -516,5 +538,4 @@ PYBIND11_MODULE(fft_functions, m)
     m.def("gaussian_gradient_magnitude", &gaussian_gradient_magnitude<std::complex<float>, std::vector<float>>, py::arg("inp"), py::arg("sigma"), py::arg("mode") = "reflect", py::arg("truncate") = 4.0, py::arg("num_threads") = 1);
     m.def("gaussian_gradient_magnitude", &gaussian_gradient_magnitude<std::complex<double>, double>, py::arg("inp"), py::arg("sigma"), py::arg("mode") = "reflect", py::arg("truncate") = 4.0, py::arg("num_threads") = 1);
     m.def("gaussian_gradient_magnitude", &gaussian_gradient_magnitude<std::complex<double>, std::vector<double>>, py::arg("inp"), py::arg("sigma"), py::arg("mode") = "reflect", py::arg("truncate") = 4.0, py::arg("num_threads") = 1);
-
 }

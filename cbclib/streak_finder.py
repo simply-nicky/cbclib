@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from typing import List, Tuple, Union
 import numpy as np
 from .data_container import DataContainer
-from .cbc_setup import Streaks, ScanStreaks
-from .cxi_protocol import Indices
+from .cbc_setup import Streaks
+from .annotations import Shape, Indices
 from .src import detect_peaks, detect_streaks, filter_peaks, Structure, Peaks
 
 Line = Tuple[float, float, float, float]
@@ -27,10 +27,11 @@ class CBSDetector(DataContainer):
         return self.replace(data=self.data[idxs], mask=self.mask[idxs])
 
     @property
-    def shape(self) -> Tuple[int, int]:
+    def shape(self) -> Shape:
         return self.data.shape
 
-    def find_peaks(self, vmin: float, npts: int, connectivity: Structure=Structure(1, 1)) -> List[Peaks]:
+    def find_peaks(self, vmin: float, npts: int,
+                   connectivity: Structure=Structure(1, 1)) -> List[Peaks]:
         """Find peaks in a pattern. Returns a sparse set of peaks which values are above a threshold
         ``vmin`` that have a supporing set of a size larger than ``npts``. The minimal distance
         between peaks is ``2 * structure.radius``.
@@ -51,7 +52,7 @@ class CBSDetector(DataContainer):
                             num_threads=self.num_threads)
 
     def detect(self, peaks: Union[Peaks, List[Peaks]], xtol: float, vmin: float, log_eps: float=0.0,
-               max_iter: int=100, lookahead: int=3, min_size: int=5) -> Union[Streaks, ScanStreaks]:
+               max_iter: int=100, lookahead: int=3, min_size: int=5) -> Streaks:
         """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
         extended with a connectivity structure.
 
@@ -75,11 +76,14 @@ class CBSDetector(DataContainer):
             peaks = peaks[0]
 
         if isinstance(peaks, Peaks):
-            streaks = np.array(detect_streaks(peaks, self.data, self.mask, self.structure, xtol,
-                                              vmin, log_eps, max_iter, lookahead, min_size))
-            return Streaks(*streaks.T)
+            streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol,
+                                     vmin, log_eps, max_iter, lookahead, min_size)
+            x0, y0, x1, y1 = np.array(streaks).T
+            return Streaks(x0, y0, x1, y1)
 
         streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, log_eps,
                                  max_iter, lookahead, min_size, num_threads=self.num_threads)
+        x0, y0, x1, y1 = np.concatenate(streaks).T
+        idxs = np.concatenate([np.full((len(val),), idx) for idx, val in enumerate(streaks)])
 
-        return ScanStreaks({idx: Streaks(*np.array(val).T) for idx, val in enumerate(streaks)})
+        return Streaks(x0, y0, x1, y1, idxs)

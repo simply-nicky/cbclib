@@ -11,7 +11,7 @@ except ImportError:
 else:
     USE_CYTHON = True
 
-__version__ = '0.7.2'
+__version__ = '0.8.0'
 
 ext = '.pyx' if USE_CYTHON else '.c'
 extension_args = {'language': 'c',

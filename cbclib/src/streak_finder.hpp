@@ -10,21 +10,6 @@ namespace cbclib {
 namespace detail{
 
 // Taken from the boost::hash_combine: https://www.boost.org/doc/libs/1_35_0/doc/html/boost/hash_combine_id241013.html
-template <typename T, size_t N>
-struct ArrayHasher
-{
-    std::size_t operator()(const std::array<T, N> & arr) const
-    {
-        std::size_t h = 0;
-
-        for (auto elem : arr)
-        {
-            h ^= std::hash<T>{}(elem) + 0x9e3779b9 + (h << 6) + (h >> 2); 
-        }
-        return h;
-    }   
-};
-
 template <typename T>
 struct PointHasher
 {
@@ -281,7 +266,7 @@ private:
     template <typename Pt, typename = std::enable_if_t<std::is_same_v<Point<T>, std::remove_cvref_t<Pt>>>>
     auto make_pair(Pt point) const
     {
-        return std::make_pair(tau.dot(point - center), std::forward<Pt>(point));
+        return std::make_pair(dot(tau, point - center), std::forward<Pt>(point));
     }
 };
 
@@ -454,7 +439,7 @@ private:
 
     Streak<T> grow_step(Streak<T> && streak, Point<T> point, const Peaks & peaks, direction dir, T xtol, T vmin, unsigned lookahead) const
     {
-        unsigned max_gap = std::sqrt(streak.line().magnitude()) / structure.radius;
+        unsigned max_gap = amplitude(streak.line().tau) / structure.radius;
         unsigned tries = 0, gap = 0;
         T threshold;
 
@@ -485,7 +470,7 @@ private:
             }
             else gap++;
 
-            point = std::move(pt);
+            point = pt.point();
         }
 
         return streak;

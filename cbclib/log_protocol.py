@@ -36,8 +36,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import os
 import re
-from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple, TypeVar, get_type_hints
+from typing import (Any, ClassVar, Dict, List, Optional, Tuple, TypeVar, Union, cast, get_type_hints,
+                    overload)
 import numpy as np
+
+from .annotations import IntSequence, NDArray, NDIntArray, NDRealArray
 from .data_container import DataContainer, Parser, INIParser, JSONParser, StringFormatter
 from .cbc_setup import Sample, ScanSamples, ScanSetup
 
@@ -98,11 +101,11 @@ class LogProtocol(DataContainer):
 
     @classmethod
     def _get_unit(cls, key: str) -> float:
-        for unit_key in cls.unit_dict:
+        for unit_key, unit_value in cls.unit_dict.items():
             units = unit_key.split(',')
             for unit in units:
                 if unit in key:
-                    return cls.unit_dict[unit_key]
+                    return unit_value
         return 1.0
 
     @classmethod
@@ -176,8 +179,18 @@ class LogProtocol(DataContainer):
                                 attr_dict[part_name][attr] *= self._get_unit(raw_str)
         return attr_dict
 
-    def load_data(self, path: str, idxs: Optional[Iterable[int]]=None,
-                  return_idxs=False) -> Tuple[Dict[str, np.ndarray], np.ndarray]:
+    @overload
+    def load_data(self, path: str, idxs: Optional[IntSequence]=None,
+                  return_idxs: bool=True) -> Tuple[Dict[str, NDArray], NDIntArray]:
+        ...
+
+    @overload
+    def load_data(self, path: str, idxs: Optional[IntSequence]=None,
+                  return_idxs: bool=False) -> Dict[str, NDArray]:
+        ...
+
+    def load_data(self, path: str, idxs: Optional[IntSequence]=None, return_idxs: bool=False
+                  ) -> Union[Tuple[Dict[str, NDArray], NDIntArray], Dict[str, NDArray]]:
         """Retrieve the main data array from the log file.
 
         Args:
@@ -249,10 +262,10 @@ class LogProtocol(DataContainer):
                 dtypes['formats'].append('<S' + str(len(val)))
                 converters[idx] = lambda item: item.strip(b' []')
 
-        txt_dict = {}
+        txt_dict: Dict[str, NDArray] = {}
         txt_tuple = np.loadtxt(path, delimiter=';', converters=converters,
-                               dtype=dtypes, unpack=True, skiprows=skiprows,
-                               max_rows=max_rows)
+                               dtype=cast(np.dtype, dtypes), unpack=True,
+                               skiprows=skiprows, max_rows=max_rows)
 
         if idxs is None:
             txt_dict.update(zip(keys, txt_tuple))
@@ -264,7 +277,7 @@ class LogProtocol(DataContainer):
                              for key, data in zip(keys, txt_tuple)})
 
         if return_idxs:
-            return txt_dict, idxs
+            return txt_dict, np.asarray(idxs)
         return txt_dict
 
 @dataclass
@@ -283,15 +296,15 @@ class LogContainer(DataContainer):
     protocol        : LogProtocol = field(default_factory=LogProtocol.import_default)
     log_attr        : Dict[str, Dict[str, Any]] = field(default_factory=dict)
     log_data        : Dict[str, Any] = field(default_factory=dict)
-    idxs            : Optional[np.ndarray] = None
-    translations    : Optional[np.ndarray] = None
+    idxs            : Optional[NDIntArray] = None
+    translations    : Optional[NDRealArray] = None
 
     _no_data_exc    : ClassVar[ValueError] = ValueError('No log data in the container')
 
     def __len__(self) -> int:
         return 0 if self.idxs is None else self.idxs.size
 
-    def read_logs(self: L, log_path: str, idxs: Optional[Iterable[int]]=None) -> L:
+    def read_logs(self: L, log_path: str, idxs: Optional[IntSequence]=None) -> L:
         """Read a log file under the path `log_path`. Read out only the frame indices defined by
         ``idxs``. If ``idxs`` is None, read the whole log file.
 
@@ -304,7 +317,7 @@ class LogContainer(DataContainer):
         """
         log_attr = self.protocol.loads(log_path)
         log_data, idxs = self.protocol.load_data(log_path, idxs=idxs, return_idxs=True)
-        return LogContainerFull(**dict(self, log_attr=log_attr, log_data=log_data, idxs=idxs))
+        return self.replace(log_attr=log_attr, log_data=log_data, idxs=idxs)
 
     def find_log_part_key(self, attr: str) -> Optional[str]:
         """Find a name of the log dictionary corresponding to an attribute name `attr`.
@@ -338,7 +351,7 @@ class LogContainer(DataContainer):
         value = part_dict.get(attr, None)
         return value
 
-    def find_log_dataset(self, attr: str) -> Optional[np.ndarray]:
+    def find_log_dataset(self, attr: str) -> Optional[NDArray]:
         """Find a dataset in the log data corresponding to an attribute name `attr`.
 
         Args:
@@ -397,8 +410,8 @@ class LogContainerFull(LogContainer):
 
     log_attr        : Dict[str, Dict[str, Any]]
     log_data        : Dict[str, Any]
-    idxs            : Optional[np.ndarray] = None
-    translations    : Optional[np.ndarray] = None
+    idxs            : Optional[NDIntArray] = None
+    translations    : Optional[NDRealArray] = None
 
     def _is_log_translations(self) -> bool:
         return (self.find_log_attribute('x_sample') is not None and
@@ -424,10 +437,11 @@ class LogContainerFull(LogContainer):
         if not self._is_sim_translations():
             raise ValueError('The necessary data is not found')
 
-        translations = np.tile((self.find_log_attribute('x_sample'),
-                                self.find_log_attribute('y_sample'),
-                                self.find_log_attribute('z_sample'),
-                                self.find_log_attribute('r_sample')), (len(self), 1))
+        translations = np.tile(np.array([self.find_log_attribute('x_sample'),
+                                         self.find_log_attribute('y_sample'),
+                                         self.find_log_attribute('z_sample'),
+                                         self.find_log_attribute('r_sample')]),
+                               (len(self), 1))
         translations = np.nan_to_num(translations)
 
         step_sizes, n_steps = [], []
@@ -438,7 +452,7 @@ class LogContainerFull(LogContainer):
                 step_sizes.append(self.log_attr[part_key].get('step_size') * unit_vec)
                 n_steps.append(self.log_attr[part_key].get('n_points'))
 
-        steps = np.tensordot(np.stack(np.mgrid[[slice(0, n) for n in n_steps]], axis=0),
+        steps = np.tensordot(np.mgrid[[slice(0, n) for n in n_steps]],
                              np.stack(step_sizes, axis=0), (0, 0)).reshape(-1, 4)
         return self.replace(translations=translations + steps)
 
@@ -446,10 +460,11 @@ class LogContainerFull(LogContainer):
         if not self._is_log_translations():
             raise ValueError('The necessary data is not found')
 
-        translations = np.tile((self.find_log_attribute('x_sample'),
-                                self.find_log_attribute('y_sample'),
-                                self.find_log_attribute('z_sample'),
-                                self.find_log_attribute('r_sample')), (len(self), 1))
+        translations = np.tile(np.array([self.find_log_attribute('x_sample'),
+                                         self.find_log_attribute('y_sample'),
+                                         self.find_log_attribute('z_sample'),
+                                         self.find_log_attribute('r_sample')]),
+                               (len(self), 1))
         translations = np.nan_to_num(translations)
 
         for idx, scan_motor in enumerate(['x_sample', 'y_sample', 'z_sample', 'r_sample']):
@@ -461,9 +476,9 @@ class LogContainerFull(LogContainer):
     def generate_samples(self, dist: float, setup: ScanSetup) -> ScanSamples:
         if self.translations is None:
             raise ValueError('No translations in the container')
+        if self.idxs is None:
+            raise ValueError("No idxs in the container")
 
-        samples = {}
-        for frame, translation in zip(self.idxs, self.translations):
-            samples[frame] = Sample(setup.tilt_rotation(translation[3] - self.translations[0, 3]),
-                                    translation[2] - self.translations[0, 2] + dist)
-        return ScanSamples(samples)
+        rmats = np.stack([setup.tilt_rotation(tr[3] - self.translations[0, 3]).matrix
+                          for tr in self.translations])
+        return ScanSamples(self.idxs, rmats, self.translations[:, 2] - self.translations[0, 2])

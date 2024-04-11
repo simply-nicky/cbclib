@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Iterator, List, Optional, Tuple, Union
-import numpy as np
+from ..annotations import NDRealArray, NDBoolArray
 
 class PointsSet:
     x : List[int]
@@ -64,24 +64,24 @@ class Regions:
     def filter(self, structure: Structure, npts: int) -> Regions:
         ...
 
-    def mask(self) -> np.ndarray:
+    def mask(self) -> NDBoolArray:
         ...
 
-    def center_of_mass(self, data: np.ndarray) -> List[List[float]]:
+    def center_of_mass(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-    def gauss_fit(self, data: np.ndarray) -> List[List[float]]:
+    def gauss_fit(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-    def ellipse_fit(self, data: np.ndarray) -> List[List[float]]:
+    def ellipse_fit(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-    def line_ift(self, data: np.ndarray) -> List[List[float]]:
+    def line_ift(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-    def moments(self, data: np.ndarray) -> List[List[float]]:
+    def moments(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-def label(mask: np.ndarray, structure: Structure, npts: int=1,
+def label(mask: NDBoolArray, structure: Structure, npts: int=1,
           axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[Regions]:
     ...

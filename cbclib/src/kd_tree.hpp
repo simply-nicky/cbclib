@@ -393,7 +393,7 @@ private:
     template <class Iter>
     node_t * build_tree(Iter first, Iter last, node_t * par, int dir)
     {
-        using value_t = typename Iter::value_type;
+        using value_t = typename std::iterator_traits<Iter>::value_type;
 
         if (last <= first) return nullptr;
         else if (last == std::next(first))

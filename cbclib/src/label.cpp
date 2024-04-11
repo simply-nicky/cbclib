@@ -43,7 +43,8 @@ auto label(py::array_t<bool> mask, Structure structure, size_t npts, std::option
     mask = axes.swap_axes(mask);
     array<bool> marr {mask.request()};
 
-    check_shape(marr.shape, [](const std::vector<size_t> & shape){return shape.size() < 2;});
+    if (marr.shape.size() < 2)
+        fail_container_check("wrong number of dimensions(" + std::to_string(marr.shape.size()) + " < 2)", marr.shape);
 
     size_t repeats = std::reduce(marr.shape.begin(), std::next(marr.shape.begin(), marr.ndim - 2), 1, std::multiplies());
 
@@ -85,6 +86,8 @@ auto label(py::array_t<bool> mask, Structure structure, size_t npts, std::option
 PYBIND11_MODULE(label, m)
 {
     using namespace cbclib;
+    py::options options;
+    options.disable_function_signatures();
 
     try
     {

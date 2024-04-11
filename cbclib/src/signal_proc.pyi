@@ -1,7 +1,8 @@
-from typing import Optional, Tuple, Union
-import numpy as np
+from typing import Optional, Tuple, Union, overload
+from ..annotations import NDIntArray, NDRealArray, IntSequence
 
-def unique_indices(array: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def unique_indices(array: NDIntArray) -> Tuple[NDIntArray, NDIntArray,
+                                                       NDIntArray]:
     """Returns the sorted unique elements of a sorted array of integers. There are three optional
     outputs in addition to the unique elements:
 
@@ -20,7 +21,8 @@ def unique_indices(array: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarra
     """
     ...
 
-def binterpolate(inp: np.ndarray, grid: Tuple[np.ndarray, ...], coords: np.ndarray, num_threads: int=1) -> np.ndarray:
+def binterpolate(inp: NDRealArray, grid: Tuple[NDRealArray, ...], coords: NDRealArray,
+                 num_threads: int=1) -> NDRealArray:
     """Perform bilinear multidimensional interpolation on regular grids. The integer grid starting
     from ``(0, 0, ...)`` to ``(inp.shape[0] - 1, inp.shape[1] - 1, ...)`` is implied.
 
@@ -39,8 +41,9 @@ def binterpolate(inp: np.ndarray, grid: Tuple[np.ndarray, ...], coords: np.ndarr
     """
     ...
 
-def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
-               kernel: str='gaussian', w: Optional[np.ndarray]=None, num_threads: int=1) -> np.ndarray:
+def kr_predict(y: NDRealArray, x: NDRealArray, x_hat: NDRealArray, sigma: float,
+               kernel: str='gaussian', w: Optional[NDRealArray]=None,
+               num_threads: int=1) -> NDRealArray:
     """Perform the multi-dimensional Nadaraya-Watson kernel regression [KerReg]_.
 
     Args:
@@ -74,7 +77,17 @@ def kr_predict(y: np.ndarray, x: np.ndarray, x_hat: np.ndarray, sigma: float,
     """
     ...
 
-def local_maxima(inp: np.ndarray, axis: Union[int, Tuple[int, ...]], num_threads: int=1) -> np.ndarray:
+@overload
+def local_maxima(inp: NDRealArray, axis: IntSequence, num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def local_maxima(inp: NDIntArray, axis: IntSequence,
+                 num_threads: int=1) -> NDIntArray:
+    ...
+
+def local_maxima(inp: Union[NDRealArray, NDIntArray], axis: IntSequence,
+                 num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """
     Find local maxima in a multidimensional array along a set of axes. This function returns
     the indices of the maxima.

@@ -9,7 +9,7 @@ from scipy.ndimage import label, center_of_mass, mean
 from .bin import (FFTW, empty_aligned, median_filter, gaussian_filter, gaussian_grid,
                   binterpolate, filter_direction)
 from .cbc_setup import Basis
-from .cxi_protocol import Indices
+from .annotations import Indices, Shape
 
 M = TypeVar('M', bound='Map3D')
 
@@ -37,7 +37,7 @@ class Map3D():
             raise ValueError('values have incompatible shape with the coordinates')
 
     @property
-    def shape(self) -> Tuple[int, int, int]:
+    def shape(self) -> Shape:
         return self.val.shape
 
     @property

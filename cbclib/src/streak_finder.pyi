@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple, Union
-import numpy as np
-from .label import Points, Structure
+from typing import List, Optional, Tuple, Union, overload
+from ..annotations import NDRealArray, NDBoolArray
+from .label import Structure
 
 Line = Tuple[float, float, float, float]
 
@@ -25,11 +25,11 @@ class Peaks:
     y : List[int]
     size : int
 
-    def __init__(self, data: np.ndarray, mask: np.ndarray, radius: int, vmin: float):
+    def __init__(self, data: NDRealArray, mask: NDBoolArray, radius: int, vmin: float):
         ...
 
-    def filter(self, data: np.ndarray, mask: np.ndarray, structure: Structure, vmin: float,
-               npts: int) -> Peaks:
+    def filter(self, data: NDRealArray, mask: NDBoolArray, structure: Structure,
+               vmin: float, npts: int) -> Peaks:
         """Discard all the peaks the support structure of which is too small. The support
         structure is a connected set of pixels which value is above the threshold ``vmin``.
         A peak is discarded is the size of support set is lower than ``npts``.
@@ -46,7 +46,7 @@ class Peaks:
         """
         ...
 
-    def mask(self, mask: np.ndarray) -> Peaks:
+    def mask(self, mask: NDBoolArray) -> Peaks:
         """Discard all peaks that are not True in masking array.
 
         Args:
@@ -57,18 +57,40 @@ class Peaks:
         """
         ...
 
-def detect_peaks(data: np.ndarray, mask: np.ndarray, radius: int, vmin: float,
+def detect_peaks(data: NDRealArray, mask: NDBoolArray, radius: int, vmin: float,
                  axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[Peaks]:
     ...
 
-def filter_peaks(peaks: Union[Peaks, List[Peaks]], data: np.ndarray, mask: np.ndarray,
+@overload
+def filter_peaks(peaks: Peaks, data: NDRealArray, mask: NDBoolArray,
                  structure: Structure, vmin: float, npts: int, axes: Optional[Tuple[int, int]]=None,
-                 num_threads: int=1) -> Union[Peaks, List[Peaks]]:
+                 num_threads: int=1) -> Peaks:
     ...
 
-def detect_streaks(peaks: Union[Peaks, List[Peaks]], data: np.ndarray, mask: np.ndarray,
-                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0, max_iter: int=100,
-                   lookahead: int=1, min_size: int=5, axes: Optional[Tuple[int, int]]=None,
+@overload
+def filter_peaks(peaks: List[Peaks], data: NDRealArray, mask: NDBoolArray,
+                 structure: Structure, vmin: float, npts: int, axes: Optional[Tuple[int, int]]=None,
+                 num_threads: int=1) -> List[Peaks]:
+    ...
+
+@overload
+def detect_streaks(peaks: Peaks, data: NDRealArray, mask: NDBoolArray,
+                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0,
+                   max_iter: int=100, lookahead: int=1, min_size: int=5,
+                   axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[Line]:
+    ...
+
+@overload
+def detect_streaks(peaks: List[Peaks], data: NDRealArray, mask: NDBoolArray,
+                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0,
+                   max_iter: int=100, lookahead: int=1, min_size: int=5,
+                   axes: Optional[Tuple[int, int]]=None, num_threads: int=1) -> List[List[Line]]:
+    ...
+
+def detect_streaks(peaks: Union[Peaks, List[Peaks]], data: NDRealArray, mask: NDBoolArray,
+                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0,
+                   max_iter: int=100, lookahead: int=1, min_size: int=5,
+                   axes: Optional[Tuple[int, int]]=None,
                    num_threads: int=1) -> Union[List[Line], List[List[Line]]]:
     """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
     extended with a connectivity structure.

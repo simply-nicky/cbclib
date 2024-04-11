@@ -5,8 +5,6 @@
 
 namespace cbclib {
 
-using point_t = Point<long>;
-
 template <typename T>
 using pixel_t = std::tuple<point_t, T>;
 
@@ -315,7 +313,7 @@ struct PointsSet : public PointsContainer<std::set<point_t>>
         }
     }
 
-    PointsSet(Point<size_t> seed, const array<bool> & mask, const Structure & srt) :
+    PointsSet(point_type seed, const array<bool> & mask, const Structure & srt) :
         PointsSet(seed, [&mask](point_type pt){return mask.is_inbound(pt.coordinate()) && mask[mask.ravel_index(pt.coordinate())];}, srt) {}
 
     PointsSet filter(array<bool> & mask, const Structure & srt, size_t npts) const
@@ -412,7 +410,7 @@ struct Pixels
             T tmin = std::numeric_limits<T>::max(), tmax = std::numeric_limits<T>::lowest();
             for (const auto & [pt, _] : pset)
             {
-                T prod = tau.dot(pt - ctr);
+                T prod = dot(tau, pt - ctr);
                 if (prod < tmin) tmin = prod;
                 if (prod > tmax) tmax = prod;
             }
@@ -480,9 +478,9 @@ struct Regions
     template <typename T>
     auto center_of_mass(const array<T> & data) const
     {
-        return apply(data, [](const Pixels<T> & region) -> std::array<T, 2>
+        return apply(data, [](const Pixels<T> & region)
         {
-            return region.moments.central_moments().center_of_mass(region.moments.pt0);
+            return std::move(region.moments.central_moments().center_of_mass(region.moments.pt0)).point();
         });
     }
 

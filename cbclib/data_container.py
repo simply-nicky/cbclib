@@ -5,13 +5,16 @@ container :class:`cbclib.CrystData`. All transform classes are inherited from th
 """
 from __future__ import annotations
 from configparser import ConfigParser
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, Field
 import json
 import os
 import re
-from typing import (Any, Callable, ClassVar, Dict, Generic, ItemsView, Iterator, List, Optional, Tuple,
-                    Type, Union, ValuesView, TypeVar, get_args, get_origin)
+from typing import (Any, Callable, ClassVar, Dict, Generic, ItemsView, Iterator, List,
+                    Optional, Protocol, Tuple, Type, Union, ValuesView, TypeVar, cast, get_args,
+                    get_origin, overload, runtime_checkable)
 import numpy as np
+import jax.numpy as jnp
+from .annotations import Array, NDArray, JaxArray, NDIntArray
 
 T = TypeVar('T')
 Self = TypeVar('Self')
@@ -21,13 +24,16 @@ class ReferenceType(Generic[T]):
     def __new__(cls: type[Self], o: T,
                 callback: Optional[Callable[[ReferenceType[T]], Any]]=...) -> Self:
         ...
-    def __call__(self) -> Optional[T]:
+    def __call__(self) -> T:
         ...
 
-D = TypeVar('D', bound='DataContainer')
+@runtime_checkable
+class DataclassInstance(Protocol):
+    __dataclass_fields__: ClassVar[Dict[str, Field[Any]]]
 
-@dataclass
-class DataContainer():
+D = TypeVar("D", bound="DataContainer")
+
+class DataContainer(DataclassInstance):
     """Abstract data container class based on :class:`dataclass`. Has :class:`dict` intefrace,
     and :func:`DataContainer.replace` to create a new obj with a set of data attributes replaced.
     """
@@ -104,21 +110,30 @@ class StringFormatter:
     def format_list(cls, string: str, dtype: Type=str) -> List:
         is_list = re.search(r'^\[([\s\S]*)\]$', string)
         if is_list:
-            return [dtype(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_list.group(1)) if p]
+            return [dtype(p.strip('\'\"'))
+                    for p in re.split(r'\s*,\s*', is_list.group(1)) if p]
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
     def format_tuple(cls, string: str, dtype: Type=str) -> Tuple:
         is_tuple = re.search(r'^\(([\s\S]*)\)$', string)
         if is_tuple:
-            return tuple(dtype(p.strip('\'\"')) for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p)
+            return tuple(dtype(p.strip('\'\"'))
+                         for p in re.split(r'\s*,\s*', is_tuple.group(1)) if p)
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
-    def format_array(cls, string: str, dtype: Type=float) -> np.ndarray:
+    def format_array(cls, string: str, dtype: Type=float) -> NDArray:
         is_list = re.search(r'^\[([\s\S]*)\]$', string)
         if is_list:
             return np.fromstring(is_list.group(1), dtype=dtype, sep=',')
+        raise ValueError(f"Invalid string: '{string}'")
+
+    @classmethod
+    def format_jax_array(cls, string: str, dtype: Type=float) -> JaxArray:
+        is_list = re.search(r'^\[([\s\S]*)\]$', string)
+        if is_list:
+            return jnp.fromstring(is_list.group(1), dtype=dtype, sep=',')
         raise ValueError(f"Invalid string: '{string}'")
 
     @classmethod
@@ -126,10 +141,36 @@ class StringFormatter:
         return string in ('yes', 'True', 'true', 'T')
 
     @classmethod
+    def get_dtype(cls, type: Type) -> str:
+        if len(get_args(type)):
+            return get_args(type)[0].__name__
+        return str()
+
+    @classmethod
+    def get_array_dtype(cls, type: Type) -> Optional[str]:
+        generic_types = {'float': np.floating, 'int': np.integer,
+                        'complex': np.complexfloating}
+        if get_origin(type) is np.ndarray and len(get_args(type)) == 2:
+            dtype = get_args(get_args(type)[1])[0]
+            if len(get_args(dtype)):
+                dtype = get_origin(dtype)
+
+            for name, generic in generic_types.items():
+                if dtype is generic or np.issubdtype(dtype, generic):
+                    return name
+
+        return str()
+
+    @classmethod
     def get_formatter(cls, type: Type):
         formatters = {'list': cls.format_list, 'tuple': cls.format_tuple,
-                      'ndarray': cls.format_array, 'float': float, 'int': int,
-                      'bool': cls.format_bool, 'complex': complex}
+                      'ndarray': cls.format_array, 'Array': cls.format_jax_array,
+                      'float': float, 'int': int, 'bool': cls.format_bool,
+                      'complex': complex}
+        arg_getters = {'list': cls.get_dtype,
+                       'tuple': cls.get_dtype,
+                       'ndarray': cls.get_array_dtype,
+                       'Array': lambda type: 'float'}
 
         if get_origin(type) is None:
             return formatters.get(type.__name__, str)
@@ -138,11 +179,11 @@ class StringFormatter:
         if get_origin(type) is dict:
             return cls.get_formatter(get_args(type)[1])
 
-        origin = get_origin(type)
-        args = get_args(type)
+        origin = cast(Any, get_origin(type))
+        string = arg_getters[origin.__name__](type)
 
         origin_formatter = formatters.get(origin.__name__, str)
-        arg_formatter = formatters.get(args[0].__name__, str)
+        arg_formatter = formatters.get(string, str)
         return lambda string: origin_formatter(string, arg_formatter)
 
     @classmethod
@@ -156,8 +197,23 @@ class StringFormatter:
                 formatted_dct[attr] = formatter(val)
         return formatted_dct
 
+    @overload
     @classmethod
-    def to_string(cls, node: Any) -> Union[str, Dict[str, str]]:
+    def to_string(cls, node: Dict[str, Any]) -> Dict[str, str]:
+        ...
+
+    @overload
+    @classmethod
+    def to_string(cls, node: List[Any]) -> List[str]:
+        ...
+
+    @overload
+    @classmethod
+    def to_string(cls, node: Union[Any, NDArray]) -> str:
+        ...
+
+    @classmethod
+    def to_string(cls, node: Union[Any, Dict[str, Any], List[Any], NDArray]) -> Union[str, List[str], Dict[str, str]]:
         if isinstance(node, dict):
             return {k: cls.to_string(v) for k, v in node.items()}
         if isinstance(node, list):
@@ -184,7 +240,7 @@ class StringFormatter:
         raise ValueError('strings must be a string or a list of strings')
 
 class Parser():
-    fields : Dict[str, Union[str, Tuple[str]]]
+    fields : Dict[str, Union[str, List[str], Dict[str, str]]]
 
     def read_all(self, file: str) -> Dict[str, Any]:
         raise NotImplementedError
@@ -234,7 +290,7 @@ class INIParser(Parser, DataContainer):
     """Abstract data container class based on :class:`dataclass` with an interface to read from
     and write to INI files.
     """
-    fields : Dict[str, Union[str, Tuple[str]]]
+    fields : Dict[str, Union[str, Tuple[str, ...]]]
     types : Dict[str, Type]
 
     def read_all(self, file: str) -> Dict[str, Any]:
@@ -249,7 +305,7 @@ class INIParser(Parser, DataContainer):
     def read(self, file: str) -> Dict[str, Any]:
         return StringFormatter.format_dict(super().read(file), self.types)
 
-    def to_dict(self, obj: Any) -> Dict[str, Any]:
+    def to_dict(self, obj: Any) -> Dict[str, str]:
         return StringFormatter.to_string(super().to_dict(obj))
 
     def write(self, file: str, obj: Any):
@@ -268,7 +324,7 @@ class INIParser(Parser, DataContainer):
 
 @dataclass
 class JSONParser(Parser, DataContainer):
-    fields: Dict[str, Union[str, Tuple[str]]]
+    fields: Dict[str, Union[str, Tuple[str, ...]]]
 
     def read_all(self, file: str) -> Dict[str, Any]:
         with open(file, 'r') as f:
@@ -283,10 +339,11 @@ class JSONParser(Parser, DataContainer):
 class Transform(DataContainer):
     """Abstract transform class."""
 
-    def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def index_array(self, ss_idxs: NDIntArray,
+                    fs_idxs: NDIntArray) -> Tuple[NDIntArray, NDIntArray]:
         raise NotImplementedError
 
-    def forward(self, inp: np.ndarray) -> np.ndarray:
+    def forward(self, inp: NDArray) -> NDArray:
         """Return a transformed image.
 
         Args:
@@ -299,16 +356,16 @@ class Transform(DataContainer):
         ss_idxs, fs_idxs = self.index_array(ss_idxs, fs_idxs)
         return inp[..., ss_idxs, fs_idxs]
 
-    def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         raise NotImplementedError
 
-    def backward(self, inp: np.ndarray, out: np.ndarray) -> np.ndarray:
+    def backward(self, inp: NDArray, out: NDArray) -> NDArray:
         ss_idxs, fs_idxs = np.indices(out.shape[-2:])
         ss_idxs, fs_idxs = self.index_array(ss_idxs, fs_idxs)
         out[..., ss_idxs, fs_idxs] = inp
         return out
 
-    def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         raise NotImplementedError
 
 @dataclass
@@ -318,7 +375,7 @@ class Crop(Transform):
     Args:
         roi : Region of interest. Comprised of four elements ``[y_min, y_max, x_min, x_max]``.
     """
-    roi : Union[List[int], Tuple[int, int, int, int], np.ndarray]
+    roi : Union[List[int], Tuple[int, int, int, int], NDIntArray]
 
     def __eq__(self, obj: object) -> bool:
         if isinstance(obj, Crop):
@@ -332,7 +389,8 @@ class Crop(Transform):
                    self.roi[2] != obj.roi[2] or self.roi[3] != obj.roi[3]
         return NotImplemented
 
-    def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def index_array(self, ss_idxs: NDIntArray,
+                    fs_idxs: NDIntArray) -> Tuple[NDIntArray, NDIntArray]:
         """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the cropping
         transform.
 
@@ -346,7 +404,7 @@ class Crop(Transform):
         return (ss_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]],
                 fs_idxs[self.roi[0]:self.roi[1], self.roi[2]:self.roi[3]])
 
-    def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates.
 
         Args:
@@ -358,7 +416,7 @@ class Crop(Transform):
         """
         return x - self.roi[2], y - self.roi[0]
 
-    def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates back.
 
         Args:
@@ -379,7 +437,8 @@ class Downscale(Transform):
     """
     scale : int
 
-    def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def index_array(self, ss_idxs: NDIntArray,
+                    fs_idxs: NDIntArray) -> Tuple[NDIntArray, NDIntArray]:
         """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the downscaling
         transform.
 
@@ -392,7 +451,7 @@ class Downscale(Transform):
         """
         return (ss_idxs[::self.scale, ::self.scale], fs_idxs[::self.scale, ::self.scale])
 
-    def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates.
 
         Args:
@@ -402,9 +461,9 @@ class Downscale(Transform):
         Returns:
             A tuple of transformed x and y coordinates.
         """
-        return x / self.scale, y / self.scale
+        return x // self.scale, y // self.scale
 
-    def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates back.
 
         Args:
@@ -427,7 +486,8 @@ class Mirror(Transform):
     axis: int
     shape: Tuple[int, int]
 
-    def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def index_array(self, ss_idxs: NDIntArray,
+                    fs_idxs: NDIntArray) -> Tuple[NDIntArray, NDIntArray]:
         """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the mirroring
         transform.
 
@@ -444,7 +504,7 @@ class Mirror(Transform):
             return (ss_idxs[:, ::-1], fs_idxs[:, ::-1])
         raise ValueError('Axis must equal to 0 or 1')
 
-    def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates.
 
         Args:
@@ -458,7 +518,7 @@ class Mirror(Transform):
             return x, self.shape[0] - y
         return self.shape[1] - x, y
 
-    def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates back.
 
         Args:
@@ -491,7 +551,8 @@ class ComposeTransforms(Transform):
     def __getitem__(self, idx: Union[int, slice]) -> Union[Transform, List[Transform]]:
         return self.transforms[idx]
 
-    def index_array(self, ss_idxs: np.ndarray, fs_idxs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def index_array(self, ss_idxs: NDIntArray,
+                    fs_idxs: NDIntArray) -> Tuple[NDIntArray, NDIntArray]:
         """Filter the indices of a frame ``(ss_idxs, fs_idxs)`` according to the composed transform.
 
         Args:
@@ -505,7 +566,7 @@ class ComposeTransforms(Transform):
             ss_idxs, fs_idxs = transform.index_array(ss_idxs, fs_idxs)
         return ss_idxs, fs_idxs
 
-    def forward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def forward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates.
 
         Args:
@@ -519,7 +580,7 @@ class ComposeTransforms(Transform):
             x, y = transform.forward_points(x, y)
         return x, y
 
-    def backward_points(self, x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward_points(self, x: Array, y: Array) -> Tuple[Array, Array]:
         """Transform detector coordinates back.
 
         Args:

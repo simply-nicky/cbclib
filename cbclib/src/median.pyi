@@ -1,10 +1,18 @@
-from typing import List, Optional, Tuple, Union
-import numpy as np
+from typing import Optional, Union, overload
+from ..annotations import NDRealArray, NDIntArray, NDBoolArray, IntSequence
 
-IntArray = Union[int, List[int], Tuple[int]]
+@overload
+def median(inp: NDRealArray, mask: Optional[NDBoolArray]=None, axis: IntSequence=0,
+           num_threads: int=1) -> NDRealArray:
+    ...
 
-def median(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: IntArray=0,
-           num_threads: int=1) -> np.ndarray:
+@overload
+def median(inp: NDIntArray, mask: Optional[NDBoolArray]=None, axis: IntSequence=0,
+           num_threads: int=1) -> NDIntArray:
+    ...
+
+def median(inp: Union[NDRealArray, NDIntArray], mask: Optional[NDBoolArray]=None,
+           axis: IntSequence=0, num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a median along the `axis`.
 
     Args:
@@ -25,10 +33,24 @@ def median(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: IntArray=0,
     """
     ...
 
-def median_filter(inp: np.ndarray, size: Optional[IntArray]=None,
-                  footprint: Optional[np.ndarray]=None, mask: Optional[np.ndarray]=None,
-                  inp_mask: Optional[np.ndarray]=None, mode: str='reflect', cval: float=0.0,
-                  num_threads: int=1) -> np.ndarray:
+@overload
+def median_filter(inp: NDRealArray, size: Optional[IntSequence]=None,
+                  footprint: Optional[NDBoolArray]=None,
+                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def median_filter(inp: NDIntArray, size: Optional[IntSequence]=None,
+                  footprint: Optional[NDBoolArray]=None,
+                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  num_threads: int=1) -> NDIntArray:
+    ...
+
+def median_filter(inp: Union[NDRealArray, NDIntArray], size: Optional[IntSequence]=None,
+                  footprint: Optional[NDBoolArray]=None,
+                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a multidimensional median filter.
 
     Args:
@@ -45,8 +67,6 @@ def median_filter(inp: np.ndarray, size: Optional[IntArray]=None,
             ignored.
         mask : Output mask. Median is calculated only where `mask` is True, output array set to 0
             otherwise. Median is calculated over the whole input array by default.
-        inp_mask : Input mask. Median takes into account only the `inp` values, where `inp_mask`
-            is True. `inp_mask` is equal to `mask` by default.
         mode : The mode parameter determines how the input array is extended when the
             filter overlaps a border. Default value is 'reflect'. The valid values and their
             behavior is as follows:
@@ -77,9 +97,24 @@ def median_filter(inp: np.ndarray, size: Optional[IntArray]=None,
     """
     ...
 
-def maximum_filter(inp: np.ndarray, size: Optional[IntArray]=None,
-                   footprint: Optional[np.ndarray]=None, mask: Optional[np.ndarray]=None,
-                   mode: str='reflect', cval: float=0.0, num_threads: int=1) -> np.ndarray:
+@overload
+def maximum_filter(inp: NDRealArray, size: Optional[IntSequence]=None,
+                   footprint: Optional[NDBoolArray]=None,
+                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def maximum_filter(inp: NDIntArray, size: Optional[IntSequence]=None,
+                   footprint: Optional[NDBoolArray]=None,
+                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   num_threads: int=1) -> NDIntArray:
+    ...
+
+def maximum_filter(inp: Union[NDRealArray, NDIntArray], size: Optional[IntSequence]=None,
+                   footprint: Optional[NDBoolArray]=None,
+                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a multidimensional maximum filter.
 
     Args:
@@ -126,9 +161,22 @@ def maximum_filter(inp: np.ndarray, size: Optional[IntArray]=None,
     """
     ...
 
-def robust_mean(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: IntArray=0, r0: float=0.0,
+@overload
+def robust_mean(inp: NDRealArray, mask: Optional[NDBoolArray]=None, axis: IntSequence=0,
+                r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
+                return_std: bool=False, num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def robust_mean(inp: NDIntArray, mask: Optional[NDBoolArray]=None,
+                axis: IntSequence=0, r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
+                return_std: bool=False, num_threads: int=1) -> NDIntArray:
+    ...
+
+def robust_mean(inp: Union[NDRealArray, NDIntArray],
+                mask: Optional[NDBoolArray]=None, axis: IntSequence=0, r0: float=0.0,
                 r1: float=0.5, n_iter: int=12, lm: float=9.0, return_std: bool=False,
-                num_threads: int=1) -> np.ndarray:
+                num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a mean along the `axis` by robustly fitting a Gaussian to input vector [RFG]_.
     The algorithm performs `n_iter` times the fast least kth order statistics (FLkOS [FLKOS]_)
     algorithm to fit a gaussian to data.
@@ -165,9 +213,22 @@ def robust_mean(inp: np.ndarray, mask: Optional[np.ndarray]=None, axis: IntArray
     """
     ...
 
-def robust_lsq(W: np.ndarray, y: np.ndarray, mask: Optional[np.ndarray]=None, axis: IntArray=-1,
-               r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
-               num_threads: int=1) -> np.ndarray:
+@overload
+def robust_lsq(W: NDRealArray, y: NDRealArray, mask: Optional[NDBoolArray]=None,
+               axis: IntSequence=-1, r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
+               num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def robust_lsq(W: NDIntArray, y: NDIntArray, mask: Optional[NDBoolArray]=None,
+               axis: IntSequence=-1, r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
+               num_threads: int=1) -> NDIntArray:
+    ...
+
+def robust_lsq(W: Union[NDRealArray, NDIntArray], y: Union[NDRealArray, NDIntArray],
+               mask: Optional[NDBoolArray]=None, axis: IntSequence=-1, r0: float=0.0, r1: float=0.5,
+               n_iter: int=12, lm: float=9.0,
+               num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Robustly solve a linear least-squares problem with the fast least kth order statistics
     (FLkOS [FLKOS]_) algorithm.
 

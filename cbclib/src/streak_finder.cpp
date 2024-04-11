@@ -38,7 +38,8 @@ std::vector<Peaks> detect_peaks(py::array_t<T> data, py::array_t<bool> mask, siz
     array<T> darr {data.request()};
     array<bool> marr {mask.request()};
 
-    check_shape(darr.shape, [](const std::vector<size_t> & shape){return shape.size() < 2;});
+    if (darr.shape.size() < 2)
+        fail_container_check("wrong number of dimensions (" + std::to_string(darr.shape.size()) + " < 2)", darr.shape);
 
     size_t repeats = std::reduce(darr.shape.begin(), std::prev(darr.shape.end(), 2), 1, std::multiplies());
 
@@ -101,7 +102,8 @@ auto filter_peaks_vec(std::vector<Peaks> peaks, py::array_t<T> data, py::array_t
     array<T> darr {data.request()};
     array<bool> marr {mask.request()};
 
-    check_shape(darr.shape, [](const std::vector<size_t> & shape){return shape.size() < 3;});
+    if (darr.shape.size() < 3)
+        fail_container_check("wrong number of dimensions (" + std::to_string(darr.shape.size()) + " < 3)", darr.shape);
 
     size_t repeats = std::reduce(darr.shape.begin(), std::prev(darr.shape.end(), 2), 1, std::multiplies());
     if (repeats != peaks.size())
@@ -170,7 +172,8 @@ auto detect_streaks_vec(std::vector<Peaks> peaks, py::array_t<T> data, py::array
     array<T> darr {data.request()};
     array<bool> marr {mask.request()};
 
-    check_shape(darr.shape, [](const std::vector<size_t> & shape){return shape.size() < 3;});
+    if (darr.shape.size() < 3)
+        fail_container_check("wrong number of dimensions (" + std::to_string(darr.shape.size()) + " < 3)", darr.shape);
 
     size_t repeats = std::reduce(darr.shape.begin(), std::prev(darr.shape.end(), 2), 1, std::multiplies());
     if (repeats != peaks.size())

@@ -140,16 +140,12 @@ void check_dimensions(const std::string & name, ssize_t axis, const Container & 
     check_dimensions(name, axis + 1, shape, index...);
 }
 
-template <typename Container, typename Function, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
-void check_shape(const Container & shape, Function && func)
+template <typename Container, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+void fail_container_check(std::string msg, const Container & shape)
 {
-    using value_t = typename Container::value_type;
-    if (std::forward<Function>(func)(shape) || !std::reduce(shape.begin(), shape.end(), 1, std::multiplies<value_t>()))
-    {
-        std::ostringstream oss;
-        std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
-        throw std::invalid_argument("invalid shape: {" + oss.str() + "}");
-    }
+    std::ostringstream oss;
+    std::copy(shape.begin(), shape.end(), std::experimental::make_ostream_joiner(oss, ", "));
+    throw std::invalid_argument(msg + ": {" + oss.str() + "}");
 }
 
 template <typename ForwardIt1, typename ForwardIt2>
@@ -164,18 +160,56 @@ void check_equal(const std::string & msg, ForwardIt1 first1, ForwardIt1 last1, F
     }
 }
 
-template <typename T, typename V>
-void check_optional(const std::string & name, const py::array_t<T, py::array::c_style | py::array::forcecast> & inp,
-                    std::optional<py::array_t<V, py::array::c_style | py::array::forcecast>> & opt, V fill_value)
+template <typename T, int ExtraFlags>
+void fill_array(py::array_t<T, ExtraFlags> & arr, T fill_value)
+{
+    auto fill = py::array_t<T, ExtraFlags>(py::ssize_t(1));
+    fill.mutable_at(0) = fill_value;
+    PyArray_CopyInto(reinterpret_cast<PyArrayObject *>(arr.ptr()), reinterpret_cast<PyArrayObject *>(fill.ptr()));
+}
+
+template <typename I, int ExtraFlags>
+void fill_indices(std::string name, size_t xsize, size_t isize, std::optional<py::array_t<I, ExtraFlags>> & idxs)
+{
+    if (xsize == 1)
+    {
+        idxs = py::array_t<I, ExtraFlags>(isize);
+        fill_array(idxs.value(), I());
+    }
+    else if (xsize == isize)
+    {
+        idxs = py::array_t<I, ExtraFlags>(isize);
+        auto ptr = static_cast<I *>(idxs.value().request().ptr);
+        for (size_t i = 0; i < isize; i++) ptr[i] = i;
+    }
+    else throw std::invalid_argument(name + " is not defined");
+}
+
+template <typename I, int ExtraFlags>
+void check_indices(std::string name, size_t xsize, size_t isize, std::optional<py::array_t<I, ExtraFlags>> & idxs)
+{
+    if (idxs && idxs.value().size())
+    {
+        if (static_cast<size_t>(idxs.value().size()) != isize)
+            throw std::invalid_argument(name + " has an invalid size (" + std::to_string(idxs.value().size()) +
+                                        " != " + std::to_string(isize) + ")");
+        auto begin = idxs.value().mutable_data();
+        auto end = begin + idxs.value().size();
+        auto [min, max] = std::minmax_element(begin, end);
+        if (*max >= static_cast<I>(xsize) || *min < I())
+            throw std::out_of_range(name + " is out of range");
+    }
+}
+
+template <typename T, typename V, int ExtraFlags>
+void check_optional(const std::string & name, const py::array_t<T, ExtraFlags> & inp,
+                    std::optional<py::array_t<V, ExtraFlags>> & opt, V fill_value)
 {
     py::buffer_info ibuf = inp.request();
     if (!opt)
     {
-        opt = py::array_t<V>(ibuf.shape);
-        auto fill = py::array_t<V>(py::ssize_t(1));
-        fill.mutable_at(0) = fill_value;
-        PyArray_CopyInto(reinterpret_cast<PyArrayObject *>(opt.value().ptr()),
-                         reinterpret_cast<PyArrayObject *>(fill.ptr()));
+        opt = py::array_t<V, ExtraFlags>(ibuf.shape);
+        fill_array(opt.value(), fill_value);
     }
     py::buffer_info obuf = opt.value().request();
     check_equal(name + " and inp arrays must have identical shapes",

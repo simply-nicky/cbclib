@@ -1,24 +1,25 @@
-from typing import List, Optional, Sequence, Tuple, Union
-import numpy as np
+from typing import Dict, Optional, Tuple
+from ..annotations import NDRealArray, NDIntArray, Shape
 
-def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[int, ...], max_val: int=255,
-                   dilation: float=0.0, kernel: str='rectangular', num_threads: int=1) -> np.ndarray:
-    """Draw thick lines with variable thickness and the antialiasing applied on a single frame
-    by using the Bresenham's algorithm [BSH]_. The lines must follow the LSD convention,
-    see the parameters for more info.
+Table = Dict[Tuple[int, int], float]
+
+def draw_line(out: NDRealArray, lines: NDRealArray, idxs: Optional[NDIntArray]=None,
+              max_val: float=1.0, kernel: str='biweight', num_threads: int=1) -> NDRealArray:
+    """Draw thick lines on top of a n-dimensional array `out` with variable thickness and the
+    antialiasing applied on a single frame.
 
     Args:
-        lines : An array of the detected lines. Must have a shape of (`N`, 7), where `N` is
-            the number of lines. Each line is comprised of 7 parameters as follows:
+        out : An output n-dimensional array.
+        lines : A dictionary of the detected lines. Each array of lines must have a shape of
+            (`N`, 5), where `N` is the number of lines. Each line is comprised of 5 parameters
+            as follows:
 
             * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
-            * `-log10(NFA)` : Number of false alarms.
 
         shape : Shape of the output array. All the lines outside the shape will be discarded.
+        idxs : An array of indices that specify to what frame each of the lines belong.
         max_val : Maximum pixel value of a drawn line.
-        dilation : Size of the binary dilation applied to the output array.
         kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
             are available:
 
@@ -31,9 +32,48 @@ def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[
         num_threads : Number of threads used in the calculations.
 
     Raises:
-        ValueError : If `inp` is not a 2-dimensional array.
+        ValueError : If any of `lines` dictionary values have an incompatible shape.
+
+    Returns:
+        Output array with the lines drawn.
+    """
+    ...
+
+def draw_line_vjp(cotangents: NDRealArray, lines: NDRealArray,
+                  idxs: Optional[NDIntArray]=None, max_val: float=1.0,
+                  kernel: str='biweight', num_threads: int=1) -> NDRealArray:
+    ...
+
+def draw_line_mask(lines: NDRealArray, shape: Shape, idxs: Optional[NDIntArray]=None,
+                   max_val: int=255, kernel: str='rectangular',
+                   num_threads: int=1) -> NDIntArray:
+    """Draw thick lines with variable thickness and the antialiasing applied on a single frame
+    by using the Bresenham's algorithm [BSH]_.
+
+    Args:
+        lines : A dictionary of the detected lines. Each array of lines must have a shape of
+            (`N`, 5), where `N` is the number of lines. Each line is comprised of 5 parameters
+            as follows:
+
+            * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
+            * `width` : Line's width.
+
+        shape : Shape of the output array. All the lines outside the shape will be discarded.
+        idxs : An array of indices that specify to what frame each of the lines belong.
+        max_val : Maximum pixel value of a drawn line.
+        kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
+            are available:
+
+            * 'biweigth' : Quartic (biweight) kernel.
+            * 'gaussian' : Gaussian kernel.
+            * 'parabolic' : Epanechnikov (parabolic) kernel.
+            * 'rectangular' : Uniform (rectangular) kernel.
+            * 'triangular' : Triangular kernel.
+
+        num_threads : Number of threads used in the calculations.
+
+    Raises:
         ValueError : If `lines` has an incompatible shape.
-        RuntimeError : If C backend exited with error.
 
     References:
         .. [BSH] "Bresenham's line algorithm." Wikipedia, Wikimedia Foundation, 20 Sept. 2022,
@@ -41,31 +81,25 @@ def draw_line_mask(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[
 
     Returns:
         Output array with the lines drawn.
-
-    See Also:
-        :class:`cbclib.bin.LSD` : Line Segment Detector.
     """
     ...
 
-def draw_line_image(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple[int, ...],
-                    max_val: float=1.0, dilation: float=0.0, kernel: str='rectangular',
-                    num_threads: int=1) -> np.ndarray:
+def draw_line_image(lines: NDRealArray, shape: Shape, idxs: Optional[NDIntArray]=None,
+                    max_val: float=1.0, kernel: str='rectangular',
+                    num_threads: int=1) -> NDRealArray:
     """Draw thick lines with variable thickness and the antialiasing applied on a single frame.
-    The lines must follow the LSD convention, see the parameters for more info.
 
     Args:
         lines : A dictionary of the detected lines. Each array of lines must have a shape of
-            (`N`, 7), where `N` is the number of lines. Each line is comprised of 7 parameters
+            (`N`, 5), where `N` is the number of lines. Each line is comprised of 5 parameters
             as follows:
 
             * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
-            * `-log10(NFA)` : Number of false alarms.
 
         shape : Shape of the output array. All the lines outside the shape will be discarded.
+        idxs : An array of indices that specify to what frame each of the lines belong.
         max_val : Maximum pixel value of a drawn line.
-        dilation : Size of the binary dilation applied to the output array.
         kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
             are available:
 
@@ -78,37 +112,29 @@ def draw_line_image(lines: Union[np.ndarray, Sequence[np.ndarray]], shape: Tuple
         num_threads : Number of threads used in the calculations.
 
     Raises:
-        ValueError : If `inp` number of dimensions is less than 3.
         ValueError : If any of `lines` dictionary values have an incompatible shape.
-        RuntimeError : If C backend exited with error.
 
     Returns:
         Output array with the lines drawn.
-
-    See Also:
-        :class:`cbclib.bin.LSD` : Line Segment Detector.
     """
     ...
 
-def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, max_val: float=1.0,
-                    dilation: float=0.0, kernel: str='rectangular') -> List[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+def draw_line_table(lines: NDRealArray, shape: Shape, idxs: Optional[NDIntArray]=None,
+                    max_val: float=1.0, kernel: str='rectangular') -> Table:
     """Return an array of rasterized thick lines indices and their corresponding pixel values.
-    The lines are drawn with variable thickness and the antialiasing applied. The lines must
-    follow the LSD convention, see the parameters for more info.
+    The lines are drawn with variable thickness and the antialiasing applied.
 
     Args:
-        lines : An array of the detected lines. Must have a shape
-            of (`N`, 7), where `N` is the number of lines. Each line is comprised
-            of 7 parameters as follows:
+        lines : A dictionary of the detected lines. Each array of lines must have a shape of
+            (`N`, 5), where `N` is the number of lines. Each line is comprised of 5 parameters
+            as follows:
 
             * `[x0, y0]`, `[x1, y1]` : The coordinates of the line's ends.
             * `width` : Line's width.
-            * `p` : Angle precision [0, 1] given by angle tolerance over 180 degree.
-            * `-log10(NFA)` : Number of false alarms.
 
         shape : Shape of the image. All the lines outside the shape will be discarded.
+        idxs : An array of indices that specify to what frame each of the lines belong.
         max_val : Maximum pixel value of a drawn line.
-        dilation : Size of the binary dilation applied to the output image.
         kernel : Choose one of the supported kernel functions [Krn]_. The following kernels
             are available:
 
@@ -124,8 +150,5 @@ def draw_line_table(lines: np.ndarray, shape: Optional[Tuple[int, int]]=None, ma
 
     Returns:
         Output line indices.
-
-    See Also:
-        :class:`cbclib.bin.LSD` : Line Segment Detector.
     """
     ...

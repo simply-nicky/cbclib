@@ -11,8 +11,8 @@ from .bin import (euler_matrix, draw_line_image, ce_criterion, unique_indices, k
                   poisson_criterion, ls_criterion, unmerge_signal)
 from .cbc_indexing import Map3D, FourierIndexer
 from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks, CBDModel
-from .cxi_protocol import Indices
 from .data_container import DataContainer, Crop, ReferenceType
+from .annotations import Indices, Shape
 
 @dataclass
 class CBCTable():
@@ -48,7 +48,7 @@ class CBCTable():
         self.frames, self.fidxs, self.finv = unique_indices(self.table['frames'].to_numpy())
 
     @property
-    def shape(self) -> Tuple[int, int]:
+    def shape(self) -> Shape:
         return (self.frames.size, self.crop.roi[1] - self.crop.roi[0], self.crop.roi[3] - self.crop.roi[2])
 
     @classmethod

@@ -1,8 +1,5 @@
-from typing import List, Optional, Tuple, Union
-import numpy as np
-
-IntArray = Union[int, List[int], Tuple[int]]
-FloatArray = Union[float, List[float], Tuple[float]]
+from typing import Optional, overload, Union
+from ..annotations import NDRealArray, NDComplexArray, RealSequence, IntSequence
 
 def next_fast_len(target: int) -> int:
     r"""Find the next fast size of input data to fft, for zero-padding, etc. FFT algorithms
@@ -24,8 +21,8 @@ def next_fast_len(target: int) -> int:
     """
     ...
 
-def fftn(inp: np.ndarray, shape: Optional[IntArray]=None, axis: Optional[IntArray]=None,
-         norm: str="backward", num_threads: int=1) -> np.ndarray:
+def fftn(inp: Union[NDRealArray, NDComplexArray], shape: Optional[IntSequence]=None,
+         axis: Optional[IntSequence]=None, norm: str="backward", num_threads: int=1) -> NDComplexArray:
     """Compute the N-dimensional discrete Fourier Transform.
 
     This function computes the *N*-dimensional discrete Fourier Transform over any number of
@@ -52,8 +49,30 @@ def fftn(inp: np.ndarray, shape: Optional[IntArray]=None, axis: Optional[IntArra
     """
     ...
 
-def fft_convolve(array: np.ndarray, kernel: np.ndarray, axis: Optional[IntArray]=None,
-                 num_threads: int=1) -> np.ndarray:
+@overload
+def fft_convolve(array: NDRealArray, kernel: NDRealArray, axis: Optional[IntSequence]=None,
+                 num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def fft_convolve(array: NDRealArray, kernel: NDComplexArray, axis: Optional[IntSequence]=None,
+                 num_threads: int=1) -> NDComplexArray:
+    ...
+
+@overload
+def fft_convolve(array: NDComplexArray, kernel: NDRealArray, axis: Optional[IntSequence]=None,
+                 num_threads: int=1) -> NDComplexArray:
+    ...
+
+@overload
+def fft_convolve(array: NDComplexArray, kernel: NDComplexArray,
+                 axis: Optional[IntSequence]=None, num_threads: int=1) -> NDComplexArray:
+    ...
+
+def fft_convolve(array: Union[NDRealArray, NDComplexArray],
+                 kernel: Union[NDRealArray, NDComplexArray],
+                 axis: Optional[IntSequence]=None,
+                 num_threads: int=1) -> Union[NDRealArray, NDComplexArray]:
     """Convolve a multi-dimensional `array` with one-dimensional `kernel` along the `axis` by means
     of FFT. Output has the same size as `array`.
 
@@ -73,7 +92,7 @@ def fft_convolve(array: np.ndarray, kernel: np.ndarray, axis: Optional[IntArray]
     """
     ...
 
-def gaussian_kernel(sigma: FloatArray, order: IntArray=0, truncate: float=4.0) -> np.ndarray:
+def gaussian_kernel(sigma: RealSequence, order: IntSequence=0, truncate: float=4.0) -> NDRealArray:
     """Discrete Gaussian kernel.
 
     Args:
@@ -88,9 +107,21 @@ def gaussian_kernel(sigma: FloatArray, order: IntArray=0, truncate: float=4.0) -
     """
     ...
 
-def gaussian_filter(inp: np.ndarray, sigma: Union[float, List[float]], order: Union[int, List[int]]=0,
+@overload
+def gaussian_filter(inp: NDRealArray, sigma: RealSequence, order: IntSequence=0,
                     mode: str='reflect', cval: float=0.0, truncate: float=4.0,
-                    num_threads: int=1) -> np.ndarray:
+                    num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def gaussian_filter(inp: NDComplexArray, sigma: RealSequence, order: IntSequence=0,
+                    mode: str='reflect', cval: float=0.0, truncate: float=4.0,
+                    num_threads: int=1) -> NDComplexArray:
+    ...
+
+def gaussian_filter(inp: Union[NDRealArray, NDComplexArray], sigma: RealSequence,
+                    order: IntSequence=0, mode: str='reflect', cval: float=0.0, truncate: float=4.0,
+                    num_threads: int=1) -> Union[NDRealArray, NDComplexArray]:
     r"""Multidimensional Gaussian filter. The multidimensional filter is implemented as a sequence
     of 1-D FFT convolutions.
 
@@ -132,9 +163,22 @@ def gaussian_filter(inp: np.ndarray, sigma: Union[float, List[float]], order: Un
     """
     ...
 
-def gaussian_gradient_magnitude(inp: np.ndarray, sigma: Union[float, List[float]], mode: str='reflect',
+@overload
+def gaussian_gradient_magnitude(inp: NDRealArray, sigma: RealSequence, mode: str='reflect',
                                 cval: float=0.0, truncate: float=4.0, backend: str='numpy',
-                                num_threads: int=1) -> np.ndarray:
+                                num_threads: int=1) -> NDRealArray:
+    ...
+
+@overload
+def gaussian_gradient_magnitude(inp: NDComplexArray, sigma: RealSequence, mode: str='reflect',
+                                cval: float=0.0, truncate: float=4.0, backend: str='numpy',
+                                num_threads: int=1) -> NDComplexArray:
+    ...
+
+def gaussian_gradient_magnitude(inp: Union[NDRealArray, NDComplexArray], sigma: RealSequence,
+                                mode: str='reflect', cval: float=0.0, truncate: float=4.0,
+                                backend: str='numpy',
+                                num_threads: int=1) -> Union[NDRealArray, NDComplexArray]:
     r"""Multidimensional gradient magnitude using Gaussian derivatives. The multidimensional filter
     is implemented as a sequence of 1-D FFT convolutions.
 
@@ -175,8 +219,9 @@ def gaussian_gradient_magnitude(inp: np.ndarray, sigma: Union[float, List[float]
     """
     ...
 
-def ifftn(inp: np.ndarray, shape: Optional[IntArray]=None, axis: Optional[IntArray]=None,
-          norm: str="backward", num_threads: int=1) -> np.ndarray:
+def ifftn(inp: Union[NDRealArray, NDComplexArray], shape: Optional[IntSequence]=None,
+          axis: Optional[IntSequence]=None, norm: str="backward",
+          num_threads: int=1) -> NDComplexArray:
     """Compute the N-dimensional discrete inverse Fourier Transform.
 
     This function computes the *N*-dimensional discrete Fourier Transform over any number of

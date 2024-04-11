@@ -7,6 +7,8 @@ auto unique_indices(py::array_t<I> a)
 {
     array<I> arr {a.request()};
 
+    if (arr.size == 0) return std::make_tuple(py::array_t<I>{}, py::array_t<size_t>{},
+                                              py::array_t<size_t>{});
     if (arr[arr.size - 1] < arr[0])
         throw std::invalid_argument("Input array must be sorted in ascending order");
 
@@ -170,7 +172,7 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                     {
                         T dist = T();
                         for (size_t axis = 0; axis < static_cast<size_t>(ndim); axis++) dist += std::pow(xarr[index * ndim + axis] - xh_vec[axis], 2);
-                        T rbf = krn(std::sqrt(dist), sigma);
+                        T rbf = krn(std::sqrt(dist) / sigma);
                         Y += yarr[index] * warr[index] * rbf;
                         W += warr[index] * warr[index] * rbf;
                     }
@@ -248,6 +250,8 @@ py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::
 PYBIND11_MODULE(signal_proc, m)
 {
     using namespace cbclib;
+    py::options options;
+    options.disable_function_signatures();
 
     try
     {

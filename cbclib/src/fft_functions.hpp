@@ -289,10 +289,9 @@ std::vector<size_t> fftw_buffer_shape(std::vector<size_t> && shape, std::false_t
 }
 
 template <typename OutputIt, typename T>
-OutputIt gaussian_zero(OutputIt first, size_t size, T sigma)
+OutputIt gaussian_zero(OutputIt first, size_t size, size_t radius, T sigma)
 {
     T sum = T();
-    auto radius = (size - 1) / 2;
     for (size_t i = 0; i < size; ++i)
     {
         auto gauss = std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
@@ -309,7 +308,7 @@ OutputIt gaussian_zero(OutputIt first, size_t size, T sigma)
 }
 
 template <typename OutputIt, typename T>
-OutputIt gaussian_order(OutputIt first, size_t size, T sigma, unsigned order)
+OutputIt gaussian_order(OutputIt first, size_t size, size_t radius, T sigma, unsigned order)
 {
     std::vector<T> q0 (order + 1, T());
     q0[0] = T(1.0);
@@ -332,7 +331,6 @@ OutputIt gaussian_order(OutputIt first, size_t size, T sigma, unsigned order)
     }
 
     T sum = T();
-    auto radius = (size - 1) / 2;
     for (size_t i = 0; i < size; ++i)
     {
         sum += std::exp(-std::pow(std::minus<long>()(i, radius), 2) / (2 * sigma * sigma));
@@ -412,14 +410,30 @@ std::vector<size_t> fftw_buffer_shape(typename detail::any_container<size_t> sha
     return detail::fftw_buffer_shape(std::move(shape), typename is_complex<T>::type ());
 }
 
-template <class Container1, class Container2>
-auto write_origin(const Container1 & fshape, const Container2 & ishape)
+template <class InputIt1, class InputIt2, class OutputIt>
+OutputIt write_origin(InputIt1 first1, InputIt1 last1, InputIt2 first2, OutputIt d_first)
 {
-    auto find_origin = [](size_t flen, size_t n){return std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;};
+    auto find_origin = [](size_t flen, size_t n)
+    {
+        return std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;
+    };
+    return std::transform(first1, last1, first2, d_first, find_origin);
+}
 
-    std::vector<long> origin;
-    std::transform(fshape.begin(), fshape.end(), ishape.begin(), std::back_inserter(origin), find_origin);
-    return origin;
+template <typename T, typename U, class Shape>
+void write_buffer(array<T> & buffer, const array<U> & data, const Shape & fshape)
+{
+    for (auto riter = rect_iterator(fshape); !riter.is_end(); ++riter)
+    {
+        auto bindex = buffer.ravel_index(riter.coord.begin(), riter.coord.end());
+
+        if (data.is_inbound(riter.coord.begin(), riter.coord.end()))
+        {
+            auto index = data.ravel_index(riter.coord.begin(), riter.coord.end());
+            buffer[bindex] = data[index];
+        }
+        else buffer[bindex] = T();
+    }
 }
 
 template <typename T, typename U, class Shape, class Origin>
@@ -440,14 +454,27 @@ void write_buffer(array<T> & buffer, const array<U> & data, const Shape & fshape
     }
 }
 
-template <class Container1, class Container2>
-auto read_origin(const Container1 & fshape, const Container2 & oshape)
+template <class InputIt1, class InputIt2, class OutputIt>
+OutputIt read_origin(InputIt1 first1, InputIt1 last1, InputIt2 first2, OutputIt d_first)
 {
-    auto find_origin = [](size_t flen, size_t n){return std::minus<long>()(flen, n / 2);};
+    auto find_origin = [](size_t flen, size_t n)
+    {
+        return std::minus<long>()(flen, n - n / 2);
+    };
+    return std::transform(first1, last1, first2, d_first, find_origin);
+}
 
-    std::vector<long> origin;
-    std::transform(fshape.begin(), fshape.end(), oshape.begin(), std::back_inserter(origin), find_origin);
-    return origin;
+template <typename T, typename U, class Shape>
+void read_buffer(const array<T> & buffer, array<U> data, const Shape & fshape)
+{
+    std::vector<long> coord (buffer.ndim, 0);
+    for (auto riter = rect_iterator(data.shape); !riter.is_end(); ++riter)
+    {
+        std::transform(riter.coord.begin(), riter.coord.end(), fshape.begin(), coord.begin(), detail::modulo<long, size_t>);
+
+        auto index = buffer.ravel_index(coord.begin(), coord.end());
+        data[riter.index] = buffer[index];
+    }
 }
 
 template <typename T, typename U, class Shape, class Origin>
@@ -465,22 +492,22 @@ void read_buffer(const array<T> & buffer, array<U> data, const Shape & fshape, c
 }
 
 template <class OutputIt, typename T>
-OutputIt gauss_kernel(OutputIt first, size_t size, T sigma, unsigned order)
+OutputIt gauss_kernel(OutputIt first, size_t size, size_t radius, T sigma, unsigned order)
 {
-    if (order) return detail::gaussian_order(first, size, sigma, order);
-    return detail::gaussian_zero(first, size, sigma);
+    if (sigma <= T()) throw std::invalid_argument("sigma must be a positive number");
+    if (order) return detail::gaussian_order(first, size, radius, sigma, order);
+    return detail::gaussian_zero(first, size, radius, sigma);
 }
 
 template <typename T, typename InputIt>
-void write_line(std::vector<T> & buffer, size_t flen, InputIt first, InputIt last, extend mode)
+void write_line(std::vector<T> & buffer, size_t flen, size_t origin, InputIt first, InputIt last, extend mode)
 {
     auto n = std::distance(first, last);
-    auto origin = std::minus<long>()(flen, n) - std::minus<long>()(flen, n) / 2;
 
     for (size_t i = 0; i < buffer.size(); ++i)
     {
-        auto idx = std::minus<long>()(i, origin);
-        if (idx < 0 || idx >= n)
+        auto index = std::minus<long>()(i, origin);
+        if (index < 0 || index >= n)
         {
             switch (mode)
             {
@@ -491,22 +518,22 @@ void write_line(std::vector<T> & buffer, size_t flen, InputIt first, InputIt las
                 
                 case extend::nearest:
 
-                    buffer[i] = (idx < 0) ? *first : *std::prev(last);
+                    buffer[i] = (index < 0) ? *first : *std::prev(last);
                     break;
 
                 case extend::mirror:
 
-                    buffer[i] = *std::next(first, detail::mirror(idx, 0, n));
+                    buffer[i] = *std::next(first, detail::mirror(index, 0, n));
                     break;
 
                 case extend::reflect:
 
-                    buffer[i] = *std::next(first, detail::reflect(idx, 0, n));
+                    buffer[i] = *std::next(first, detail::reflect(index, 0, n));
                     break;
 
                 case extend::wrap:
 
-                    buffer[i] = *std::next(first, detail::wrap(idx, 0, n));
+                    buffer[i] = *std::next(first, detail::wrap(index, 0, n));
                     break;
 
                 default:
@@ -515,16 +542,14 @@ void write_line(std::vector<T> & buffer, size_t flen, InputIt first, InputIt las
         }
         else
         {
-            buffer[i] = *std::next(first, idx);
+            buffer[i] = *std::next(first, index);
         }
     }
 }
 
 template <typename T, typename OutputIt>
-void read_line(const std::vector<T> & buffer, size_t flen, OutputIt first, OutputIt last)
+void read_line(const std::vector<T> & buffer, size_t flen, long origin, OutputIt first, OutputIt last)
 {
-    auto n = std::distance(first, last);
-    auto origin = std::minus<long>()(flen, n / 2);
     for (size_t i = 0; first != last; ++first, ++i)
     {
         *first = buffer[detail::modulo(std::plus<long>()(i, origin), flen)];

@@ -18,8 +18,8 @@ template <typename Iter>
 using select_access_type_for = std::conditional_t<
     std::is_same_v<Iter, std::vector<bool>::iterator> ||
     std::is_same_v<Iter, std::vector<bool>::const_iterator>,
-    typename Iter::value_type,
-    typename Iter::reference
+    typename std::iterator_traits<Iter>::value_type,
+    typename std::iterator_traits<Iter>::reference
 >;
 
 
@@ -45,11 +45,11 @@ public:
 
     zip_iterator() = delete;
 
-    zip_iterator(Iters && ... iters) : m_iters{std::forward<Iters>(iters)...} {}
+    zip_iterator(Iters &&... iters) : m_iters{std::forward<Iters>(iters)...} {}
 
     zip_iterator & operator++() 
     {
-        std::apply([](auto && ... args){ ((args += 1), ...); }, m_iters);
+        std::apply([](auto &&... args){ ((args += 1), ...); }, m_iters);
         return *this;
     }
 
@@ -72,7 +72,7 @@ public:
 
     value_type operator*()
     {
-        return std::apply([](auto && ... args){return value_type(*args...);}, m_iters);
+        return std::apply([](auto &&... args){return value_type(*args...);}, m_iters);
     }
 
 private:
@@ -96,16 +96,16 @@ public:
     using zip_type = zip_iterator<select_iterator_for<T> ...>;
 
     template <typename ... Args>
-    zipper(Args && ... args) : m_args{std::forward<Args>(args)...} {}
+    zipper(Args &&... args) : m_args{std::forward<Args>(args)...} {}
 
     zip_type begin()
     {
-        return std::apply([](auto && ... args){return zip_type(std::begin(args)...);}, m_args);
+        return std::apply([](auto &&... args){return zip_type(std::begin(args)...);}, m_args);
     }
 
     zip_type end()
     {
-        return std::apply([](auto && ... args){return zip_type(std::end(args)...);}, m_args);
+        return std::apply([](auto &&... args){return zip_type(std::end(args)...);}, m_args);
     }
 
 private:
@@ -115,7 +115,7 @@ private:
 
 
 template <typename ... T>
-auto zip(T && ... t)
+auto zip(T &&... t)
 {
     return zipper<T ...>(std::forward<T>(t)...);
 }

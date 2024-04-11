@@ -175,7 +175,7 @@ def gaussian_gradient_magnitude(inp: np.ndarray, sigma: Union[float, List[float]
     ...
 
 def median(inp: np.ndarray, mask: Optional[np.ndarray]=None,
-           axis: Union[int, List[int], Tuple[int]]=0, num_threads: int=1) -> np.ndarray:
+           axis: Union[int, Sequence[int]]=0, num_threads: int=1) -> np.ndarray:
     """Calculate a median along the `axis`.
 
     Args:
@@ -196,7 +196,7 @@ def median(inp: np.ndarray, mask: Optional[np.ndarray]=None,
     """
     ...
 
-def median_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]]=None,
+def median_filter(inp: np.ndarray, size: Optional[Union[int, Sequence[int]]]=None,
                   footprint: Optional[np.ndarray]=None, mask: Optional[np.ndarray]=None,
                   inp_mask: Optional[np.ndarray]=None, mode: str='reflect', cval: float=0.0,
                   num_threads: int=1) -> np.ndarray:
@@ -248,7 +248,7 @@ def median_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]]=N
     """
     ...
 
-def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
+def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Sequence[int]]],
                    footprint: Optional[np.ndarray]=None, mask: Optional[np.ndarray]=None,
                    mode: str='reflect', cval: float=0.0, num_threads: int=1) -> np.ndarray:
     """Calculate a multidimensional maximum filter.
@@ -297,7 +297,7 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Tuple[int, ...]]],
     """
     ...
 
-def robust_mean(inp: np.ndarray, axis: Union[int, List[int], Tuple[int]]=0, r0: float=0.0,
+def robust_mean(inp: np.ndarray, axis: Union[int, Sequence[int]]]=0, r0: float=0.0,
                 r1: float=0.5, n_iter: int=12, lm: float=9.0, num_threads: int=1) -> np.ndarray:
     """Calculate a mean along the `axis` by robustly fitting a Gaussian to input vector [RFG]_.
     The algorithm performs `n_iter` times the fast least kth order statistics (FLkOS [FLKOS]_)
@@ -334,7 +334,7 @@ def robust_mean(inp: np.ndarray, axis: Union[int, List[int], Tuple[int]]=0, r0: 
     """
     ...
 
-def robust_lsq(W: np.ndarray, y: np.ndarray, axis: Union[int, List[int], Tuple[int]]=-1,
+def robust_lsq(W: np.ndarray, y: np.ndarray, axis: Union[int, Sequence[int]]=-1,
                r0: float=0.0, r1: float=0.5, n_iter: int=12, lm: float=9.0,
                num_threads: int=1) -> np.ndarray:
     """Robustly solve a linear least-squares problem with the fast least kth order statistics

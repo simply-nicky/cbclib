@@ -109,6 +109,8 @@ void test_tree(size_t npts, F range)
 PYBIND11_MODULE(kd_tree, m)
 {
     using namespace cbclib;
+    py::options options;
+    options.disable_function_signatures();
 
     try
     {

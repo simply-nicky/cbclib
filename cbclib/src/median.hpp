@@ -39,12 +39,12 @@ OutputIt wrap(InputIt1 first, InputIt1 last, OutputIt d_first, InputIt2 min, Inp
 }
 
 template <typename Container, typename T, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
-std::optional<T> extend_point(const Container & coord, const array<T> & arr, const array<bool> & mask, extend mode, const T & cval)
+T extend_point(const Container & coord, const array<T> & arr, extend mode, const T & cval)
 {
     using I = typename Container::value_type;
 
     /* kkkkkkkk|abcd|kkkkkkkk */
-    if (mode == extend::constant) return std::optional<T>(cval);
+    if (mode == extend::constant) return cval;
 
     std::vector<I> close;
     std::vector<I> min (arr.ndim, I());
@@ -89,9 +89,7 @@ std::optional<T> extend_point(const Container & coord, const array<T> & arr, con
     }
 
     size_t index = arr.ravel_index(close.begin(), close.end());
-
-    if (mask[index]) return std::optional<T>(arr[index]);
-    else return std::nullopt;
+    return arr[index];
 }
 
 template <typename T>
@@ -127,7 +125,7 @@ struct footprint
     }
 
     template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, long>>>
-    footprint & update(const Container & coord, const array<T> & arr, const array<bool> & mask, extend mode, const T & cval)
+    footprint & update(const Container & coord, const array<T> & arr, extend mode, const T & cval)
     {
         this->data.clear();
 
@@ -143,49 +141,19 @@ struct footprint
 
             if (extend)
             {
-                auto val = extend_point(this->coords[i], arr, mask, mode, cval);
-                if (val) this->data.push_back(val.value());
+                auto val = extend_point(this->coords[i], arr, mode, cval);
+                this->data.push_back(val);
             }
             else
             {
                 size_t index = arr.ravel_index(this->coords[i].begin(), this->coords[i].end());
-                if (mask[index]) this->data.push_back(arr[index]);
+                this->data.push_back(arr[index]);
             }
         }
 
         return *this;
     }
 };
-
-template <typename T, typename U>
-py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
-                      std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                      U axis, unsigned threads);
-
-template <typename T, typename U>
-py::array_t<T> median_filter(py::array_t<T, py::array::c_style | py::array::forcecast> inp, std::optional<U> size,
-                             std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> footprint,
-                             std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                             std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> inp_mask,
-                             std::string mode, const T & cval, unsigned threads);
-
-template <typename T, typename U>
-py::array_t<T> maximum_filter(py::array_t<T, py::array::c_style | py::array::forcecast> inp, std::optional<U> size,
-                              std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> fprint,
-                              std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                              std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> inp_mask,
-                              std::string mode, const T & cval, unsigned threads);
-
-template <typename T, typename U>
-auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
-                 std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                 U axis, double r0, double r1, int n_iter, double lm, bool return_std, unsigned threads) -> py::array_t<std::common_type_t<T, float>>;
-
-template <typename T, typename U>
-auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
-                py::array_t<T, py::array::c_style | py::array::forcecast> y,
-                std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                U axis, double r0, double r1, int n_iter, double lm, unsigned threads) -> py::array_t<std::common_type_t<T, float>>;
 
 }
 

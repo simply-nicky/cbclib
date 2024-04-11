@@ -6,6 +6,12 @@ namespace cbclib {
 
 namespace detail{
 
+template <typename T>
+inline constexpr int signum(T val)
+{
+    return (T(0) < val) - (val < T(0));
+}
+
 /* Returns a positive remainder of division */
 template <typename T, typename U, typename = std::enable_if_t<std::is_integral_v<T> && std::is_integral_v<U>>>
 constexpr auto modulo(T a, U b) -> decltype(a % b)
@@ -65,6 +71,18 @@ auto ravel_index_impl(InputIt1 cfirst, InputIt1 clast, InputIt2 sfirst)
     return index;
 }
 
+template <size_t Dim = 0, typename Strides>
+size_t ravel_index_var(const Strides & strides)
+{
+    return 0;
+}
+
+template <size_t Dim = 0, typename Strides, typename... Ix>
+size_t ravel_index_var(const Strides & strides, size_t i, Ix... index)
+{
+    return i * strides[Dim] + ravel_index_var<Dim + 1>(strides, index...);
+}
+
 template <typename InputIt, typename OutputIt, typename T>
 OutputIt unravel_index_impl(InputIt sfirst, InputIt slast, T index, OutputIt cfirst)
 {
@@ -110,7 +128,7 @@ public:
         size_t stride = size;
         for (auto length : shape)
         {
-            stride /= length;
+            stride = (length) ? stride / length : stride;
             strides.push_back(stride);
         }
     }
@@ -164,6 +182,14 @@ public:
         return ravel_index_impl(coord.begin(), coord.end(), this->strides.begin());
     }
 
+    template <typename... Ix, typename = std::enable_if_t<(std::is_integral_v<Ix> && ...)>>
+    auto ravel_index(Ix... index) const
+    {
+        if (sizeof...(index) > ndim) fail_dim_check(sizeof...(index), "too many indices for an array");
+
+        return ravel_index_var(strides, size_t(index)...);
+    }
+
     // initializer_list's aren't deducible, so don't get matched by the above template;
     // we need this to explicitly allow implicit conversion from one:
     template <typename T, typename = std::enable_if_t<std::is_integral_v<T>>>
@@ -175,8 +201,8 @@ public:
     template <
         typename CoordIter,
         typename = std::enable_if_t<
-            std::is_integral_v<typename CoordIter::value_type> || 
-            std::is_same_v<typename CoordIter::iterator_category, std::output_iterator_tag>
+            std::is_integral_v<typename std::iterator_traits<CoordIter>::value_type> || 
+            std::is_same_v<typename std::iterator_traits<CoordIter>::iterator_category, std::output_iterator_tag>
         >
     >
     CoordIter unravel_index(CoordIter first, size_t index) const
@@ -191,6 +217,63 @@ protected:
     void fail_dim_check(size_t dim, const std::string & msg) const
     {
         throw std::out_of_range(msg + ": " + std::to_string(dim) + " (ndim = " + std::to_string(this->ndim) + ')');
+    }
+};
+
+// Taken from the boost::hash_combine: https://www.boost.org/doc/libs/1_35_0/doc/html/boost/hash_combine_id241013.html
+template <class T>
+inline size_t hash_combine(size_t seed, const T & v)
+{
+    return seed ^ (std::hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+}
+
+template <typename T, size_t N>
+struct ArrayHasher
+{
+    size_t operator()(const std::array<T, N> & arr) const
+    {
+        size_t h = 0;
+        for (auto elem : arr) h = hash_combine(h, elem); 
+        return h;
+    }   
+};
+
+// Recursive template code derived from Matthieu M.
+template <class Tuple, size_t Index = std::tuple_size<Tuple>::value - 1>
+struct HashValueImpl
+{
+    static size_t apply(size_t seed, const Tuple & tuple)
+    {
+        seed = HashValueImpl<Tuple, Index - 1>::apply(seed, tuple);
+        return hash_combine(seed, std::get<Index>(tuple));
+    }
+};
+
+template <class Tuple>
+struct HashValueImpl<Tuple, 0>
+{
+    static size_t apply(size_t seed, const Tuple & tuple)
+    {
+        return hash_combine(seed, std::get<0>(tuple));
+    }
+};
+
+
+template <typename ... Ts>
+struct TupleHasher
+{
+    size_t operator()(const std::tuple<Ts...> & tt) const
+    {
+        return HashValueImpl<std::tuple<Ts...>>::apply(0, tt);
+    }
+};
+
+template <typename T1, typename T2>
+struct PairHasher
+{
+    size_t operator()(const std::pair<T1, T2> & tt) const
+    {
+        return HashValueImpl<std::pair<T1, T2>>::apply(0, tt);
     }
 };
 
@@ -508,42 +591,188 @@ static std::unordered_map<std::string, extend> const modes = {{"constant", exten
 namespace detail {
 
 template <typename T>
-T rectangular(T x, T sigma) {return (x <= sigma) ? T(1.0) : T(0.0);}
+T rectangular(T x) {return (std::abs(x) <= T(1.0)) ? T(1.0) : T();}
 
 template <typename T>
-T gaussian(T x, T sigma) {return exp(-std::pow(3 * x / sigma, 2) / 2) / Constants::M_1_SQRT2PI;}
+T gaussian(T x)
+{
+    if (std::abs(x) <= T(1.0)) return Constants::M_1_SQRT2PI * std::exp(-std::pow(3 * x, 2) / 2);
+    return T();
+}
 
 template <typename T>
-T triangular(T x, T sigma) {return std::max<T>(1 - std::abs(x / sigma), T());}
+T gaussian_grad(T x) {return -9 * x * gaussian(x);}
 
 template <typename T>
-T parabolic(T x, T sigma) {return T(0.75) * std::max<T>(1 - std::pow(x / sigma, 2), T());}
+T triangular(T x) {return std::max<T>(T(1.0) - std::abs(x), T());}
 
 template <typename T>
-T biweight(T x, T sigma) {return 15 / 16 * std::max<T>(std::pow(1 - std::pow(x / sigma, 2), 2), T());}
+T triangular_grad(T x)
+{
+    if (std::abs(x) < T(1.0)) return -signum(x);
+    return T();
+}
+
+template <typename T>
+T parabolic(T x) {return T(0.75) * std::max<T>(1 - std::pow(x, 2), T());}
+
+template <typename T>
+T parabolic_grad(T x) 
+{
+    if (std::abs(x) < T(1.0)) return T(0.75) * -2 * x;
+    return T();
+}
+
+template <typename T>
+T biweight(T x) {return T(0.9375) * std::pow(std::max<T>(1 - std::pow(x, 2), T()), 2);}
+
+template <typename T>
+T biweight_grad(T x)
+{
+    if (std::abs(x) < T(1.0)) return T(0.9375) * -4 * x * (1 - std::pow(x, 2));
+    return T();
+}
 
 }
 
 template <typename T>
 struct kernels
 {
-    using kernel = T (*)(T, T);
+    enum kernel_type
+    {
+        biweight = 0,
+        gaussian = 1,
+        parabolic = 2,
+        rectangular = 3,
+        triangular = 4
+    };
 
-    static inline std::map<std::string, kernel> registered_kernels = {{"biweight"   , detail::biweight<T>},
-                                                                      {"gaussian"   , detail::gaussian<T>},
-                                                                      {"parabolic"  , detail::parabolic<T>},
-                                                                      {"rectangular", detail::rectangular<T>},
-                                                                      {"triangular" , detail::triangular<T>}};
+    using kernel = T (*)(T);
+    using gradient = T (*)(T);
+
+    static inline std::map<std::string, kernel_type> kernel_names =
+    {
+        {"biweight", kernel_type::biweight},
+        {"gaussian", kernel_type::gaussian},
+        {"parabolic", kernel_type::parabolic},
+        {"rectangular", kernel_type::rectangular},
+        {"triangular", kernel_type::triangular}
+    };
+
+    static inline std::map<kernel_type, std::pair<kernel, kernel>> registered_kernels = 
+    {
+        {kernel_type::biweight, {detail::biweight<T>, detail::biweight_grad<T>}},
+        {kernel_type::gaussian, {detail::gaussian<T>, detail::gaussian_grad<T>}},
+        {kernel_type::parabolic, {detail::parabolic<T>, detail::parabolic_grad<T>}},
+        {kernel_type::rectangular, {detail::rectangular<T>, nullptr}},
+        {kernel_type::triangular, {detail::triangular<T>, detail::triangular_grad<T>}}
+    };
+
+    static kernel get_kernel(kernel_type k, bool throw_if_missing = true)
+    {
+        auto it = registered_kernels.find(k);
+        if (it != registered_kernels.end()) return it->second.first;
+        if (throw_if_missing)
+            throw std::invalid_argument("kernel is missing for " + std::to_string(k));
+        return nullptr;
+    }
 
     static kernel get_kernel(std::string name, bool throw_if_missing = true)
     {
-        auto it = registered_kernels.find(name);
-        if (it != registered_kernels.end()) return it->second;
+        auto it = kernel_names.find(name);
+        if (it != kernel_names.end()) return get_kernel(it->second, throw_if_missing);
         if (throw_if_missing)
             throw std::invalid_argument("kernel is missing for " + name);
         return nullptr;
     }
+
+    static kernel get_grad(kernel_type k, bool throw_if_missing = true)
+    {
+        auto it = registered_kernels.find(k);
+        if (it != registered_kernels.end() && it->second.second) return it->second.second;
+        if (throw_if_missing)
+            throw std::invalid_argument("gradient is missing for " + std::to_string(k));
+        return nullptr;
+    }
+
+    static kernel get_grad(std::string name, bool throw_if_missing = true)
+    {
+        auto it = kernel_names.find(name);
+        if (it != kernel_names.end()) return get_grad(it->second, throw_if_missing);
+        if (throw_if_missing)
+            throw std::invalid_argument("gradient is missing for " + name);
+        return nullptr;
+    }
+
+
 };
+
+/*----------------------------------------------------------------------------*/
+/*-------------- Compile-time to_array, to_tuple, and to_tie -----------------*/
+/*----------------------------------------------------------------------------*/
+namespace detail {
+template <size_t... I>
+constexpr auto integral_sequence_impl(std::index_sequence<I...>)
+{
+  return std::make_tuple(std::integral_constant<size_t, I>{}...);
+}
+
+template <typename T, T... I, size_t... J>
+constexpr auto reverse_impl(std::integer_sequence<T, I...>, std::index_sequence<J...>)
+{
+    return std::integer_sequence<T, std::get<sizeof...(J) - J - 1>(std::make_tuple(I...))...>{};
+}
+
+}
+
+template <size_t N>
+constexpr auto integral_sequence()
+{
+    return detail::integral_sequence_impl(std::make_index_sequence<N>{});
+}
+
+template <typename T, T... I>
+constexpr auto reverse_sequence(std::integer_sequence<T, I...> seq)
+{
+    return detail::reverse_impl(seq, std::make_index_sequence<sizeof...(I)>{});
+}
+
+template <size_t N, class Func>
+constexpr decltype(auto) apply_to_sequence(Func && func)
+{
+    return std::apply(std::forward<Func>(func), integral_sequence<N>());
+}
+
+template <size_t N, class Container, typename T = Container::value_type>
+constexpr std::array<T, N> to_array(const Container & a, size_t start)
+{
+    auto impl = [&a, start](auto... idxs) -> std::array<T, N> {return {{a[start + idxs]...}};};
+    return apply_to_sequence<N>(impl);
+}
+
+template <size_t N, class Container>
+constexpr auto to_tuple(const Container & a, size_t start)
+{
+    return apply_to_sequence<N>([&a, start](auto... idxs){return std::make_tuple(a[start + idxs]...);});
+}
+
+template <typename T, size_t N>
+constexpr auto to_tuple(const std::array<T, N> & a)
+{
+    return apply_to_sequence<N>([&a](auto... idxs){return std::make_tuple(a[idxs]...);});
+}
+
+template <size_t N, class Container>
+constexpr auto to_tie(Container & a, size_t start)
+{
+    return apply_to_sequence<N>([&a, start](auto... idxs){return std::tie(a[start + idxs]...);});
+}
+
+template <typename T, size_t N>
+constexpr auto to_tie(std::array<T, N> & a)
+{
+    return apply_to_sequence<N>([&a](auto... idxs){return std::tie(a[idxs]...);});
+}
 
 }
 
