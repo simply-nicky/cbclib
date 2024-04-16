@@ -1,5 +1,5 @@
 from typing import Optional, Union, overload
-from ..annotations import NDRealArray, NDIntArray, NDBoolArray, IntSequence
+from ..annotations import NDRealArray, NDIntArray, NDBoolArray, Mode, IntSequence
 
 @overload
 def median(inp: NDRealArray, mask: Optional[NDBoolArray]=None, axis: IntSequence=0,
@@ -36,20 +36,20 @@ def median(inp: Union[NDRealArray, NDIntArray], mask: Optional[NDBoolArray]=None
 @overload
 def median_filter(inp: NDRealArray, size: Optional[IntSequence]=None,
                   footprint: Optional[NDBoolArray]=None,
-                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                   num_threads: int=1) -> NDRealArray:
     ...
 
 @overload
 def median_filter(inp: NDIntArray, size: Optional[IntSequence]=None,
                   footprint: Optional[NDBoolArray]=None,
-                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                   num_threads: int=1) -> NDIntArray:
     ...
 
 def median_filter(inp: Union[NDRealArray, NDIntArray], size: Optional[IntSequence]=None,
                   footprint: Optional[NDBoolArray]=None,
-                  mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                  mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                   num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a multidimensional median filter.
 
@@ -100,20 +100,20 @@ def median_filter(inp: Union[NDRealArray, NDIntArray], size: Optional[IntSequenc
 @overload
 def maximum_filter(inp: NDRealArray, size: Optional[IntSequence]=None,
                    footprint: Optional[NDBoolArray]=None,
-                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                    num_threads: int=1) -> NDRealArray:
     ...
 
 @overload
 def maximum_filter(inp: NDIntArray, size: Optional[IntSequence]=None,
                    footprint: Optional[NDBoolArray]=None,
-                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                    num_threads: int=1) -> NDIntArray:
     ...
 
 def maximum_filter(inp: Union[NDRealArray, NDIntArray], size: Optional[IntSequence]=None,
                    footprint: Optional[NDBoolArray]=None,
-                   mask: Optional[NDBoolArray]=None, mode: str='reflect', cval: float=0.0,
+                   mask: Optional[NDBoolArray]=None, mode: Mode='reflect', cval: float=0.0,
                    num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
     """Calculate a multidimensional maximum filter.
 

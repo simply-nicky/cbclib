@@ -10,7 +10,7 @@ import json
 import os
 import re
 from typing import (Any, Callable, ClassVar, Dict, Generic, ItemsView, Iterator, List,
-                    Optional, Protocol, Tuple, Type, Union, ValuesView, TypeVar, cast, get_args,
+                    Optional, Protocol, Tuple, Type, Union, ValuesView, TypeVar, get_args,
                     get_origin, overload, runtime_checkable)
 import numpy as np
 import jax.numpy as jnp
@@ -172,16 +172,16 @@ class StringFormatter:
                        'ndarray': cls.get_array_dtype,
                        'Array': lambda type: 'float'}
 
-        if get_origin(type) is None:
+        origin = get_origin(type)
+
+        if origin is None:
             return formatters.get(type.__name__, str)
-        if get_origin(type) is ClassVar:
+        if origin is ClassVar:
             return formatters.get(get_args(type)[0].__name__, str)
-        if get_origin(type) is dict:
+        if origin is dict:
             return cls.get_formatter(get_args(type)[1])
 
-        origin = cast(Any, get_origin(type))
         string = arg_getters[origin.__name__](type)
-
         origin_formatter = formatters.get(origin.__name__, str)
         arg_formatter = formatters.get(string, str)
         return lambda string: origin_formatter(string, arg_formatter)

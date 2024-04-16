@@ -1,7 +1,5 @@
-from typing import Dict, Optional, Tuple
-from ..annotations import NDRealArray, NDIntArray, Shape
-
-Table = Dict[Tuple[int, int], float]
+from typing import Optional
+from ..annotations import NDRealArray, NDIntArray, Shape, Table
 
 def draw_line(out: NDRealArray, lines: NDRealArray, idxs: Optional[NDIntArray]=None,
               max_val: float=1.0, kernel: str='biweight', num_threads: int=1) -> NDRealArray:

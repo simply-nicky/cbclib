@@ -193,7 +193,7 @@ void check_indices(std::string name, size_t xsize, size_t isize, std::optional<p
         if (static_cast<size_t>(idxs.value().size()) != isize)
             throw std::invalid_argument(name + " has an invalid size (" + std::to_string(idxs.value().size()) +
                                         " != " + std::to_string(isize) + ")");
-        auto begin = idxs.value().mutable_data();
+        auto begin = idxs.value().data();
         auto end = begin + idxs.value().size();
         auto [min, max] = std::minmax_element(begin, end);
         if (*max >= static_cast<I>(xsize) || *min < I())

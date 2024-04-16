@@ -7,7 +7,7 @@ namespace cbclib {
 using point_t = Point<long>;
 
 template <typename T, typename I = typename point_t::value_type>
-using table_t = std::unordered_map<std::pair<I, I>, T, detail::PairHasher<I, I>>;
+using table_t = std::map<std::pair<I, I>, T>;
 
 namespace detail {
 

@@ -19,7 +19,7 @@ import os
 import fnmatch
 import re
 from types import TracebackType
-from typing import (Any, Callable, ClassVar, Dict, List, Optional, Protocol, Tuple, Union, cast,
+from typing import (Any, Callable, ClassVar, Dict, List, Literal, Optional, Protocol, Tuple, Union, cast,
                     get_type_hints)
 import h5py
 import numpy as np
@@ -399,8 +399,10 @@ class CXIStore(FileStore):
             * 'w-' or 'x' : Create file, fail if exists.
             * 'a' : Read/write if exists, create otherwise.
     """
+    Mode = Literal['r', 'r+', 'w', 'w-', 'x', 'a']
+
     names       : Union[str, List[str]]
-    mode        : str = 'r'
+    mode        : Mode = 'r'
     protocol    : CXIProtocol = CXIProtocol.read()
     files       : Dict[str, Optional[h5py.File]] = field(default_factory=dict)
     indices     : Dict[str, NDArray] = field(default_factory=dict)

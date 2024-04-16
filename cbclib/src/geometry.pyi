@@ -142,8 +142,7 @@ def k_to_smp_vjp(cotangents: NDRealArray, k: NDRealArray, z: NDRealArray,
     ...
 
 def matmul_indices(vsize: int, msize: int, vidxs: Optional[NDIntArray]=None,
-                   midxs: Optional[NDIntArray]=None) -> Tuple[NDIntArray,
-                                                                      NDIntArray]:
+                   midxs: Optional[NDIntArray]=None) -> Tuple[NDIntArray, NDIntArray]:
     ...
 
 def matmul(vecs: NDRealArray, mats: NDRealArray, vidxs: Optional[NDIntArray]=None,

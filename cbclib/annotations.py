@@ -1,4 +1,4 @@
-from typing import Any, List, Sequence, Tuple, Union
+from typing import Any, Dict, List, Literal, NamedTuple, Sequence, Tuple, Union
 import numpy as np
 import numpy.typing as npt
 from jax import Array as JaxArray
@@ -31,3 +31,35 @@ NDRealArrayLike = Union[NDRealArray, List[float], Tuple[float, ...]]
 JaxRealArrayLike = Union[JaxArray, List[float], Tuple[float, ...]]
 
 PyTree = Any
+Table = Dict[Tuple[int, int], float]
+
+Norm = Literal['backward', 'forward', 'ortho']
+Mode = Literal['constant', 'nearest', 'mirror', 'reflect', 'wrap']
+
+class Pattern(NamedTuple):
+    index   : NDIntArray
+    frames  : NDIntArray
+    y       : NDIntArray
+    x       : NDIntArray
+    rp      : NDRealArray
+
+class PatternWithHKL(NamedTuple):
+    index   : NDIntArray
+    frames  : NDIntArray
+    y       : NDIntArray
+    x       : NDIntArray
+    rp      : NDRealArray
+    h       : NDIntArray
+    k       : NDIntArray
+    l       : NDIntArray
+
+class PatternWithHKLID(NamedTuple):
+    index   : NDIntArray
+    frames  : NDIntArray
+    y       : NDIntArray
+    x       : NDIntArray
+    rp      : NDRealArray
+    h       : NDIntArray
+    k       : NDIntArray
+    l       : NDIntArray
+    hkl_id  : NDIntArray

@@ -17,7 +17,7 @@ class TestJaxPrimitives():
         return request.param
 
     @pytest.fixture
-    def src(self, rng: np.random.Generator) -> Tuple[int, int, int]:
+    def src(self, rng: np.random.Generator) -> Tuple[int, ...]:
         return tuple(rng.random(3))
 
     @pytest.fixture

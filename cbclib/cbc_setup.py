@@ -15,13 +15,14 @@ Examples:
 from __future__ import annotations
 from multiprocessing import cpu_count
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, Iterable, List, Optional, Tuple, Union, cast, get_type_hints
+from typing import Any, ClassVar, Iterable, Optional, Tuple, Union, get_type_hints
 import numpy as np
 import pandas as pd
 from .src import (draw_line_image, draw_line_mask, draw_line_table, det_to_k, euler_angles,
                   euler_matrix, k_to_det, k_to_smp, matmul, source_lines, tilt_angles, tilt_matrix)
 from .data_container import DataContainer, Parser, INIParser, JSONParser, Transform, Crop
-from .annotations import RealSequence, Indices, NDArray, NDIntArray, NDRealArray, Shape
+from .annotations import (Indices, NDArray, NDIntArray, NDRealArray, Pattern, PatternWithHKL,
+                          PatternWithHKLID, RealSequence, Shape)
 
 @dataclass
 class Basis(DataContainer):
@@ -64,7 +65,10 @@ class Basis(DataContainer):
         Returns:
             A new :class:`Basis` object.
         """
-        return cls(mat[0], mat[1], mat[2])
+        if mat.size != 9:
+            raise ValueError("Wrong matrix size: " + str(mat.size))
+        mat = mat.reshape(-1, 3)
+        return cls(a_vec=mat[0], b_vec=mat[1], c_vec=mat[2])
 
     @classmethod
     def import_spherical(cls, mat: NDRealArray) -> Basis:
@@ -160,11 +164,18 @@ class ScanSetup(DataContainer):
     x_pixel_size    : float
     y_pixel_size    : float
 
-    def __post_init__(self):
-        self.kin_min = self.detector_to_kin(x=self.pupil_roi[2], y=self.pupil_roi[0])[0]
-        self.kin_max = self.detector_to_kin(x=self.pupil_roi[3], y=self.pupil_roi[1])[0]
-        self.kin_center = self.detector_to_kin(x=np.mean(self.pupil_roi[2:]),
-                                               y=np.mean(self.pupil_roi[:2]))[0]
+    @property
+    def kin_min(self) -> NDRealArray:
+        return self.detector_to_kin(x=self.pupil_roi[2], y=self.pupil_roi[0]).ravel()
+
+    @property
+    def kin_max(self) -> NDRealArray:
+        return self.detector_to_kin(x=self.pupil_roi[3], y=self.pupil_roi[1]).ravel()
+
+    @property
+    def kin_center(self) -> NDRealArray:
+        return self.detector_to_kin(x=np.mean(self.pupil_roi[2:]),
+                                    y=np.mean(self.pupil_roi[:2])).ravel()
 
     @classmethod
     def parser(cls, ext: str='ini') -> Parser:
@@ -258,7 +269,7 @@ class ScanSetup(DataContainer):
             An array of points pertaining to the sample planes.
         """
         if smp_z is None:
-            smp_z = cast(RealSequence, self.foc_pos[2] + self.smp_dist)
+            smp_z = float(self.foc_pos[2] + self.smp_dist)
         return k_to_smp(kin, np.atleast_1d(smp_z), self.foc_pos, idxs=idxs,
                         num_threads=num_threads)
 
@@ -433,7 +444,7 @@ class Sample(DataContainer):
             An array of points belonging to the sample plane.
         """
         if kin is None:
-            kin = cast(NDRealArray, setup.kin_center)
+            kin = setup.kin_center
         return setup.kin_to_sample(kin, self.z, num_threads=num_threads)
 
     def rotate_basis(self, basis: Basis) -> Basis:
@@ -679,14 +690,6 @@ class Streaks(DataContainer):
     def __len__(self) -> int:
         return self.length.shape[0]
 
-    def keys(self) -> List[str]:
-        keys = ['index', 'frames', 'x' , 'y', 'rp']
-        if self.hkl is not None:
-            keys.extend(['h', 'k', 'l'])
-        if self.hkl_id is not None:
-            keys.append('hkl_id')
-        return keys
-
     def mask_streaks(self, idxs: Indices) -> Streaks:
         """Return a new streaks container with a set of streaks discarded.
 
@@ -698,8 +701,8 @@ class Streaks(DataContainer):
         """
         return Streaks(**{attr: self[attr][idxs] for attr in self.contents()})
 
-    def pattern_dict(self, width: float, shape: Shape,
-                     kernel: str='rectangular') -> Dict[str, Union[NDRealArray, NDIntArray]]:
+    def pattern_dict(self, width: float, shape: Shape, kernel: str='rectangular'
+                     ) -> Union[Pattern, PatternWithHKL, PatternWithHKLID]:
         """Draw a pattern in the :class:`dict` format.
 
         Args:
@@ -720,16 +723,18 @@ class Streaks(DataContainer):
         table = draw_line_table(lines=self.to_lines(width), shape=shape,
                                 idxs=self.idxs, kernel=kernel)
         ids, idxs = np.array(list(table)).T
-        normalised_shape = (np.prod(shape[:-2], dtype=int),) + shape[-2:]
-        frames, y, x = np.stack(np.unravel_index(idxs, normalised_shape), axis=-1)
+        normalised_shape: Tuple[int, int, int] = (np.prod(shape[:-2], dtype=int),) + shape[-2:]
+        frames, y, x = np.unravel_index(idxs, normalised_shape)
         vals = np.array(list(table.values()))
-        pattern = {'index': ids, 'frames': frames, 'x': x, 'y': y, 'rp': vals}
+
         if self.hkl is not None:
             h, k, l = self.hkl[ids].T
-            pattern.update(h=h, k=k, l=l)
-        if self.hkl_id is not None:
-            pattern['hkl_id'] = self.hkl_id[ids]
-        return pattern
+
+            if self.hkl_id is not None:
+                return PatternWithHKLID(ids, frames, y, x, vals, h, k, l,
+                                        self.hkl_id[ids])
+            return PatternWithHKL(ids, frames, y, x, vals, h, k, l)
+        return Pattern(ids, frames, y, x, vals)
 
     def pattern_dataframe(self, width: float, shape: Shape,
                           kernel: str='rectangular') -> pd.DataFrame:
@@ -846,13 +851,9 @@ class CBDModel(DataContainer):
     @property
     def shape(self) -> Optional[Shape]:
         if isinstance(self.transform, Crop):
-            return (self.transform.roi[1] - self.transform.roi[0],
+            return (self.samples.size, self.transform.roi[1] - self.transform.roi[0],
                     self.transform.roi[3] - self.transform.roi[2])
         return None
-
-    @property
-    def size(self) -> int:
-        return self.samples.size
 
     def __getitem__(self, idxs: Indices) -> CBDModel:
         return self.replace(samples=self.samples[idxs])
@@ -906,7 +907,7 @@ class CBDModel(DataContainer):
 
         rec_vec = self.rec_vectors(hkl, hidxs, bidxs)
         kin = source_lines(rec_vec, num_threads=self.num_threads,
-                        kmin=self.setup.kin_min[:2], kmax=self.setup.kin_max[:2])
+                           kmin=self.setup.kin_min[:2], kmax=self.setup.kin_max[:2])
         mask = np.sum(kin, axis=(-2, -1)) > 0
 
         kin, rec_vec, hidxs, bidxs = kin[mask], rec_vec[mask], hidxs[mask], bidxs[mask]
@@ -919,8 +920,8 @@ class CBDModel(DataContainer):
             x, y = self.transform.forward_points(x, y)
 
         if self.shape:
-            mask = (0 < y).any(axis=1) & (y < self.shape[0]).any(axis=1) & \
-                   (0 < x).any(axis=1) & (x < self.shape[1]).any(axis=1)
+            mask = (0 < y).any(axis=1) & (y < self.shape[-2]).any(axis=1) & \
+                   (0 < x).any(axis=1) & (x < self.shape[-1]).any(axis=1)
             x, y, hidxs, bidxs = x[mask], y[mask], hidxs[mask], bidxs[mask]
 
         result = {'idxs': bidxs, 'x0': x[:, 0], 'y0': y[:, 0], 'x1': x[:, 1], 'y1': y[:, 1],
