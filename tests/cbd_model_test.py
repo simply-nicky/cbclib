@@ -1,12 +1,12 @@
 import pytest
 from typing import Any, Callable, Tuple
 import jax.numpy as jnp
-import jax
+from jax import config
 from jax.test_util import check_grads
 import cbclib as cbc
 from cbclib.annotations import JaxArray, JaxIntArray
 
-jax.config.update("jax_enable_x64", True)
+config.update("jax_enable_x64", True)
 
 class Parameters():
     a_vec           = [-0.00093604,-0.00893389,-0.00049815]
@@ -78,7 +78,7 @@ class TestCBDModel():
         hidxs, bidxs = indices
 
         def wrapper(basis: cbc.jax.Basis, samples: cbc.jax.ScanSamples, setup: cbc.jax.ScanSetup):
-            model = cbc.jax.CBDModel(basis, samples, setup, crop)
+            model = cbc.jax.CBDModel(basis, samples, setup, crop, 1)
             streaks = model.generate_streaks(hkl, hidxs, bidxs)
             return jnp.mean(jnp.concatenate(streaks.to_lines(width)))
 

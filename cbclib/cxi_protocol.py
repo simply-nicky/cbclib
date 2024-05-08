@@ -19,8 +19,8 @@ import os
 import fnmatch
 import re
 from types import TracebackType
-from typing import (Any, Callable, ClassVar, Dict, List, Literal, Optional, Protocol, Tuple, Union, cast,
-                    get_type_hints)
+from typing import (Any, Callable, ClassVar, Dict, List, Literal, Optional, Protocol, Tuple, Union,
+                    cast, get_type_hints)
 import h5py
 import numpy as np
 from tqdm.auto import tqdm

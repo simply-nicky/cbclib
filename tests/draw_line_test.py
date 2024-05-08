@@ -1,11 +1,14 @@
 from typing import Callable, Dict, Optional
 import numpy as np
 import jax.numpy as jnp
+from jax import config
 import pytest
 from jax.test_util import check_grads
 from cbclib.src import draw_line_image, draw_line_table
 from cbclib.jax import draw_line
 from cbclib.annotations import NDIntArray, NDRealArray, Shape, Table
+
+config.update("jax_enable_x64", True)
 
 class TestDrawLine():
     ATOL: float = 1e-8
@@ -46,12 +49,12 @@ class TestDrawLine():
         return request.param
 
     @pytest.fixture
-    def idxs(self, rng: np.random.Generator, n_lines: int, shape: Shape) -> np.ndarray:
+    def idxs(self, rng: np.random.Generator, n_lines: int, shape: Shape) -> NDIntArray:
         return rng.integers(0, np.prod(shape[:-2]) - 1, size=n_lines)
 
     @pytest.fixture
     def lines(self, rng: np.random.Generator, n_lines: int, shape: Shape,
-              length: float, width: float) -> np.ndarray:
+              length: float, width: float) -> NDRealArray:
         lengths = length * rng.random((n_lines,))
         thetas = 2 * np.pi * rng.random((n_lines,))
         x0, y0 = np.array([[shape[-1]], [shape[-2]]]) * rng.random((2, n_lines))
@@ -63,7 +66,7 @@ class TestDrawLine():
 
     @pytest.fixture
     def image(self, lines: NDRealArray, idxs: NDIntArray, shape: Shape, max_val: float,
-              kernel: str) -> np.ndarray:
+              kernel: str) -> NDRealArray:
         return draw_line_image(lines, shape, idxs, max_val=max_val, kernel=kernel)
 
     @pytest.fixture
@@ -161,4 +164,4 @@ class TestDrawLine():
             return draw_line(jnp.zeros(shape), jnp.asarray(lines), jnp.asarray(idxs),
                              max_val=max_val, kernel=kernel)
 
-        check_grads(wrapper, (lines,), order=1, modes='rev', eps=1e-5)
+        check_grads(wrapper, (lines,), order=1, modes='rev')

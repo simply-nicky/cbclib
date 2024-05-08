@@ -86,7 +86,7 @@ py::array_t<T> kr_predict(py::array_t<T, py::array::c_style | py::array::forceca
                           std::optional<py::array_t<T, py::array::c_style | py::array::forcecast>> w, unsigned threads);
 
 template <typename InputIt, typename T, typename Axes, class UnaryFunction>
-UnaryFunction maxima1d(InputIt first, InputIt last, UnaryFunction unary_op, const array<T> & arr, const Axes & axes)
+UnaryFunction maxima_nd(InputIt first, InputIt last, UnaryFunction unary_op, const array<T> & arr, const Axes & axes, size_t order)
 {
     // First element can't be a maximum
     auto iter = (first != last) ? std::next(first) : first;
@@ -120,7 +120,7 @@ UnaryFunction maxima1d(InputIt first, InputIt last, UnaryFunction unary_op, cons
                     break;
                 }
 
-                if (n == axes.size()) unary_op(index);
+                if (n >= order) unary_op(index);
 
                 // Skip samples that can't be maximum, check if it's not last
                 if (ahead != last) iter = ahead;

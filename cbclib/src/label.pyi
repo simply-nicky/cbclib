@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import Iterator, List, Optional, Tuple, Union
-from ..annotations import NDRealArray, NDBoolArray
+from ..annotations import CPPIntSequence, Line, NDRealArray, NDBoolArray
 
 class PointsSet:
     x : List[int]
     y : List[int]
     size : int
 
-    def __init__(self, x: List[int], y: List[int]):
+    def __init__(self, x: CPPIntSequence, y: CPPIntSequence):
         ...
 
 class Structure:
@@ -40,7 +40,7 @@ class Structure:
 class Regions:
     shape : List[int]
 
-    def __init__(self, shape: List[int]):
+    def __init__(self, shape: CPPIntSequence, regions: List[PointsSet]=[]):
         ...
 
     def __delitem__(self, idxs: Union[int, slice]):
@@ -76,7 +76,7 @@ class Regions:
     def ellipse_fit(self, data: NDRealArray) -> List[List[float]]:
         ...
 
-    def line_ift(self, data: NDRealArray) -> List[List[float]]:
+    def line_fit(self, data: NDRealArray) -> List[Line]:
         ...
 
     def moments(self, data: NDRealArray) -> List[List[float]]:

@@ -81,7 +81,7 @@ struct BhmIterator
 
     template <typename Point1, typename Point2, typename Point3>
     BhmIterator(Point1 && pt, Point2 && tau, const Point3 & origin) :
-        point(std::forward<Point1>(pt).point()), tau(std::forward<Point2>(tau).point()), error(dot(pt - origin, tau)) {}
+        point(std::forward<Point1>(pt)), tau(std::forward<Point2>(tau)), error(dot(pt - origin, tau)) {}
 
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     BhmIterator move(const Point<J> & step) const
@@ -117,6 +117,8 @@ struct BhmIterator
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     bool is_xnext(const Point<J> & step) const
     {
+        // std::cout << "2 * e_xy(step) = " << 2 * e_xy(step) << ", step.x() * tau.x() = " << step.x() * tau.x() << std::endl;
+        if (step.x() * tau.x() == 0) return true;
         if (step.x() * tau.x() > 0) return 2 * e_xy(step) <= step.x() * tau.x();
         return 2 * e_xy(step) >= step.x() * tau.x();
     }
@@ -128,8 +130,16 @@ struct BhmIterator
     template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
     bool is_ynext(const Point<J> & step) const
     {
+        // std::cout << "2 * e_xy(step) = " << 2 * e_xy(step) << ", step.y() * tau.y() = " << step.y() * tau.y() << std::endl;
+        if (step.y() * tau.y() == 0) return true;
         if (step.y() * tau.y() > 0) return 2 * e_xy(step) <= step.y() * tau.y();
         return 2 * e_xy(step) >= step.y() * tau.y();
+    }
+
+    template <typename J, typename = std::enable_if_t<std::is_convertible_v<I, J>>>
+    bool is_end(const Point<J> & start, const Point<J> & end) const
+    {
+        return dot(point - end, end - start) >= 0;
     }
 
 private:
@@ -182,8 +192,8 @@ template <typename T, class Func, typename I = typename point_t::value_type, typ
 void draw_bresenham_func(const point_t & ubound, const Line<T> & line, T width, Func && func)
 {
     /* Discrete line */
-    point_t pt0 (line.pt0.round().point());
-    point_t pt1 (line.pt1.round().point());
+    point_t pt0 (line.pt0.round());
+    point_t pt1 (line.pt1.round());
 
     T length = amplitude(line.tau);
     int wi = std::ceil(width) + 1;
@@ -200,9 +210,7 @@ void draw_bresenham_func(const point_t & ubound, const Line<T> & line, T width, 
     BhmIterator<T, I> epix {bnd0, line.tau, line.pt0};
     point_t new_step;
 
-    auto max_cnt = Line<I>(bnd0, bnd1).perimeter();
-
-    for (int cnt = 0; cnt < max_cnt; cnt++)
+    do
     {
         // Perform a step
         lpix.step(new_step); epix.step(new_step);
@@ -220,7 +228,6 @@ void draw_bresenham_func(const point_t & ubound, const Line<T> & line, T width, 
             {
                 std::forward<Func>(func)(liter, eiter);
             }
-            if (lpix.point.x() == bnd1.x()) break;
             new_step.x() = step.x();
         }
         if (lpix.is_ynext(step))
@@ -232,10 +239,10 @@ void draw_bresenham_func(const point_t & ubound, const Line<T> & line, T width, 
             {
                 std::forward<Func>(func)(liter, eiter);
             }
-            if (lpix.point.y() == bnd1.y()) break;
             new_step.y() = step.y();
         }
     }
+    while (!lpix.is_end(bnd0, bnd1));
 }
 
 }

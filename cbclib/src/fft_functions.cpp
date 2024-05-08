@@ -8,7 +8,7 @@ size_t next_fast_len(size_t target)
     if (!(target & (target - 1))) return target;
     if (target <= detail::LPRE[detail::LPRE.size() - 1])
     {
-        return *std::lower_bound(detail::LPRE.cbegin(), detail::LPRE.cend(), target, std::less<size_t>());
+        return *std::lower_bound(detail::LPRE.cbegin(), detail::LPRE.cend(), target);
     }
     size_t match, best_match = 2 * target;
 

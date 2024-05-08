@@ -224,7 +224,7 @@ py::array_t<size_t> local_maxima(py::array_t<T, py::array::c_style | py::array::
         {
             e.run([&]
             {
-                maxima1d(iarr.line_begin(seq[0], i), iarr.line_end(seq[0], i), add_peak, iarr, seq);
+                maxima_nd(iarr.line_begin(seq[0], i), iarr.line_end(seq[0], i), add_peak, iarr, seq, seq.size());
             });
         }
 

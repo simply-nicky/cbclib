@@ -259,6 +259,7 @@ struct Structure : public PointsContainer<std::set<point_t>>
 
     Structure(int radius, int rank) : radius(radius), rank(rank)
     {
+        if (rank > 2 * radius) rank = 2 * radius;
         for (int i = -radius; i <= radius; i++)
         {
             for (int j = -radius; j <= radius; j++)
@@ -480,7 +481,7 @@ struct Regions
     {
         return apply(data, [](const Pixels<T> & region)
         {
-            return std::move(region.moments.central_moments().center_of_mass(region.moments.pt0)).point();
+            return std::move(region.moments.central_moments().center_of_mass(region.moments.pt0)).to_array();
         });
     }
 
@@ -510,7 +511,7 @@ struct Regions
     {
         return apply(data, [](const Pixels<T> & region) -> std::array<T, 4>
         {
-            return region.get_line();
+            return region.get_line().to_array();
         });
     }
 

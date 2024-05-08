@@ -119,14 +119,15 @@ cdef extern from 'fftw3.h':
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             double *_in, double *_out,
-            int *kind, unsigned flags)
+            int *kind, unsigned flags) nogil
 
     # Single precision real planner
     fftwf_plan fftwf_plan_guru_r2r(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             float *_in, float *_out,
-            int *kind, unsigned flags)
+            int *kind, unsigned flags) nogil
+
     # Double precision complex new array execute
     void fftw_execute_dft(fftw_plan,
           cdouble *_in, cdouble *_out) nogil
@@ -160,31 +161,31 @@ cdef extern from 'fftw3.h':
           float *_in, float *_out) nogil
 
     # Double precision plan destroyer
-    void fftw_destroy_plan(fftw_plan)
+    void fftw_destroy_plan(fftw_plan) nogil
 
     # Single precision plan destroyer
-    void fftwf_destroy_plan(fftwf_plan)
+    void fftwf_destroy_plan(fftwf_plan) nogil
 
     # Double precision set timelimit
-    void fftw_set_timelimit(double seconds)
+    void fftw_set_timelimit(double seconds) nogil
 
     # Single precision set timelimit
-    void fftwf_set_timelimit(double seconds)
+    void fftwf_set_timelimit(double seconds) nogil
 
     # Threading routines
     # Double precision
-    void fftw_init_threads()
-    void fftw_plan_with_nthreads(int n)
+    void fftw_init_threads() nogil
+    void fftw_plan_with_nthreads(int n) nogil
 
     # Single precision
-    void fftwf_init_threads()
-    void fftwf_plan_with_nthreads(int n)
+    void fftwf_init_threads() nogil
+    void fftwf_plan_with_nthreads(int n) nogil
 
     # cleanup routines
-    void fftw_cleanup()
-    void fftwf_cleanup()
-    void fftw_cleanup_threads()
-    void fftwf_cleanup_threads()
+    void fftw_cleanup() nogil
+    void fftwf_cleanup() nogil
+    void fftw_cleanup_threads() nogil
+    void fftwf_cleanup_threads() nogil
 
     double FFTW_NO_TIMELIMIT
 
@@ -196,21 +197,21 @@ ctypedef void * (*fftw_generic_plan_guru)(
         int rank, fftw_iodim *dims,
         int howmany_rank, fftw_iodim *howmany_dims,
         void *_in, void *_out,
-        int *directions, unsigned flags) nogil
+        int *directions, unsigned flags) noexcept nogil
 
-ctypedef void (*fftw_generic_execute)(void *_plan, void *_in, void *_out) nogil
+ctypedef void (*fftw_generic_execute)(void *_plan, void *_in, void *_out) noexcept nogil
 
-ctypedef void (*fftw_generic_destroy_plan)(void *_plan)
+ctypedef void (*fftw_generic_destroy_plan)(void *_plan) noexcept nogil
 
-ctypedef void (*fftw_generic_init_threads)()
+ctypedef void (*fftw_generic_init_threads)() noexcept nogil
 
-ctypedef void (*fftw_generic_plan_with_nthreads)(int n)
+ctypedef void (*fftw_generic_plan_with_nthreads)(int n) noexcept nogil
 
-ctypedef void (*fftw_generic_set_timelimit)(double seconds)
+ctypedef void (*fftw_generic_set_timelimit)(double seconds) noexcept nogil
 
 ctypedef bint (*validator)(np.ndarray input_array,
         np.ndarray output_array, int64_t *axes, int64_t *not_axes,
-        int64_t axes_length)
+        int64_t axes_length)noexcept nogil
 
 # Direction enum
 cdef enum:

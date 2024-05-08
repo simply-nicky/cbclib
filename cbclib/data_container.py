@@ -213,7 +213,8 @@ class StringFormatter:
         ...
 
     @classmethod
-    def to_string(cls, node: Union[Any, Dict[str, Any], List[Any], NDArray]) -> Union[str, List[str], Dict[str, str]]:
+    def to_string(cls, node: Union[Any, Dict[str, Any], List[Any], NDArray]
+                  ) -> Union[str, List[str], Dict[str, str]]:
         if isinstance(node, dict):
             return {k: cls.to_string(v) for k, v in node.items()}
         if isinstance(node, list):

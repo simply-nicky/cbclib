@@ -1,10 +1,10 @@
-from typing import Optional, Tuple
+from typing import Tuple
 import numpy as np
 import jax.numpy as jnp
 from jax.core import Primitive, ShapedArray
 from jax.lax import zeros_like_array
 from jax.interpreters import ad
-from .. import src as source
+from ..src import geometry, image_proc
 
 def make_zero(arr, prim):
     return zeros_like_array(prim) if isinstance(arr, ad.Zero) else arr
@@ -19,8 +19,8 @@ def euler_angles(rmats, num_threads=1):
     return euler_angles_p.bind(rmats, num_threads)
 
 @euler_angles_p.def_impl
-def euler_angles_impl(rmats: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.euler_angles(rmats, num_threads)
+def euler_angles_impl(rmats, num_threads):
+    return geometry.euler_angles(np.asarray(rmats), num_threads)
 
 def euler_angles_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     (rmats, num_threads), (rmats_dot, _) = primals, tangents
@@ -43,8 +43,8 @@ def euler_angles_jvp_transpose(ct_angles, rmats, num_threads, rmats_dot):
 ad.primitive_transposes[euler_angles_jvp_p] = euler_angles_jvp_transpose
 
 @euler_angles_vjp_p.def_impl
-def euler_angles_vjp_impl(ct_y: np.ndarray, rmats: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.geometry.euler_angles_vjp(ct_y, rmats, num_threads)
+def euler_angles_vjp_impl(ct_y, rmats, num_threads):
+    return geometry.euler_angles_vjp(np.asarray(ct_y), np.asarray(rmats), num_threads)
 
 # Euler matrix
 
@@ -56,8 +56,8 @@ def euler_matrix(angles, num_threads=1):
     return euler_matrix_p.bind(angles, num_threads)
 
 @euler_matrix_p.def_impl
-def euler_matrix_impl(angles: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.euler_matrix(angles, num_threads)
+def euler_matrix_impl(angles, num_threads):
+    return geometry.euler_matrix(np.asarray(angles), num_threads)
 
 def euler_matrix_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     (angles, num_threads), (angles_dot, _) = primals, tangents
@@ -80,8 +80,8 @@ def euler_matrix_jvp_transpose(ct_rmats, angles, num_threads, angles_dot):
 ad.primitive_transposes[euler_matrix_jvp_p] = euler_matrix_jvp_transpose
 
 @euler_matrix_vjp_p.def_impl
-def euler_matrix_vjp_impl(ct_rmats: np.ndarray, angles: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.geometry.euler_matrix_vjp(ct_rmats, angles, num_threads)
+def euler_matrix_vjp_impl(ct_rmats, angles, num_threads):
+    return geometry.euler_matrix_vjp(np.asarray(ct_rmats), np.asarray(angles), num_threads)
 
 # Tilt angles
 
@@ -93,8 +93,8 @@ def tilt_angles(rmats, num_threads=1):
     return tilt_angles_p.bind(rmats, num_threads)
 
 @tilt_angles_p.def_impl
-def tilt_angles_impl(rmats: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.tilt_angles(rmats, num_threads)
+def tilt_angles_impl(rmats, num_threads):
+    return geometry.tilt_angles(np.asarray(rmats), num_threads)
 
 def tilt_angles_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     (rmats, num_threads), (rmats_dot, _) = primals, tangents
@@ -117,8 +117,8 @@ def tilt_angles_jvp_transpose(ct_angles, rmats, num_threads, rmats_dot):
 ad.primitive_transposes[tilt_angles_jvp_p] = tilt_angles_jvp_transpose
 
 @tilt_angles_vjp_p.def_impl
-def tilt_angles_vjp_impl(ct_y: np.ndarray, rmats: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.geometry.tilt_angles_vjp(ct_y, rmats, num_threads)
+def tilt_angles_vjp_impl(ct_y, rmats, num_threads):
+    return geometry.tilt_angles_vjp(np.asarray(ct_y), np.asarray(rmats), num_threads)
 
 # Tilt matrix
 
@@ -130,8 +130,8 @@ def tilt_matrix(angles, num_threads=1):
     return tilt_matrix_p.bind(angles, num_threads)
 
 @tilt_matrix_p.def_impl
-def tilt_matrix_impl(angles: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.tilt_matrix(angles, num_threads)
+def tilt_matrix_impl(angles, num_threads):
+    return geometry.tilt_matrix(np.asarray(angles), num_threads)
 
 def tilt_matrix_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     (angles, num_threads), (angles_dot, _) = primals, tangents
@@ -154,8 +154,8 @@ def tilt_matrix_jvp_transpose(ct_rmats, angles, num_threads, angles_dot):
 ad.primitive_transposes[tilt_matrix_jvp_p] = tilt_matrix_jvp_transpose
 
 @tilt_matrix_vjp_p.def_impl
-def tilt_matrix_vjp_impl(ct_rmats: np.ndarray, angles: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.geometry.tilt_matrix_vjp(ct_rmats, angles, num_threads)
+def tilt_matrix_vjp_impl(ct_rmats, angles, num_threads):
+    return geometry.tilt_matrix_vjp(np.asarray(ct_rmats), np.asarray(angles), num_threads)
 
 # det_to_k
 
@@ -164,13 +164,13 @@ det_to_k_jvp_p = Primitive('det_to_k_jvp')
 det_to_k_vjp_p = Primitive('det_to_k_vjp')
 
 def det_to_k(x, y, src, idxs=None, num_threads=1):
-    idxs = source.geometry.fill_indices(src.size // src.shape[-1], x.size, idxs)
+    idxs = geometry.fill_indices(src.size // src.shape[-1], x.size, idxs)
     return det_to_k_p.bind(x, y, src, idxs, num_threads)
 
 @det_to_k_p.def_impl
-def det_to_k_impl(x: np.ndarray, y: np.ndarray, src: np.ndarray, idxs: np.ndarray,
-                  num_threads: int) -> np.ndarray:
-    return source.det_to_k(x, y, src, idxs, num_threads)
+def det_to_k_impl(x, y, src, idxs, num_threads):
+    return geometry.det_to_k(np.asarray(x), np.asarray(y), np.asarray(src), np.asarray(idxs),
+                             num_threads)
 
 def det_to_k_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     x, y, src, idxs, num_threads = primals
@@ -198,10 +198,9 @@ def det_to_k_jvp_transpose(ct_k, x, y, src, idxs, num_threads, x_dot, y_dot, src
 ad.primitive_transposes[det_to_k_jvp_p] = det_to_k_jvp_transpose
 
 @det_to_k_vjp_p.def_impl
-def det_to_k_vjp_impl(ct_k: np.ndarray, x: np.ndarray, y: np.ndarray,
-                      src: np.ndarray, idxs: Optional[np.ndarray],
-                      num_threads: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    return source.geometry.det_to_k_vjp(ct_k, x, y, src, idxs, num_threads)
+def det_to_k_vjp_impl(ct_k, x, y, src, idxs, num_threads):
+    return geometry.det_to_k_vjp(np.asarray(ct_k), np.asarray(x), np.asarray(y),
+                                 np.asarray(src), np.asarray(idxs), num_threads)
 
 # k_to_det
 
@@ -210,14 +209,14 @@ k_to_det_jvp_p = Primitive('k_to_det_jvp')
 k_to_det_vjp_p = Primitive('k_to_det_vjp')
 
 def k_to_det(k, src, idxs=None, num_threads=1):
-    idxs = source.geometry.fill_indices(src.size // src.shape[-1], k.size // k.shape[-1], idxs)
+    idxs = geometry.fill_indices(src.size // src.shape[-1], k.size // k.shape[-1], idxs)
     x, y = k_to_det_p.bind(k, src, idxs, num_threads)
     return x, y
 
 @k_to_det_p.def_impl
-def k_to_det_impl(k: np.ndarray, src: np.ndarray, idxs: np.ndarray,
-                  num_threads: int) -> np.ndarray:
-    return np.stack(source.geometry.k_to_det(k, src, idxs, num_threads))
+def k_to_det_impl(k, src, idxs, num_threads):
+    return np.stack(geometry.k_to_det(np.asarray(k), np.asarray(src), np.asarray(idxs),
+                                      num_threads))
 
 def k_to_det_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     k, src, idxs, num_threads = primals
@@ -244,9 +243,9 @@ def k_to_det_jvp_transpose(cotangents, k, src, idxs, num_threads, k_dot, src_dot
 ad.primitive_transposes[k_to_det_jvp_p] = k_to_det_jvp_transpose
 
 @k_to_det_vjp_p.def_impl
-def k_to_det_vjp_impl(cotangents: Tuple[np.ndarray, np.ndarray], k: np.ndarray, src: np.ndarray,
-                      idxs: np.ndarray, num_threads: int) -> Tuple[np.ndarray, np.ndarray]:
-    return source.geometry.k_to_det_vjp(cotangents, k, src, idxs, num_threads)
+def k_to_det_vjp_impl(cotangents, k, src, idxs, num_threads):
+    return geometry.k_to_det_vjp(cotangents, np.asarray(k), np.asarray(src), np.asarray(idxs),
+                                 num_threads)
 
 # k_to_smp
 
@@ -255,13 +254,13 @@ k_to_smp_jvp_p = Primitive('k_to_smp_jvp')
 k_to_smp_vjp_p = Primitive('k_to_smp_vjp')
 
 def k_to_smp(k, z, src, idxs=None, num_threads=1):
-    idxs = source.geometry.fill_indices(z.size, k.size // k.shape[-1], idxs)
+    idxs = geometry.fill_indices(z.size, k.size // k.shape[-1], idxs)
     return k_to_smp_p.bind(k, z, jnp.asarray(src), idxs, num_threads)
 
 @k_to_smp_p.def_impl
-def k_to_smp_impl(k: np.ndarray, z: np.ndarray, src: np.ndarray, idxs: np.ndarray,
-                  num_threads: int) -> np.ndarray:
-    return source.geometry.k_to_smp(k, z, src, idxs, num_threads)
+def k_to_smp_impl(k, z, src, idxs, num_threads):
+    return geometry.k_to_smp(np.asarray(k), np.asarray(z), np.asarray(src), np.asarray(idxs),
+                             num_threads)
 
 def k_to_smp_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     k, z, src, idxs, num_threads = primals
@@ -289,10 +288,9 @@ def k_to_smp_jvp_transpose(ct_pts, k, z, src, idxs, num_threads, k_dot, z_dot, s
 ad.primitive_transposes[k_to_smp_jvp_p] = k_to_smp_jvp_transpose
 
 @k_to_smp_vjp_p.def_impl
-def k_to_smp_vjp_impl(cotangents: np.ndarray, k: np.ndarray, z: np.ndarray,
-                      src: np.ndarray, idxs: np.ndarray,
-                      num_threads: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    ct_k, ct_z, ct_src = source.geometry.k_to_smp_vjp(cotangents, k, z, src, idxs, num_threads)
+def k_to_smp_vjp_impl(cotangents, k, z, src, idxs, num_threads):
+    ct_k, ct_z, ct_src = geometry.k_to_smp_vjp(np.asarray(cotangents), np.asarray(k), np.asarray(z),
+                                               np.asarray(src), np.asarray(idxs), num_threads)
     return ct_k, ct_z, np.array(ct_src)
 
 # matmul
@@ -303,13 +301,13 @@ matmul_vjp_p = Primitive('matmul_vjp')
 
 def matmul(vecs, mats, vidxs=None, midxs=None, num_threads=1):
     vsize, msize = vecs.size // vecs.shape[-1], mats.size // (mats.shape[-2] * mats.shape[-1])
-    vidxs, midxs = source.geometry.matmul_indices(vsize, msize, vidxs, midxs)
+    vidxs, midxs = geometry.matmul_indices(vsize, msize, vidxs, midxs)
     return matmul_p.bind(vecs, mats, vidxs, midxs, num_threads)
 
 @matmul_p.def_impl
-def matmul_impl(vecs: np.ndarray, mats: np.ndarray, vidxs: np.ndarray, midxs: np.ndarray,
-                num_threads: int) -> np.ndarray:
-    return source.geometry.matmul(vecs, mats, vidxs, midxs, num_threads)
+def matmul_impl(vecs, mats, vidxs, midxs, num_threads):
+    return geometry.matmul(np.asarray(vecs), np.asarray(mats), np.asarray(vidxs), np.asarray(midxs),
+                           num_threads)
 
 def matmul_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     vecs, mats, vidxs, midxs, num_threads = primals
@@ -334,9 +332,9 @@ def matmul_jvp_transpose(ct, vecs, mats, vidxs, midxs, num_threads, v_dot, m_dot
 ad.primitive_transposes[matmul_jvp_p] = matmul_jvp_transpose
 
 @matmul_vjp_p.def_impl
-def matmul_vjp_impl(cotangents: np.ndarray, vecs: np.ndarray, mats: np.ndarray, vidxs: np.ndarray,
-                    midxs: np.ndarray, num_threads: int) -> Tuple[np.ndarray, np.ndarray]:
-    return source.geometry.matmul_vjp(cotangents, vecs, mats, vidxs, midxs, num_threads)
+def matmul_vjp_impl(cotangents, vecs, mats, vidxs, midxs, num_threads):
+    return geometry.matmul_vjp(np.asarray(cotangents), np.asarray(vecs), np.asarray(mats),
+                               np.asarray(vidxs), np.asarray(midxs), num_threads)
 
 # source_lines
 
@@ -348,8 +346,8 @@ def source_lines(q, kmin, kmax, num_threads=1):
     return source_lines_p.bind(q, jnp.asarray(kmin), jnp.asarray(kmax), num_threads)
 
 @source_lines_p.def_impl
-def source_lines_impl(q: np.ndarray, kmin: np.ndarray, kmax: np.ndarray, num_threads: int) -> np.ndarray:
-    return source.geometry.source_lines(q, kmin, kmax, num_threads)
+def source_lines_impl(q, kmin, kmax, num_threads):
+    return geometry.source_lines(np.asarray(q), np.asarray(kmin), np.asarray(kmax), num_threads)
 
 def source_lines_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     q, kmin, kmax, num_threads = primals
@@ -377,11 +375,10 @@ def source_lines_jvp_transpose(ct, kin, q, kmin, kmax, num_threads, q_dot, kmin_
 ad.primitive_transposes[source_lines_jvp_p] = source_lines_jvp_transpose
 
 @source_lines_vjp_p.def_impl
-def source_lines_vjp_impl(cotangents: np.ndarray, kin: np.ndarray, q: np.ndarray, kmin: np.ndarray,
-                          kmax: np.ndarray, num_threads: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    ct_q, ct_kmin, ct_kmax = source.geometry.source_lines_vjp(cotangents, kin, q, kmin, kmax,
-                                                              num_threads)
-    return ct_q, jnp.array(ct_kmin), jnp.array(ct_kmax)
+def source_lines_vjp_impl(cotangents, kin, q, kmin, kmax, num_threads):
+    ct_q, ct_kmin, ct_kmax = geometry.source_lines_vjp(np.asarray(cotangents), np.asarray(kin), np.asarray(q),
+                                                       np.asarray(kmin), np.asarray(kmax), num_threads)
+    return ct_q, jnp.asarray(ct_kmin), jnp.asarray(ct_kmax)
 
 # draw_line
 
@@ -397,14 +394,14 @@ KERNEL_NAMES = {0: 'biweight',
 KERNEL_NUMS = dict(zip(KERNEL_NAMES.values(), KERNEL_NAMES.keys()))
 
 def draw_line(out, lines, idxs=None, max_val=1.0, kernel='rectangular', num_threads=1):
-    idxs = source.geometry.fill_indices(np.prod(out.shape[:-2], dtype=int),
-                                        np.prod(lines.shape[:-1], dtype=int), idxs)
+    idxs = geometry.fill_indices(np.prod(out.shape[:-2], dtype=int),
+                                 np.prod(lines.shape[:-1], dtype=int), idxs)
     return draw_line_p.bind(out, lines, idxs, max_val, KERNEL_NUMS[kernel], num_threads)
 
 @draw_line_p.def_impl
-def draw_line_impl(out: np.ndarray, lines: np.ndarray, idxs: np.ndarray, max_val: float,
-                   kernel: int, num_threads: int):
-    return source.image_proc.draw_line(out, lines, idxs, max_val, KERNEL_NAMES[kernel], num_threads)
+def draw_line_impl(out, lines, idxs, max_val, kernel, num_threads):
+    return image_proc.draw_line(np.asarray(out), np.asarray(lines), np.asarray(idxs),
+                                max_val, KERNEL_NAMES[kernel], num_threads)
 
 def draw_line_jvp(primals: Tuple, tangents: Tuple) -> Tuple:
     out, lines, idxs, max_val, kernel, num_threads = primals
@@ -429,7 +426,6 @@ def draw_line_jvp_transpose(ct, out, lines, idxs, max_val, kernel, num_threads, 
 ad.primitive_transposes[draw_line_jvp_p] = draw_line_jvp_transpose
 
 @draw_line_vjp_p.def_impl
-def draw_line_vjp_impl(cotangents: np.ndarray, lines: np.ndarray, idxs: np.ndarray,
-                       max_val: float, kernel: int, num_threads: int) -> np.ndarray:
-    return source.image_proc.draw_line_vjp(cotangents, lines, idxs, max_val, KERNEL_NAMES[kernel],
-                                           num_threads)
+def draw_line_vjp_impl(cotangents, lines, idxs, max_val, kernel, num_threads):
+    return image_proc.draw_line_vjp(np.asarray(cotangents), np.asarray(lines), np.asarray(idxs),
+                                    max_val, KERNEL_NAMES[kernel], num_threads)

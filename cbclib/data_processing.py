@@ -12,7 +12,7 @@ Examples:
 """
 from __future__ import annotations
 from multiprocessing import cpu_count
-from typing import ClassVar, Dict, List, Optional, TypeVar, Union, cast
+from typing import Dict, List, Optional, TypeVar, Union, cast
 from dataclasses import dataclass, field
 from weakref import ref
 import numpy as np
@@ -20,14 +20,15 @@ import pandas as pd
 from .cbc_setup import Basis, ScanSamples, ScanSetup, Streaks, CBDModel
 from .cxi_protocol import CrystProtocol, FileStore, Kinds
 from .data_container import StringFormatter, DataContainer, Transform, ReferenceType
-from .streak_finder import CBSDetector
+from .streak_finder import PatternsStreakFinder
 from .annotations import (Indices, IntSequence, IntTuple, NDArray, NDBoolArray, NDIntArray,
                           NDRealArray, ROIType, Shape)
 from .src import median, robust_mean, robust_lsq, Structure
 
 def read(input_file: FileStore, attributes: Union[str, List[str]],
          idxs: Optional[IntSequence]=None, transform: Optional[Transform] = None,
-         processes: int=1, update: bool=True, verbose: bool=True):
+         processes: int=1, update: bool=True, verbose: bool=True
+         ) -> Union[CrystData, CrystDataPart, CrystDataFull]:
     """Load data attributes from the input files in `files` file handler object.
 
     Args:
@@ -155,9 +156,6 @@ class CrystData(CrystProtocol, DataContainer):
     scales      : Optional[NDRealArray] = field(default=None)
     num_threads : int = field(default=cpu_count())
 
-    _no_data_exc: ClassVar[ValueError] = ValueError('No data in the container')
-    _no_whitefield_exc: ClassVar[ValueError] = ValueError('No whitefield in the container')
-
     @property
     def shape(self) -> Shape:
         shape = [0, 0, 0]
@@ -205,8 +203,6 @@ Self = TypeVar("Self", bound="CrystDataPart")
 
 @dataclass
 class CrystDataPart(CrystData):
-    frames      : NDIntArray
-
     data        : NDRealArray
     mask        : NDBoolArray = field(default_factory=lambda: np.array([], dtype=bool))
 
@@ -360,10 +356,10 @@ class CrystDataPart(CrystData):
             frames = np.arange(self.shape[0])
 
         if method == 'median':
-            whitefield = median(inp=(self.data * self.mask)[frames], axis=0,
+            whitefield = median(inp=self.data[frames] * self.mask[frames], axis=0,
                                 num_threads=self.num_threads)
         elif method == 'robust-mean':
-            whitefield = robust_mean(inp=(self.data * self.mask)[frames],
+            whitefield = robust_mean(inp=self.data[frames] * self.mask[frames],
                                      axis=0, r0=r0, r1=r1, n_iter=n_iter, lm=lm,
                                      num_threads=self.num_threads)
         else:
@@ -555,9 +551,7 @@ class Detector(DataContainer):
         return df
 
 @dataclass
-class LineDetector(Detector, CBSDetector):
-    num_threads     : int
-
+class LineDetector(PatternsStreakFinder, Detector):
     def __getitem__(self, idxs: Indices) -> LineDetector:
         return self.replace(data=self.data[idxs], mask=self.mask[idxs], frames=self.frames[idxs])
 

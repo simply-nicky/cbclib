@@ -1299,11 +1299,11 @@ auto source_lines_vjp(py_array_t<F> cotangents, py_array_t<F> kin, py_array_t<F>
 
     #pragma omp parallel num_threads(threads)
     {
-        std::array<F, 2> ct_k0, ct_k1;
+        std::array<F, 2> ct_k0 {}, ct_k1 {};
         std::array<line_tie_t<F>, 4> ct_edges = {std::tie(ct_k0[0], ct_k0[1], ct_k0[0], ct_k1[1]),
-                                              std::tie(ct_k0[0], ct_k0[1], ct_k1[0], ct_k0[1]),
-                                              std::tie(ct_k1[0], ct_k0[1], ct_k1[0], ct_k1[1]),
-                                              std::tie(ct_k0[0], ct_k1[1], ct_k1[0], ct_k1[1])};
+                                                 std::tie(ct_k0[0], ct_k0[1], ct_k1[0], ct_k0[1]),
+                                                 std::tie(ct_k1[0], ct_k0[1], ct_k1[0], ct_k1[1]),
+                                                 std::tie(ct_k0[0], ct_k1[1], ct_k1[0], ct_k1[1])};
 
         #pragma omp for nowait
         for (py::ssize_t i = 0; i < qsize; i++)

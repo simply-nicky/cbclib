@@ -1,6 +1,7 @@
 from typing import Callable, Tuple
 import numpy as np
 import pytest
+from jax import config
 from jax.test_util import check_grads
 from cbclib.jax import (euler_angles, euler_matrix, tilt_angles, tilt_matrix, det_to_k,
                         k_to_det, k_to_smp, matmul)

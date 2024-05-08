@@ -53,6 +53,14 @@ inline py::array_t<typename Container::value_type> as_pyarray(Container && seq)
     );
 }
 
+template <typename Container, typename Shape, typename = std::enable_if_t<
+    std::is_integral_v<typename std::remove_cvref_t<Shape>::value_type>
+>>
+inline py::array_t<typename Container::value_type> to_pyarray(const Container & seq, Shape && shape)
+{
+    return py::array(std::forward<Shape>(shape), seq.data());
+}
+
 template <typename Container>
 inline py::array_t<typename Container::value_type> to_pyarray(const Container & seq)
 {

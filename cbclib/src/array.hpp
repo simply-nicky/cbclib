@@ -114,6 +114,8 @@ public:
 
     using ShapeContainer = detail::any_container<size_t>;
 
+    shape_handler() = default;
+
     shape_handler(ShapeContainer sh, ShapeContainer st) : shape(std::move(sh)), strides(std::move(st))
     {
         ndim = shape.size();
@@ -368,6 +370,8 @@ public:
 
     operator py::array_t<T>() const {return {shape, ptr};}
 
+    array() : shape_handler(), ptr(nullptr) {}
+
     array(ShapeContainer shape, ShapeContainer strides, T * ptr) :
         shape_handler(std::move(shape), std::move(strides)), ptr(ptr) {}
 
@@ -470,10 +474,18 @@ class vector_array : public array<T>
     std::vector<T> buffer;
 
 public:
-    vector_array(typename array<T>::ShapeContainer shape) : array<T>(std::move(shape), nullptr)
+    vector_array() = default;
+
+    template <typename Vector, typename = std::enable_if_t<std::is_base_of_v<std::vector<T>, std::remove_cvref_t<Vector>>>>
+    vector_array(Vector && v, detail::shape_handler::ShapeContainer shape) : array<T>(std::move(shape), v.data()), buffer(std::forward<Vector>(v))
+    {
+        if (buffer.size() != this->size) buffer.resize(this->size);
+    }
+
+    vector_array(detail::shape_handler::ShapeContainer shape) : array<T>(std::move(shape), nullptr)
     {
         buffer = std::vector<T>(this->size, T());
-        this->set_data(buffer.data());
+        array<T>::set_data(buffer.data());
     }
 };
 

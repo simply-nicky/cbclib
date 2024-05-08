@@ -13,11 +13,16 @@ class KDNode
 public:
     using data_type = Data;
     using item_type = std::pair<Point, Data>;
+    using node_ptr = std::shared_ptr<KDNode>;
 
     item_type item;
     int cut_dim;
 
     KDNode() = default;
+
+    template <typename Item, typename = std::enable_if_t<std::is_same_v<item_type, std::remove_cvref_t<Item>>>>
+    KDNode(Item && item, int dir, node_ptr lt = node_ptr(), node_ptr rt = node_ptr(), node_ptr par = node_ptr()) :
+        item(std::forward<Item>(item)), cut_dim(dir), left(lt), right(rt), parent(par) {}
 
     auto ndim() const -> decltype(std::declval<Point &>().size()) {return item.first.size();}
 
@@ -27,21 +32,18 @@ public:
     Data & data() {return item.second;}
     const Data & data() const {return item.second;}
 
-    bool is_left(const Point & pt) const
+    template <typename Pt>
+    bool is_left(const Pt & pt) const
     {
         return pt[this->cut_dim] < point()[this->cut_dim];
     }
 
 private:
-    KDNode *left;
-    KDNode *right;
-    KDNode *parent;
+    node_ptr left;
+    node_ptr right;
+    node_ptr parent;
 
     friend class KDTree<Point, Data>;
-
-    template <typename Item, typename = std::enable_if_t<std::is_same_v<item_type, std::remove_cvref_t<Item>>>>
-    KDNode(Item && item, int dir, KDNode * lt = nullptr, KDNode * rt = nullptr, KDNode * par = nullptr) :
-        item(std::forward<Item>(item)), cut_dim(dir), left(lt), right(rt), parent(par) {}
 };
 
 template <typename Node, typename Point, typename Data, typename = void>
@@ -61,6 +63,7 @@ class KDTree
 public:
     using F = typename Point::value_type;
     using node_t = KDNode<Point, Data>;
+    using node_ptr = typename node_t::node_ptr;
     using item_type = typename node_t::item_type;
 
     class KDIterator
@@ -69,7 +72,7 @@ public:
         using iterator_category = std::bidirectional_iterator_tag;
         using value_type = KDNode<Point, Data>;
         using difference_type = std::ptrdiff_t;
-        using pointer = const value_type *;
+        using pointer = typename KDNode<Point, Data>::node_ptr;
         using reference = const value_type &;
 
         KDIterator() : ptr(nullptr), root(nullptr) {}
@@ -83,21 +86,21 @@ public:
 
         KDIterator & operator++()
         {
-            if (ptr == nullptr)
+            if (!ptr)
             {
                 // ++ from end(). Get the root of the tree
                 ptr = root;
 
                 // error! ++ requested for an empty tree
-                while (ptr != nullptr && ptr->left != nullptr) ptr = ptr->left;
+                while (ptr && ptr->left) ptr = ptr->left;
 
             }
-            else if (ptr->right != nullptr)
+            else if (ptr->right)
             {
                 // successor is the farthest left node of right subtree
                 ptr = ptr->right;
 
-                while (ptr->left != nullptr) ptr = ptr->left;
+                while (ptr->left) ptr = ptr->left;
             }
             else
             {
@@ -108,8 +111,8 @@ public:
                 // is the successor. if parent is NULL, the original node
                 // was the last node inorder, and its successor
                 // is the end of the list
-                node_t * p = ptr->parent;
-                while (p != nullptr && ptr == p->right)
+                node_ptr p = ptr->parent;
+                while (p && ptr == p->right)
                 {
                     ptr = p; p = p->parent;
                 }
@@ -132,23 +135,23 @@ public:
 
         KDIterator & operator--()
         {
-            if (ptr == nullptr)
+            if (!ptr)
             {
                 // -- from end(). Get the root of the tree
                 ptr = root;
 
                 // move to the largest value in the tree,
                 // which is the last node inorder
-                while (ptr != nullptr && ptr->right != nullptr) ptr = ptr->right;
+                while (ptr && ptr->right) ptr = ptr->right;
             }
-            else if (ptr->left != nullptr)
+            else if (ptr->left)
             {
                 // must have gotten here by processing all the nodes
                 // on the left branch. predecessor is the farthest
                 // right node of the left subtree
                 ptr = ptr->left;
 
-                while (ptr->right != nullptr) ptr = ptr->right;
+                while (ptr->right) ptr = ptr->right;
             }
             else
             {
@@ -159,8 +162,8 @@ public:
                 // predecessor. if parent is nullptr, the original node
                 // was the first node inorder, and its predecessor
                 // is the end of the list
-                node_t * p = ptr->parent;
-                while (p != nullptr && ptr == p->left)
+                node_ptr p = ptr->parent;
+                while (p && ptr == p->left)
                 {
                     ptr = p; p = p->parent;
                 }
@@ -187,10 +190,10 @@ public:
     private:
         friend class KDTree<Point, Data>;
 
-        const node_t * ptr;
-        const node_t * root;
+        node_ptr ptr;
+        node_ptr root;
 
-        KDIterator(const node_t * ptr, const node_t * root) : ptr(ptr), root(root) {}
+        KDIterator(node_ptr ptr, node_ptr root) : ptr(ptr), root(root) {}
     };
 
     class Rectangle
@@ -199,6 +202,15 @@ public:
         std::vector<F> low, high;
 
         Rectangle() = default;
+
+        Rectangle(const KDTree<Point, Data> & tree)
+        {
+            for (size_t i = 0; i < tree.ndim(); i++)
+            {
+                low.push_back(tree.find_min(i)->point()[i]);
+                high.push_back(tree.find_max(i)->point()[i]);
+            }
+        }
 
         void update(const Point & pt)
         {
@@ -209,9 +221,10 @@ public:
             }
         }
 
-        F distance(const Point & pt) const
+        template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+        G distance(const Pt & pt) const
         {
-            F dist = F();
+            G dist = G();
             for (size_t i = 0; i < pt.size(); i++)
             {
                 if (pt[i] < low[i]) dist += std::pow(low[i] - pt[i], 2);
@@ -223,27 +236,18 @@ public:
     private:
         friend class KDTree<Point, Data>;
 
-        Rectangle trim_left(node_t * node) const
+        Rectangle trim_left(node_ptr node) const
         {
             Rectangle rect = *this;
             rect.high[node->cut_dim] = node->point()[node->cut_dim];
             return rect;
         }
 
-        Rectangle trim_right(node_t * node) const
+        Rectangle trim_right(node_ptr node) const
         {
             Rectangle rect = *this;
             rect.low[node->cut_dim] = node->point()[node->cut_dim];
             return rect;
-        }
-
-        Rectangle(const KDTree<Point, Data> & tree)
-        {
-            for (size_t i = 0; i < tree.ndim(); i++)
-            {
-                low.push_back(tree.find_min(i)->point()[i]);
-                high.push_back(tree.find_max(i)->point()[i]);
-            }
         }
     };
 
@@ -251,53 +255,34 @@ public:
     using iterator = const_iterator;
 
     using rect_t = Rectangle;
+    using rect_ptr = std::shared_ptr<rect_t>;
 
-    using query_t = std::pair<const_iterator, F>;
-    using stack_t = std::vector<std::pair<const_iterator, F>>;
+    template <typename T>
+    using query_t = std::pair<const_iterator, T>;
+    template <typename T>
+    using stack_t = std::vector<std::pair<const_iterator, T>>;
 
-    KDTree() : root(nullptr), rect(nullptr) {}
+    KDTree() : root(nullptr), rect(nullptr) {} 
 
     KDTree(std::vector<item_type> && items) : KDTree()
     {
         root = build_tree(std::make_move_iterator(items.begin()),
-                          std::make_move_iterator(items.end()), nullptr, 0);
-        if (root) rect = new rect_t{*this};
-    }
-
-    KDTree(const KDTree<Point, Data> & rhs) : root(clone_node(rhs.root)), rect(clone_rect(rhs.rect)) {}
-    KDTree(KDTree<Point, Data> && rhs) : root(rhs.root), rect(rhs.rect)
-    {
-        rhs.root = nullptr; rhs.rect = nullptr;
-    }
-
-    ~KDTree() {clear();}
-
-    KDTree<Point, Data> & operator=(const KDTree<Point, Data> & rhs)
-    {
-        KDTree<Point, Data> copy = rhs;
-        std::swap(*this, copy);
-        return *this;
-    }
-
-    KDTree<Point, Data> & operator=(KDTree<Point, Data> && rhs)
-    {
-        std::swap(root, rhs.root);
-        std::swap(rect, rhs.rect);
-        return *this;
+                          std::make_move_iterator(items.end()), node_ptr(), 0);
+        if (root) rect = std::make_shared<rect_t>(*this);
     }
 
     auto ndim() const -> decltype(std::declval<Point &>().size())
     {
-        if (root == nullptr) return 0;
+        if (!root) return 0;
         else return root->ndim();
     }
 
-    bool empty() const {return root == nullptr;}
+    bool empty() const {return !root;}
 
     void clear()
     {
-        root = clear_node(root);
-        rect = clear_rect(rect);
+        root = node_ptr();
+        rect = rect_ptr();
     }
 
     const_iterator begin() const
@@ -307,7 +292,7 @@ public:
 
     const_iterator end() const
     {
-        return {nullptr, root};
+        return {node_ptr(), root};
     }
 
     const_iterator insert(item_type && item)
@@ -318,7 +303,7 @@ public:
 
         if (inserted != end())
         {
-            if (!rect) rect = new rect_t(*this);
+            if (!rect) rect = std::make_shared<rect_t>(*this);
             else rect->update(item.first);
         }
 
@@ -340,7 +325,7 @@ public:
                     if (pt[i] == rect->high[i]) rect->high[i] = find_max(i)->point()[i];
                 }
             }
-            else rect = clear_rect(rect);
+            else rect = rect_ptr();
         }
 
         return removed;
@@ -357,7 +342,7 @@ public:
 
     const_iterator find(const Point & pt) const
     {
-        return {find_node(root, pt, *rect, nullptr), root};
+        return {find_node(root, pt, *rect, node_ptr()), root};
     }
 
     const_iterator find_min(int axis) const
@@ -370,14 +355,16 @@ public:
         return {find_max_node(root, axis), root};
     }
 
-    query_t find_nearest(const Point & pt) const
+    template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+    query_t<G> find_nearest(const Pt & pt) const
     {
-        return nearest_node(root, pt, *rect, {const_iterator(root, root), std::numeric_limits<F>::max()});
+        return nearest_node(root, pt, *rect, {const_iterator(root, root), std::numeric_limits<G>::max()});
     }
 
-    stack_t find_range(const Point & pt, F range) const
+    template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+    stack_t<G> find_range(const Pt & pt, G range_sq) const
     {
-        return find_range_node(root, pt, range * range, *rect, {});
+        return find_range_node(root, pt, range_sq, *rect, {});
     }
 
     void print() const
@@ -387,72 +374,37 @@ public:
     }
 
 private:
-    node_t * root;
-    rect_t * rect;
+    node_ptr root;
+    rect_ptr rect;
 
     template <class Iter>
-    node_t * build_tree(Iter first, Iter last, node_t * par, int dir)
+    node_ptr build_tree(Iter first, Iter last, node_ptr par, int dir)
     {
         using value_t = typename std::iterator_traits<Iter>::value_type;
 
-        if (last <= first) return nullptr;
+        if (last <= first) return node_ptr();
         else if (last == std::next(first))
         {
-            return new node_t{*first, dir, nullptr, nullptr, par};
+            return std::make_shared<node_t>(*first, dir, node_ptr(), node_ptr(), par);
         }
         else
         {
             auto compare = [dir](const value_t & a, const value_t & b){return a.first[dir] < b.first[dir];};
             auto iter = wirthmedian(first, last, compare);
 
-            node_t * node = new node_t{*iter, dir, nullptr, nullptr, par};
+            node_ptr node = std::make_shared<node_t>(*iter, dir, node_ptr(), node_ptr(), par);
             node->left = build_tree(first, iter, node, (dir + 1) % node->ndim());
             node->right = build_tree(std::next(iter), last, node, (dir + 1) % node->ndim());
             return node;
         }
     }
 
-    rect_t * clear_rect(rect_t * r)
-    {
-        delete r;
-        return nullptr;
-    }
-
-    node_t * clear_node(node_t * node)
-    {
-        if (node != nullptr)
-        {
-            node->left = clear_node(node->left);
-            node->right = clear_node(node->right);
-            delete node;
-        }
-
-        return nullptr;
-    }
-
-    node_t * clone_node(node_t * node)
-    {
-        if (node == nullptr)
-        {
-            return node;
-        }
-        else
-        {
-            return new node_t{node->item, node->cut_dim, clone_node(node->left), clone_node(node->right), node->parent};
-        }
-    }
-
-    rect_t * clone_rect(rect_t * r)
-    {
-        return new rect_t(*r);
-    }
-
-    std::tuple<node_t *, const_iterator> insert_node(node_t * node, item_type && item, node_t * par, int dir)
+    std::tuple<node_ptr, const_iterator> insert_node(node_ptr node, item_type && item, node_ptr par, int dir)
     {
         // Create new node if empty
         if (!node)
         {
-            node = new node_t{std::move(item), dir, nullptr, nullptr, par};
+            node = std::make_shared<node_t>(std::move(item), dir, node_ptr(), node_ptr(), par);
             return {node, const_iterator(node, root)};
         }
 
@@ -478,7 +430,7 @@ private:
         return {node, inserted};
     }
 
-    std::tuple<node_t *, size_t> remove_node(node_t * node, const Point & pt)
+    std::tuple<node_ptr, size_t> remove_node(node_ptr node, const Point & pt)
     {
         // Fell out of tree
         if (!node) return {node, 0};
@@ -505,12 +457,12 @@ private:
                 // move left subtree to right!
                 std::tie(node->right, removed) = remove_node(node->left, node->point());
                 // left subtree is now empty
-                node->left = nullptr;
+                node->left = node_ptr();
             }
             // Remove this leaf
             else
             {
-                node = clear_node(node); removed = 1;
+                node = node_ptr(); removed = 1;
             }
         }
         // Search left subtree
@@ -524,7 +476,7 @@ private:
         return {node, removed};
     }
 
-    node_t * min_node(node_t * a, node_t * b, node_t * c, int axis) const
+    node_ptr min_node(node_ptr a, node_ptr b, node_ptr c, int axis) const
     {
         if (b && b->point()[axis] < a->point()[axis])
         {
@@ -535,7 +487,7 @@ private:
         return a;
     }
 
-    node_t * max_node(node_t * a, node_t * b, node_t * c, int axis) const
+    node_ptr max_node(node_ptr a, node_ptr b, node_ptr c, int axis) const
     {
         if (b && b->point()[axis] > a->point()[axis])
         {
@@ -546,7 +498,7 @@ private:
         return a;
     }
 
-    node_t * find_min_node(node_t * node, int axis) const
+    node_ptr find_min_node(node_ptr node, int axis) const
     {
         // Fell out of tree
         if (!node) return node;
@@ -559,7 +511,7 @@ private:
         else return min_node(node, find_min_node(node->left, axis), find_min_node(node->right, axis), axis);
     }
 
-    node_t * find_max_node(node_t * node, int axis) const
+    node_ptr find_max_node(node_ptr node, int axis) const
     {
         // Fell out of tree
         if (!node) return node;
@@ -572,22 +524,22 @@ private:
         else return max_node(node, find_max_node(node->left, axis), find_max_node(node->right, axis), axis);
     }
 
-    node_t * begin_node(node_t * node) const
+    node_ptr begin_node(node_ptr node) const
     {
-        if (node == nullptr) return nullptr;
-        if (node->left == nullptr) return node;
+        if (!node) return node;
+        if (!node->left) return node;
         return begin_node(node->left);
     }
 
-    template <typename Point1, typename Point2>
-    F distance(const Point1 & a, const Point2 & b) const
+    template <typename Point1, typename Point2, typename G = std::common_type_t<typename Point1::value_type, typename Point2::value_type>>
+    G distance(const Point1 & a, const Point2 & b) const
     {
-        F dist = F();
+        G dist = G();
         for (size_t i = 0; i < a.size(); i++) dist += std::pow(a[i] - b[i], 2);
         return dist;
     }
 
-    node_t * find_node(node_t * node, const Point & pt, const rect_t & rect, node_t * query) const
+    node_ptr find_node(node_ptr node, const Point & pt, const rect_t & rect, node_ptr query) const
     {
         // Fell out of tree
         if (!node) return query;
@@ -615,16 +567,17 @@ private:
         return query;
     }
 
-    query_t nearest_node(node_t * node, const Point & pt, const rect_t & rect, query_t && query) const
+    template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+    query_t<G> nearest_node(node_ptr node, const Pt & pt, const rect_t & rect, query_t<G> && query) const
     {
         // Fell out of tree
         if (!node) return query;
         // This cell is too far away
-        if (rect.distance(pt) >= std::pow(query.second, 2)) return query;
+        if (rect.distance(pt) >= query.second) return query;
 
         // Update if the root is closer
-        F dist = distance(node->point(), pt);
-        if (dist < std::pow(query.second, 2)) query = std::make_pair(const_iterator(node, root), std::sqrt(dist));
+        auto dist_sq = distance(node->point(), pt);
+        if (dist_sq < query.second) query = std::make_pair(const_iterator(node, root), dist_sq);
 
         // pt is close to left child
         if (node->is_left(pt))
@@ -644,15 +597,17 @@ private:
         return query;
     }
 
-    stack_t stack_push_node(node_t * node, const Point & pt, stack_t && stack) const
+    template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+    stack_t<G> stack_push_node(node_ptr node, const Pt & pt, stack_t<G> && stack) const
     {
         if (node->left) stack = stack_push_node(node->left, pt, std::move(stack));
-        stack.emplace_back(const_iterator(node, root), std::sqrt(distance(node->point(), pt)));
+        stack.emplace_back(const_iterator(node, root), distance(node->point(), pt));
         if (node->right) stack = stack_push_node(node->right, pt, std::move(stack));
         return stack;
     }
 
-    stack_t find_range_node(node_t * node, const Point & pt, F range_sq, const rect_t & rect, stack_t && stack) const
+    template <typename Pt, typename G = std::common_type_t<F, typename Pt::value_type>>
+    stack_t<G> find_range_node(node_ptr node, const Pt & pt, G range_sq, const rect_t & rect, stack_t<G> && stack) const
     {
         // Fell out of tree
         if (!node) return stack;
@@ -665,9 +620,9 @@ private:
             return stack_push_node(node, pt, std::move(stack));
         }
 
-        F dist = distance(pt, node->point());
+        auto dist_sq = distance(pt, node->point());
         // Put this item to stack
-        if (dist < range_sq) stack.emplace_back(const_iterator(node, root), std::sqrt(dist));
+        if (dist_sq < range_sq) stack.emplace_back(const_iterator(node, root), dist_sq);
 
         // Search left subtree
         stack = find_range_node(node->left, pt, range_sq, rect.trim_left(node), std::move(stack));
@@ -690,7 +645,7 @@ private:
         return os;
     }
 
-    std::ostream & print_node(std::ostream & os, node_t * node, size_t level = 0) const
+    std::ostream & print_node(std::ostream & os, node_ptr node, size_t level = 0) const
     {
         if (!node) return os;
 
@@ -704,9 +659,6 @@ private:
         return os;
     }
 };
-
-template<typename F, size_t ndim>
-void test_tree(size_t npts, F range);
 
 }
 

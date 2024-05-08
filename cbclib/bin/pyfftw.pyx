@@ -201,7 +201,7 @@ cdef void* _fftw_plan_guru_dft(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftw_plan_guru_dft(rank, dims,
             howmany_rank, howmany_dims,
@@ -213,7 +213,7 @@ cdef void* _fftw_plan_guru_dft_r2c(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftw_plan_guru_dft_r2c(rank, dims,
             howmany_rank, howmany_dims,
@@ -225,7 +225,7 @@ cdef void* _fftw_plan_guru_dft_c2r(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftw_plan_guru_dft_c2r(rank, dims,
             howmany_rank, howmany_dims,
@@ -237,7 +237,7 @@ cdef void* _fftw_plan_guru_r2r(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, int flags):
+            int *direction, int flags) noexcept nogil:
 
     return <void *>fftw_plan_guru_r2r(rank, dims,
             howmany_rank, howmany_dims,
@@ -249,7 +249,7 @@ cdef void* _fftwf_plan_guru_dft(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftwf_plan_guru_dft(rank, dims,
             howmany_rank, howmany_dims,
@@ -261,7 +261,7 @@ cdef void* _fftwf_plan_guru_dft_r2c(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftwf_plan_guru_dft_r2c(rank, dims,
             howmany_rank, howmany_dims,
@@ -273,7 +273,7 @@ cdef void* _fftwf_plan_guru_dft_c2r(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, unsigned flags) nogil:
+            int *direction, unsigned flags) noexcept nogil:
 
     return <void *>fftwf_plan_guru_dft_c2r(rank, dims,
             howmany_rank, howmany_dims,
@@ -285,7 +285,7 @@ cdef void* _fftwf_plan_guru_r2r(
             int rank, fftw_iodim *dims,
             int howmany_rank, fftw_iodim *howmany_dims,
             void *_in, void *_out,
-            int *direction, int flags):
+            int *direction, int flags) noexcept nogil:
 
     return <void *>fftwf_plan_guru_r2r(rank, dims,
             howmany_rank, howmany_dims,
@@ -296,48 +296,48 @@ cdef void* _fftwf_plan_guru_r2r(
 #    =========
 #
 # Complex double precision
-cdef void _fftw_execute_dft(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftw_execute_dft(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftw_execute_dft(<fftw_plan>_plan,
             <cdouble *>_in, <cdouble *>_out)
 
 # real to complex double precision
-cdef void _fftw_execute_dft_r2c(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftw_execute_dft_r2c(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftw_execute_dft_r2c(<fftw_plan>_plan,
             <double *>_in, <cdouble *>_out)
 
 # complex to real double precision
-cdef void _fftw_execute_dft_c2r(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftw_execute_dft_c2r(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftw_execute_dft_c2r(<fftw_plan>_plan,
             <cdouble *>_in, <double *>_out)
 
 # Complex single precision
-cdef void _fftwf_execute_dft(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftwf_execute_dft(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftwf_execute_dft(<fftwf_plan>_plan,
             <cfloat *>_in, <cfloat *>_out)
 
 # real to complex single precision
-cdef void _fftwf_execute_dft_r2c(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftwf_execute_dft_r2c(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftwf_execute_dft_r2c(<fftwf_plan>_plan,
             <float *>_in, <cfloat *>_out)
 
 # complex to real single precision
-cdef void _fftwf_execute_dft_c2r(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftwf_execute_dft_c2r(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftwf_execute_dft_c2r(<fftwf_plan>_plan,
             <cfloat *>_in, <float *>_out)
 
 # real to real double precision
-cdef void _fftw_execute_r2r(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftw_execute_r2r(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftw_execute_r2r(<fftw_plan>_plan, <double *>_in, <double *>_out)
 
 # real to real single precision
-cdef void _fftwf_execute_r2r(void *_plan, void *_in, void *_out) nogil:
+cdef void _fftwf_execute_r2r(void *_plan, void *_in, void *_out) noexcept nogil:
 
     fftwf_execute_r2r(<fftwf_plan>_plan, <float *>_in, <float *>_out)
 
@@ -345,12 +345,12 @@ cdef void _fftwf_execute_r2r(void *_plan, void *_in, void *_out) nogil:
 #    ==========
 #
 # Double precision
-cdef void _fftw_destroy_plan(void *_plan):
+cdef void _fftw_destroy_plan(void *_plan) noexcept nogil:
 
     fftw_destroy_plan(<fftw_plan>_plan)
 
 # Single precision
-cdef void _fftwf_destroy_plan(void *_plan):
+cdef void _fftwf_destroy_plan(void *_plan) noexcept nogil:
 
     fftwf_destroy_plan(<fftwf_plan>_plan)
 
@@ -359,7 +359,7 @@ cdef void _fftwf_destroy_plan(void *_plan):
 # Planner table (of size the number of planners).
 cdef fftw_generic_plan_guru planners[8]
 
-cdef fftw_generic_plan_guru * _build_planner_list():
+cdef fftw_generic_plan_guru * _build_planner_list() noexcept nogil:
     planners[0] = <fftw_generic_plan_guru>&_fftw_plan_guru_dft
     planners[2] = <fftw_generic_plan_guru>&_fftw_plan_guru_dft_r2c
     planners[4] = <fftw_generic_plan_guru>&_fftw_plan_guru_dft_c2r
@@ -372,7 +372,7 @@ cdef fftw_generic_plan_guru * _build_planner_list():
 # Executor table (of size the number of executors)
 cdef fftw_generic_execute executors[8]
 
-cdef fftw_generic_execute * _build_executor_list():
+cdef fftw_generic_execute * _build_executor_list() noexcept nogil:
     executors[0] = <fftw_generic_execute>&_fftw_execute_dft
     executors[2] = <fftw_generic_execute>&_fftw_execute_dft_r2c
     executors[4] = <fftw_generic_execute>&_fftw_execute_dft_c2r
@@ -385,7 +385,7 @@ cdef fftw_generic_execute * _build_executor_list():
 # Destroyer table (of size the number of destroyers)
 cdef fftw_generic_destroy_plan destroyers[2]
 
-cdef fftw_generic_destroy_plan * _build_destroyer_list():
+cdef fftw_generic_destroy_plan * _build_destroyer_list() nogil:
     destroyers[0] = <fftw_generic_destroy_plan>&_fftw_destroy_plan
     destroyers[1] = <fftw_generic_destroy_plan>&_fftwf_destroy_plan
 
@@ -410,7 +410,7 @@ cdef fftw_generic_set_timelimit * _build_set_timelimit_funcs_list():
 # Data validators table
 cdef validator validators[2]
 
-cdef validator * _build_validators_list():
+cdef validator * _build_validators_list() noexcept nogil:
     validators[0] = &_validate_r2c_arrays
     validators[1] = &_validate_c2r_arrays
 
@@ -418,7 +418,7 @@ cdef validator * _build_validators_list():
 # ===================
 cdef bint _validate_r2c_arrays(np.ndarray input_array,
         np.ndarray output_array, int64_t *axes, int64_t *not_axes,
-        int64_t axes_length):
+        int64_t axes_length) noexcept nogil:
     ''' Validates the input and output array to check for
     a valid real to complex transform.
     '''
@@ -448,7 +448,7 @@ cdef bint _validate_r2c_arrays(np.ndarray input_array,
 
 cdef bint _validate_c2r_arrays(np.ndarray input_array,
         np.ndarray output_array, int64_t *axes, int64_t *not_axes,
-        int64_t axes_length):
+        int64_t axes_length) noexcept nogil:
     ''' Validates the input and output array to check for
     a valid complex to real transform.
     '''

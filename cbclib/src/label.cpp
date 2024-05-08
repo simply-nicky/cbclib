@@ -99,10 +99,10 @@ PYBIND11_MODULE(label, m)
     }
 
     py::class_<PointsSet>(m, "PointsSet")
-        .def(py::init([](std::vector<int> xvec, std::vector<int> yvec)
+        .def(py::init([](std::vector<typename point_t::value_type> xvec, std::vector<typename point_t::value_type> yvec)
         {
             PointsSet::container_type points;
-            for (auto [x, y] : zip::zip(xvec, yvec)) points.emplace(PointsSet::point_type{x, y});
+            for (auto [x, y] : zip::zip(xvec, yvec)) points.emplace(x, y);
             return PointsSet(std::move(points));
         }), py::arg("x"), py::arg("y"))
         .def_property("size", [](const PointsSet & points){return points.points.size();}, nullptr, py::keep_alive<0, 1>())
@@ -120,7 +120,10 @@ PYBIND11_MODULE(label, m)
         .def("__repr__", &Structure::info);
 
     py::class_<Regions>(m, "Regions")
-        .def(py::init([](std::array<size_t, 2> shape){return Regions(std::move(shape));}), py::arg("shape"))
+        .def(py::init([](std::array<size_t, 2> shape, std::vector<PointsSet> regions)
+        {
+            return Regions(std::move(shape), std::move(regions));
+        }), py::arg("shape"), py::arg("regions")=std::vector<PointsSet>{})
         .def_readonly("shape", &Regions::shape)
         .def("__delitem__", [](Regions & regions, size_t i)
         {
