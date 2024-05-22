@@ -579,7 +579,7 @@ size_t searchsorted_r(const void *key, const void *base, size_t npts, size_t siz
 
 /*---------------------------------------------------------------------------
     Function :  kth_smallest()
-    In       :  array of elements, n elements in the array, rank k 
+    In       :  array of elements, n elements in the array, rank k
     Out      :  one element
     Job      :  find the kth smallest element in the array
     Notice   :  Buffer must be of size n
@@ -604,7 +604,7 @@ void *wirthselect(void *inp, int k, int n, size_t size, int (*compar)(const void
         {
             while (compar(buf, inp + i * size) > 0) i++;
             while (compar(buf, inp + j * size) < 0) j--;
-            if (i <= j) 
+            if (i <= j)
             {
                 SWAP_BUF(inp + i * size, inp + j * size, size);
                 i++; j--;
@@ -614,7 +614,7 @@ void *wirthselect(void *inp, int k, int n, size_t size, int (*compar)(const void
         if (k < i) m = j;
     }
     free(buf);
-    
+
     return inp + k * size;
 }
 
@@ -631,7 +631,7 @@ void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const vo
         {
             while (compar(buf, inp + i * size, arg) > 0) i++;
             while (compar(buf, inp + j * size, arg) < 0) j--;
-            if (i <= j) 
+            if (i <= j)
             {
                 SWAP_BUF(inp + i * size, inp + j * size, size);
                 i++; j--;
@@ -641,7 +641,7 @@ void *wirthselect_r(void *inp, int k, int n, size_t size, int (*compar)(const vo
         if (k < i) m = j;
     }
     free(buf);
-    
+
     return inp + k * size;
 }
 
@@ -662,7 +662,7 @@ rect_iter ri_ini(int ndim, int *pt0, int *pt1)
 
     rect_iter ri = (rect_iter)malloc(sizeof(struct rect_iter_s));
     if (!ri) {ERROR("new_ri: not enough memory."); return NULL;}
-    
+
     ri->index = 0;
     ri->ndim = ndim;
     ri->size = 1;

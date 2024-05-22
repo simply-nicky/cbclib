@@ -8,8 +8,8 @@ using kernel_t = typename kernels<T>::kernel;
 template <typename T>
 using grad_t = typename kernels<T>::kernel;
 
-template <typename Out, typename T, typename I>
-Out line_value(BhmIterator<T, I> liter, BhmIterator<T, I> eiter, T width, Out max_val, kernel_t<T> krn)
+template <typename Out, typename T>
+Out line_value(BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter, T width, Out max_val, kernel_t<T> krn)
 {
     T length = amplitude(liter.tau);
     auto r1 = liter.error / length, r2 = eiter.error / length;
@@ -28,8 +28,8 @@ Out line_value(BhmIterator<T, I> liter, BhmIterator<T, I> eiter, T width, Out ma
     }
 }
 
-template <typename Out, typename T, typename I>
-void line_value_vjp(std::array<T, 5> & ct_line, const Line<T> & line, Out ct_pt, BhmIterator<T, I> liter, BhmIterator<T, I> eiter, T width, Out max_val, grad_t<T> grad)
+template <typename Out, typename T>
+void line_value_vjp(std::array<T, 5> & ct_line, const Line<T> & line, Out ct_pt, BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter, T width, Out max_val, grad_t<T> grad)
 {
     T length = amplitude(line.tau);
     auto mag = length * length;
@@ -63,11 +63,11 @@ void line_value_vjp(std::array<T, 5> & ct_line, const Line<T> & line, Out ct_pt,
 
     ct_line[0] += ct_r1 * (line.tau.x() * r1 / mag + v1.y() / length) +
                   ct_r2 * (line.tau.x() * r2 / mag - (line.tau.x() + v0.x()) / length);
-    ct_line[1] += ct_r1 * (line.tau.y() * r1 / mag - v1.x() / length) + 
+    ct_line[1] += ct_r1 * (line.tau.y() * r1 / mag - v1.x() / length) +
                   ct_r2 * (line.tau.y() * r2 / mag - (line.tau.y() + v0.y()) / length);
     ct_line[2] += ct_r1 * (-line.tau.x() * r1 / mag - v0.y() / length) +
                   ct_r2 * (-line.tau.x() * r2 / mag + v0.x() / length);
-    ct_line[3] += ct_r1 * (-line.tau.y() * r1 / mag + v0.x() / length) + 
+    ct_line[3] += ct_r1 * (-line.tau.y() * r1 / mag + v0.x() / length) +
                   ct_r2 * (-line.tau.y() * r2 / mag + v0.y() / length);
     ct_line[4] -= ct_pt * max_val * grad(val / width) * val / (width * width);
 }
@@ -90,15 +90,14 @@ point_t get_ubound(const std::vector<size_t> & shape)
 template <typename Data, typename T, typename Out, class Func>
 void draw_bresenham(Data & data, const point_t & ubound, const Line<T> & line, T width, Out max_val, kernel_t<T> krn, Func draw_pixel)
 {
-    using I = typename point_t::value_type;
     width = std::clamp(width, T(), std::numeric_limits<T>::max());
 
-    auto get_val = [&krn, width, max_val](BhmIterator<T, I> liter, BhmIterator<T, I> eiter)
+    auto get_val = [&krn, width, max_val](BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter)
     {
         return line_value(liter, eiter, width, max_val, krn);
     };
 
-    auto draw = [&data, &get_val, &draw_pixel](BhmIterator<T, I> liter, BhmIterator<T, I> eiter)
+    auto draw = [&data, &get_val, &draw_pixel](BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter)
     {
         draw_pixel(data, liter.point, get_val(liter, eiter));
     };
@@ -109,16 +108,15 @@ void draw_bresenham(Data & data, const point_t & ubound, const Line<T> & line, T
 template <typename Data, typename T, class Func>
 auto draw_bresenham_vjp(Data & ct, const point_t & ubound, const Line<T> & line, T width, T max_val, grad_t<T> grad, Func get_pixel)
 {
-    using I = typename point_t::value_type;
     width = std::clamp(width, T(), std::numeric_limits<T>::max());
     std::array<T, 5> ct_line {};
 
-    auto propagate = [&ct_line, &line, &grad, width, max_val](T ct_pt, BhmIterator<T, I> liter, BhmIterator<T, I> eiter)
+    auto propagate = [&ct_line, &line, &grad, width, max_val](T ct_pt, BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter)
     {
         line_value_vjp(ct_line, line, ct_pt, liter, eiter, width, max_val, grad);
     };
 
-    auto get_contangent = [&ct, &propagate, &get_pixel](BhmIterator<T, I> liter, BhmIterator<T, I> eiter)
+    auto get_contangent = [&ct, &propagate, &get_pixel](BresenhamIterator<T, true> liter, BresenhamIterator<T, true> eiter)
     {
         propagate(get_pixel(ct, liter.point), liter, eiter);
     };
@@ -308,68 +306,6 @@ auto draw_line_table(py::array_t<T> lines, std::vector<size_t> shape, std::optio
 
     return result;
 }
-
-// template <typename T, typename I>
-// auto draw_line_table_vjp(table_t<T> cotangents, py::array_t<T> lines, std::vector<size_t> shape,
-//                          std::optional<py::array_t<I>> idxs, T max_val, T , std::string kernel, unsigned threads)
-// {
-//     assert(PyArray_API);
-
-//     auto krn = kernels<T>::get_grad(kernel);
-
-//     auto n_shape = normalise_shape(shape);
-//     auto ubound = get_ubound(shape);
-
-//     auto larr = array<T>(lines.request());
-//     check_dimensions("lines", larr.ndim - 1, larr.shape, 5);
-//     auto lsize = larr.size / larr.shape[larr.ndim - 1];
-
-//     if (!idxs) fill_indices("idxs", n_shape[0], lsize, idxs);
-//     else check_indices("idxs", n_shape[0], lsize, idxs);
-//     auto sorted_idxs = sort_indices(array<I>(idxs.value().request()));
-
-//     std::vector<py::ssize_t> out_shape (larr.shape.begin(), std::prev(larr.shape.end(), 1));
-//     out_shape.push_back(4);
-//     auto ct_l = py::array_t<T>(out_shape);
-//     auto ct_larr = array<T>(ct_l.request());
-
-//     thread_exception e;
-
-//     py::gil_scoped_release release;
-
-//     #pragma omp parallel num_threads(threads)
-//     {
-//         detail::shape_handler handler (n_shape);
-
-//         #pragma omp for
-//         for (size_t i = 0; i < sorted_idxs.size(); i++)
-//         {
-//             e.run([&]
-//             {
-//                 auto iter = std::next(sorted_idxs.begin(), i);
-//                 auto fnum = iter->first;
-
-//                 for (auto lindex : iter->second)
-//                 {
-//                     auto get_pixel = [fnum, lindex, &handler](table_t<T> & table, const point_t & pt)
-//                     {
-//                         return detail::get_pixel(table, std::make_pair(lindex, handler.ravel_index(fnum, pt.y(), pt.x())));
-//                     };
-
-//                     auto line = std::make_from_tuple<Line<T>>(to_tuple<4>(larr, 5 * lindex));
-//                     to_tie<4>(ct_larr, 4 * lindex) = draw_bresenham_vjp(cotangents, ubound, line, larr[5 * lindex + 4] + dilation,
-//                                                                         max_val, krn, get_pixel);
-//                 }
-//             });
-//         }
-//     }
-
-//     py::gil_scoped_acquire acquire;
-
-//     e.rethrow();
-
-//     return ct_l;
-// }
 
 }
 

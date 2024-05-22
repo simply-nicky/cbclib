@@ -76,11 +76,11 @@ cdef extern from "median.h":
 
     int robust_mean_c "robust_mean" (float *out, void *inp, int ndim, unsigned long *dims,
                       unsigned long item_size, int axis, int (*compar)(void*, void*), float (*getter)(void*),
-                      float r0, float r1, int n_iter, float lm, unsigned threads) nogil 
+                      float r0, float r1, int n_iter, float lm, unsigned threads) nogil
 
     int robust_fit(float *out, float *W, void *y, int nf, int ndim, unsigned long *ydims,
                    unsigned long item_size, int (*compar)(void*, void*), float (*getter)(void*), float r0,
-                   float r1, int n_iter, float lm, unsigned threads) nogil 
+                   float r1, int n_iter, float lm, unsigned threads) nogil
 
 ctypedef float (*line_profile)(float, float)
 
@@ -89,7 +89,7 @@ cdef extern from "img_proc.h":
     float tophat_profile(float err, float wd) nogil
     float quad_profile(float err, float wd) nogil
     float gauss_profile(float err, float wd) nogil
-    
+
     int draw_line_int(unsigned *out, unsigned long *dims, unsigned max_val, float *lines,
                       unsigned long *ldims, float dilation, line_profile profile) nogil
 

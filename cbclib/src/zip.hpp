@@ -47,7 +47,7 @@ public:
 
     zip_iterator(Iters &&... iters) : m_iters{std::forward<Iters>(iters)...} {}
 
-    zip_iterator & operator++() 
+    zip_iterator & operator++()
     {
         std::apply([](auto &&... args){ ((args += 1), ...); }, m_iters);
         return *this;
@@ -83,7 +83,7 @@ private:
 /* std::decay needed because T is a reference, and is not a complete type */
 template <typename T>
 using select_iterator_for = std::conditional_t<
-    std::is_const_v<std::remove_reference_t<T>>, 
+    std::is_const_v<std::remove_reference_t<T>>,
     typename std::remove_cvref_t<T>::const_iterator,
     typename std::remove_cvref_t<T>::iterator>;
 

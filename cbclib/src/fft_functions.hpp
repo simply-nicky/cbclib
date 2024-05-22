@@ -323,7 +323,7 @@ OutputIt gaussian_order(OutputIt first, size_t size, size_t radius, T sigma, uns
             {
                 auto idx = j + (order + 1) * i;
                 if ((idx % (order + 2)) == 1) qval += q0[j] * (idx / (order + 2) + 1);
-                if ((idx % (order + 2)) == (order + 1)) qval -= q0[j] / (sigma * sigma); 
+                if ((idx % (order + 2)) == (order + 1)) qval -= q0[j] / (sigma * sigma);
             }
             q1[i] = qval;
         }
@@ -429,8 +429,7 @@ void write_buffer(array<T> & buffer, const array<U> & data, const Shape & fshape
 
         if (data.is_inbound(riter.coord.begin(), riter.coord.end()))
         {
-            auto index = data.ravel_index(riter.coord.begin(), riter.coord.end());
-            buffer[bindex] = data[index];
+            buffer[bindex] = data.at(riter.coord.begin(), riter.coord.end());
         }
         else buffer[bindex] = T();
     }
@@ -447,8 +446,7 @@ void write_buffer(array<T> & buffer, const array<U> & data, const Shape & fshape
 
         if (data.is_inbound(coord.begin(), coord.end()))
         {
-            auto index = data.ravel_index(coord.begin(), coord.end());
-            buffer[bindex] = data[index];
+            buffer[bindex] = data.at(coord.begin(), coord.end());
         }
         else buffer[bindex] = T();
     }
@@ -472,8 +470,7 @@ void read_buffer(const array<T> & buffer, array<U> data, const Shape & fshape)
     {
         std::transform(riter.coord.begin(), riter.coord.end(), fshape.begin(), coord.begin(), detail::modulo<long, size_t>);
 
-        auto index = buffer.ravel_index(coord.begin(), coord.end());
-        data[riter.index] = buffer[index];
+        data[riter.index] = buffer.at(coord.begin(), coord.end());
     }
 }
 
@@ -486,8 +483,7 @@ void read_buffer(const array<T> & buffer, array<U> data, const Shape & fshape, c
         std::transform(origin.begin(), origin.end(), riter.coord.begin(), coord.begin(), std::plus<long>());
         std::transform(coord.begin(), coord.end(), fshape.begin(), coord.begin(), detail::modulo<long, size_t>);
 
-        auto index = buffer.ravel_index(coord.begin(), coord.end());
-        data[riter.index] = buffer[index];
+        data[riter.index] = buffer.at(coord.begin(), coord.end());
     }
 }
 
@@ -515,7 +511,7 @@ void write_line(std::vector<T> & buffer, size_t flen, size_t origin, InputIt fir
 
                     buffer[i] = T();
                     break;
-                
+
                 case extend::nearest:
 
                     buffer[i] = (index < 0) ? *first : *std::prev(last);

@@ -111,18 +111,19 @@ StreakFinderResult = Union[StreakFinderResultDouble, StreakFinderResultFloat]
 
 class StreakFinder:
     structure   : Structure
+    min_size    : int
     lookahead   : int
     nfa         : int
 
-    def __init__(self, structure: Structure, lookahead: int=0, nfa: int=0):
+    def __init__(self, structure: Structure, min_size: int, lookahead: int=0, nfa: int=0):
         ...
 
     def detect_streaks(self, data: NDRealArray, mask: NDBoolArray, peaks: Peaks,
-                       xtol: float, vmin: float, log_eps: float=0.0) -> StreakFinderResult:
+                       xtol: float, vmin: float) -> StreakFinderResult:
         ...
 
 def detect_streaks(peaks: List[Peaks], data: NDRealArray, mask: NDBoolArray,
-                   structure: Structure, xtol: float, vmin: float, log_eps: float=0.0,
+                   structure: Structure, xtol: float, vmin: float, min_size: int,
                    lookahead: int=0, nfa: int=0, axes: Optional[Tuple[int, int]]=None,
                    num_threads: int=1) -> List[List[Line]]:
     """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
@@ -142,7 +143,7 @@ def detect_streaks(peaks: List[Peaks], data: NDRealArray, mask: NDBoolArray,
             null hypothesis is below ``np.exp(log_eps)``.
         lookahead : Number of linelets considered at the ends of a streak to be added to the streak.
         nfa : Number of false alarms, allowed number of unaligned points in a streak.
-        
+
     Returns:
         A list of detected streaks.
     """

@@ -128,7 +128,7 @@ class DetectExecutor(Executor, INIContainer):
         table = pd.concat(tables, ignore_index=True)
         table.to_hdf(self.out_path, 'data')
 
-    def detect_model(self):  
+    def detect_model(self):
         indices = CXIStore(self.h5_files, 'r').indices()[self.frames[0]:self.frames[1]]
         indices = np.array_split(indices, self.num_chunks)
 

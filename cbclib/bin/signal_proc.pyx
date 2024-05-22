@@ -29,7 +29,7 @@ def unique_indices(np.ndarray idxs not None):
     cdef unsigned *_uniq
     cdef unsigned *_iidxs
     cdef unsigned *_idxs = <unsigned *>np.PyArray_DATA(idxs)
-    
+
     cdef np.ndarray inv = np.PyArray_SimpleNew(1, idxs.shape, np.NPY_UINT32)
     cdef unsigned *_inv = <unsigned *>np.PyArray_DATA(inv)
 

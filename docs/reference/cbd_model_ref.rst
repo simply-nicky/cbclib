@@ -14,7 +14,7 @@ distance downstream. The sample diffracts the incoming X-ray beam into a diffrac
 
 * **foc_pos** : Focal point of the incoming X-ray beam.
 * **pupil_roi** : Focus beam extent :code:`[y_min, y_max, x_min, x_max]` at the detector plane. Since the beam is formed by two 1D focusing lenses, the focused
-  beam has a rectangular shape. 
+  beam has a rectangular shape.
 * **rot_axis** : The axis of sample rotation. The axis is defined by its azimuth and inclination.
 * **smp_dist** : Focus-to-sample distance in meters.
 * **wavelength** : The wavelength of the incident X-ray beam in meters.
@@ -29,7 +29,7 @@ A location at the detector plane is related to a wave-field emanated from the so
 
 .. math::
 
-    \mathbf{k}_{out} &= 
+    \mathbf{k}_{out} &=
         \begin{cases}
             \sin \theta(\mathbf{x} - \mathbf{x}_s) \cos \varphi(\mathbf{x} - \mathbf{x}_s), \\
             \sin \theta(\mathbf{x} - \mathbf{x}_s) \sin \varphi(\mathbf{x} - \mathbf{x}_s), \\
@@ -38,7 +38,7 @@ A location at the detector plane is related to a wave-field emanated from the so
     \theta(\mathbf{x}) &= \arccos \left(\frac{z}{\sqrt{x^2 + y^2 + z^2}} \right), \\
     \varphi(\mathbf{x}) &= \mathrm{atan2}(y, x).
 
-.. seealso:: 
+.. seealso::
 
     :class:`cbclib.ScanSetup` provides methods to project a detector point to a outcoming wave-vector (:func:`detector_to_kout <cbclib.ScanSetup.detector_to_kout>`)
     and vice-versa (:func:`kout_to_detector <cbclib.ScanSetup.kout_to_detector>`) following the above equation.
@@ -47,14 +47,14 @@ The source point :math:`\mathbf{x}_s` is assumed to lie at the sample plane and 
 
 .. math::
 
-    \mathbf{x}_s = 
+    \mathbf{x}_s =
         \begin{cases}
             x_f + (z_{smp} - z_f) \tan \theta(\mathbf{k}_{in}) \cos \varphi(\mathbf{k}_{in}), \\
             y_f + (z_{smp} - z_f) \tan \theta(\mathbf{k}_{in}) \sin \varphi(\mathbf{k}_{in}), \\
             z_{smp}.
         \end{cases}
 
-.. seealso:: 
+.. seealso::
 
     The above equation is used in :func:`cbclib.ScanSetup.kin_to_sample` to project an incident wave-vector to a source point at the sample plane.
 
@@ -77,14 +77,14 @@ reflection on the detector is defined by a set of incident wave-vectors that sat
 
 .. math::
 
-    (\mathbf{k}_{in} - \mathbf{s}) \mathbf{q} = 0, \quad \mathbf{s} = 
+    (\mathbf{k}_{in} - \mathbf{s}) \mathbf{q} = 0, \quad \mathbf{s} =
     \begin{cases}
         \sin\left(\arccos(q / 2) - \theta_q\right) \cos \varphi_q, \\
         \sin\left(\arccos(q / 2) - \theta_q\right) \sin \varphi_q, \\
         \cos\left(\arccos(q / 2) - \theta_q\right).
     \end{cases}
 
-.. seealso:: 
+.. seealso::
 
     :func:`cbclib.bin.calc_source_lines` takes a set of reciprocal lattice points and calculates the source lines following the above equation.
 

@@ -262,7 +262,7 @@ public:
     template <typename T>
     using stack_t = std::vector<std::pair<const_iterator, T>>;
 
-    KDTree() : root(nullptr), rect(nullptr) {} 
+    KDTree() : root(nullptr), rect(nullptr) {}
 
     KDTree(std::vector<item_type> && items) : KDTree()
     {
@@ -408,12 +408,12 @@ private:
             return {node, const_iterator(node, root)};
         }
 
-        // Duplicate data point, no insertion 
+        // Duplicate data point, no insertion
         if (item.first == node->point())
         {
             return {node, end()};
         }
-        
+
         const_iterator inserted;
 
         if (node->is_left(item.first))

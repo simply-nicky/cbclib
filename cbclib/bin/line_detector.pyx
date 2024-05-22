@@ -98,7 +98,7 @@ cdef class LSD:
         if _reg_xs is NULL:
             free(_outs); free(_ns); free(_regs)
             raise MemoryError('not enough memory')
-        
+
         cdef int *_reg_ys = <int *>malloc(repeats * sizeof(int))
         if _reg_ys is NULL:
             free(_outs); free(_ns); free(_regs); free(_reg_xs)
@@ -160,7 +160,7 @@ cdef class LSD:
                 out_dims[0] = _reg_ys[i]
                 out_dims[1] = _reg_xs[i]
                 reg_dict[i] = ArrayWrapper.from_ptr(<void *>_regs[i]).to_ndarray(2, out_dims, np.NPY_INT32)
-            
+
             out_dict['labels'] = reg_dict
         else:
             for i in range(repeats):

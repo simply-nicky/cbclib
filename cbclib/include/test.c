@@ -136,7 +136,7 @@ static int test_median()
     size_t X = 30;
     size_t Y = 30;
     size_t dims[2] = {Y, X};
-    size_t size = 6; 
+    size_t size = 6;
     size_t fsize[2] = {size, size};
 
     double *data = MALLOC(double, X * Y);
@@ -199,7 +199,7 @@ static int test_median()
     return EXIT_SUCCESS;
 }
 
-static const float LINES[14] = 
+static const float LINES[14] =
    {1.0, 2.0, 1.0, 2.0, 0.0, 0.0, 0.0,
     1.0, 2.0, 2.0, 3.0, 1.0, 0.0, 0.0,};
 

@@ -67,14 +67,6 @@ inline py::array_t<typename Container::value_type> to_pyarray(const Container & 
     return py::array(seq.size(), seq.data());
 }
 
-namespace detail {
-
-struct Constants
-{
-    // 1 / sqrt(2 * pi)
-    static constexpr double M_1_SQRT2PI = 0.3989422804014327; 
-};
-
 template <typename T, typename = void>
 struct is_input_iterator : std::false_type {};
 
@@ -82,6 +74,17 @@ template <typename T>
 struct is_input_iterator<T,
     std::void_t<decltype(*std::declval<T &>()), decltype(++std::declval<T &>())>
 > : std::true_type {};
+
+template <typename T>
+constexpr bool is_input_iterator_v = is_input_iterator<T>::value;
+
+namespace detail {
+
+struct Constants
+{
+    // 1 / sqrt(2 * pi)
+    static constexpr double M_1_SQRT2PI = 0.3989422804014327;
+};
 
 template <typename T>
 class any_container
@@ -209,19 +212,18 @@ void check_indices(std::string name, size_t xsize, size_t isize, std::optional<p
     }
 }
 
-template <typename T, typename V, int ExtraFlags>
-void check_optional(const std::string & name, const py::array_t<T, ExtraFlags> & inp,
+template <typename ForwardIt, typename V, int ExtraFlags>
+void check_optional(const std::string & name, ForwardIt first, ForwardIt last,
                     std::optional<py::array_t<V, ExtraFlags>> & opt, V fill_value)
 {
-    py::buffer_info ibuf = inp.request();
     if (!opt)
     {
-        opt = py::array_t<V, ExtraFlags>(ibuf.shape);
+        opt = py::array_t<V, ExtraFlags>(std::vector(first, last));
         fill_array(opt.value(), fill_value);
     }
     py::buffer_info obuf = opt.value().request();
     check_equal(name + " and inp arrays must have identical shapes",
-                obuf.shape.begin(), obuf.shape.end(), ibuf.shape.begin(), ibuf.shape.end());
+                obuf.shape.begin(), obuf.shape.end(), first, last);
 }
 
 template <typename T>
@@ -325,15 +327,15 @@ public:
     }
 
     void capture_exception()
-    { 
+    {
         std::unique_lock<std::mutex> guard(this->lock);
-        this->ptr = std::current_exception(); 
-    }   
+        this->ptr = std::current_exception();
+    }
 
     template <typename Function, typename... Args>
     void run(Function && f, Args &&... params)
     {
-        try 
+        try
         {
             std::forward<Function>(f)(std::forward<Args>(params)...);
         }

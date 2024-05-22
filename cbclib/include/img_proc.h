@@ -71,7 +71,7 @@ int filter_line(float *olines, unsigned char *proc, float *data, const size_t *d
     @param ilines       Input buffer of lines. If olines is uninitialized, the data
                         from ilines is copied to olines.
     @param ldims        Shape of a ilines buffer.
-    @param threshold    Grouping threshold. A pair of lines is merged if the 
+    @param threshold    Grouping threshold. A pair of lines is merged if the
                         correlation[i, j] > threshold.
     @param dilation     Line mask dilation in pixels.
 

@@ -197,7 +197,7 @@ static void plot_line_width(void *out, const size_t *dims, float *line, float wi
     {
         bnd[0] = pts[2] - wi; CLIP(bnd[0], 0, (int)dims[0] - 1);
         bnd[2] = pts[0] + wi; CLIP(bnd[2], 0, (int)dims[0] - 1);
-        err1 -= (bnd[2] - pts[0]) * dx; err2 -= (bnd[2] - pts[0]) * dy; 
+        err1 -= (bnd[2] - pts[0]) * dx; err2 -= (bnd[2] - pts[0]) * dy;
         pts[0] = bnd[2]; pts[2] = bnd[0];
     }
 
@@ -501,7 +501,7 @@ static float collapse_pair(float *oln, float *img, int *pts, float *data, const 
         mu_xy = 2.0f * (MXY / M0 - mu_x * mu_y);
         mu_xx = MXX / M0 - mu_x * mu_x; mu_yy = MYY / M0 - mu_y * mu_y;
 
-        /* Line inclination */ 
+        /* Line inclination */
         th = 0.5f * atanf(mu_xy / (mu_xx - mu_yy));
         if (mu_xx < mu_yy) th += M_PI_2;
 
@@ -537,7 +537,7 @@ static float find_overlap(float *img0, int *pts0, float *img1, int *pts1, float 
 {
     /* Define overlap rectangle */
     /* Points are given by [j0, i0, j1, i1], where {j <-> y, i <-> x} */
-    int pts[4] = {MIN(pts0[0], pts1[0]), MIN(pts0[1], pts1[1]), 
+    int pts[4] = {MIN(pts0[0], pts1[0]), MIN(pts0[1], pts1[1]),
                   MAX(pts0[2], pts1[2]), MAX(pts0[3], pts1[3])};
 
     /* Image shapes are given by [Y, X],
@@ -635,7 +635,7 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
     /* Check parameters */
     if (!olines|| !data || !ilines) {ERROR("group_line: one of the arguments is NULL."); return -1;}
     if (!dims[0] && !dims[1]) {ERROR("group_line: data array must have a positive size."); return -1;}
-    
+
     if (ldims[0] == 0) return 0;
     if (*olines != *ilines) memcpy(olines, ilines, ldims[0] * ldims[1] * sizeof(float));
 
@@ -685,7 +685,7 @@ int group_line(float *olines, unsigned char *proc, float *data, const size_t *di
                     {
                         /* Create an image of a pair */
                         create_line_image_pair(&img_pair, &ptp_pair, dims, ln0, ln1, dilation, profile);
-                        
+
                         /* Collapse a pair of lines */
                         M0 = collapse_pair(oln, img_pair, pts_pair, data, dims, ln0, ln1, ldims[1]);
 
@@ -905,7 +905,7 @@ double cross_entropy(unsigned *ij, float *p, unsigned *fidxs, size_t *dims, floa
             /* Calculate the cross entropy: ce = -p * log(q) */
             for (j = fidxs[i]; j < (int)fidxs[i + 1]; j++)
             {
-                crit -= p[j] * log(MAX(GET(iarr, float, ij[j]), epsilon)); 
+                crit -= p[j] * log(MAX(GET(iarr, float, ij[j]), epsilon));
             }
         }
 

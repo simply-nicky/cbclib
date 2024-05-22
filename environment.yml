@@ -3,10 +3,10 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - cython
   - fftw
   - h5py
   - hdf5plugin
+  - jax
   - llvm-openmp
   - numpy
   - pandas

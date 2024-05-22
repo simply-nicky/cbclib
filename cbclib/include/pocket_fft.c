@@ -299,7 +299,7 @@ NOINLINE static void pass2b(size_t ido, size_t l1, const cmplx *restrict cc,
                 A_EQ_B_MUL_C(CH(i, k, 1), WA(0, i), t)
             }
         }
-} 
+}
 
 NOINLINE static void pass2f(size_t ido, size_t l1, const cmplx *restrict cc,
                             cmplx *restrict ch, const cmplx *restrict wa)
@@ -2028,7 +2028,7 @@ static int rfftblue_backward(fftblue_plan plan, double c[], double fct)
         tmp[2 * n - m + 1] = -tmp[m + 1];
     }
     if (fftblue_fft(plan, tmp, 1, fct) != 0)
-    { 
+    {
         DEALLOC(tmp); return -1;
     }
     for (size_t m = 0; m < n; ++m) c[m] = tmp[2 * m];

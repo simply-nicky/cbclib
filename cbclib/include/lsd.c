@@ -1210,7 +1210,7 @@ static void rect_copy(struct rect * in, struct rect * out)
 						    *                :                         vx[2], vy[2]
 							    *            :                          *
 			y                       *        :                      *
-			^                           *    :                  * 
+			^                           *    :                  *
 			|                               ys              *
 			|                                   *       *
 			+---> x                            vx[3], vy[3]
@@ -2160,7 +2160,7 @@ int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
     	   the memory with the image data to be returned by this function. */
         DEALLOC(region);
     }
-    
+
     if (out != NULL && n_out != NULL)
     {
         if (out_buf->size > (unsigned int)INT_MAX)
@@ -2171,7 +2171,7 @@ int LineSegmentDetection(float **out, int *n_out, float *img, size_t *dims,
         DEALLOC(out_buf);    /* only the 'ntuple_list' structure must be freed,
                                 but the 'values' pointer must be keep to return
                                 as a result. */
-        
+
     }
     else free_ntuple_list(out_buf);
 

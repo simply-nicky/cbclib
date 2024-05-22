@@ -12,7 +12,7 @@ def median(inp: NDIntArray, mask: Optional[NDBoolArray]=None, axis: IntSequence=
     ...
 
 def median(inp: Union[NDRealArray, NDIntArray], mask: Optional[NDBoolArray]=None,
-           axis: IntSequence=0, num_threads: int=1) -> Union[NDRealArray, NDIntArray]:
+           axis: IntSequence=0, num_threads: int=1) -> NDRealArray:
     """Calculate a median along the `axis`.
 
     Args:
@@ -180,7 +180,7 @@ def robust_mean(inp: Union[NDRealArray, NDIntArray],
     """Calculate a mean along the `axis` by robustly fitting a Gaussian to input vector [RFG]_.
     The algorithm performs `n_iter` times the fast least kth order statistics (FLkOS [FLKOS]_)
     algorithm to fit a gaussian to data.
-    
+
     Args:
         inp : Input array. Must be one of the following types: np.float64, np.float32, np.int32,
             np.uint32, np.uint64.

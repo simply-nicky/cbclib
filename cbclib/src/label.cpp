@@ -49,7 +49,7 @@ auto label(py::array_t<bool> mask, Structure structure, size_t npts, std::option
     size_t repeats = std::reduce(marr.shape.begin(), std::next(marr.shape.begin(), marr.ndim - 2), 1, std::multiplies());
 
     std::vector<Regions> result;
-    
+
     thread_exception e;
 
     py::gil_scoped_release release;

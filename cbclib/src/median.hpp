@@ -38,6 +38,19 @@ OutputIt wrap(InputIt1 first, InputIt1 last, OutputIt d_first, InputIt2 min, Inp
 
 }
 
+template <typename RandomIt, typename Compare>
+double median_1d(RandomIt first, RandomIt last, Compare comp)
+{
+    auto n = std::distance(first, last);
+    if (n & 1) return *wirthselect(first, last, n / 2, comp);
+    else
+    {
+        double lo = *wirthselect(first, last, n / 2 - 1, comp);
+        double hi = *wirthselect(first, last, n / 2, comp);
+        return (lo + hi) / 2;
+    }
+}
+
 template <typename Container, typename T, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
 T extend_point(const Container & coord, const array<T> & arr, extend mode, const T & cval)
 {
@@ -88,8 +101,7 @@ T extend_point(const Container & coord, const array<T> & arr, extend mode, const
             throw std::invalid_argument("Invalid extend argument: " + std::to_string(static_cast<int>(mode)));
     }
 
-    size_t index = arr.ravel_index(close.begin(), close.end());
-    return arr[index];
+    return arr.at(close.begin(), close.end());
 }
 
 template <typename T>
@@ -113,42 +125,38 @@ struct footprint
             {
                 std::vector<long> coord;
                 fmask.unravel_index(std::back_inserter(coord), i);
-                auto & offset = this->offsets.emplace_back();
+                auto & offset = offsets.emplace_back();
                 std::transform(coord.begin(), coord.end(), fmask.shape.begin(), std::back_inserter(offset),
                                [](long crd, size_t dim){return crd - dim / 2;});
             }
         }
 
-        this->npts = this->offsets.size();
-        this->coords = std::vector<std::vector<long>>(npts, std::vector<long>(ndim));
-        if (this->npts == 0) throw std::runtime_error("zero number of points in a footprint.");
+        npts = offsets.size();
+        coords = std::vector<std::vector<long>>(npts, std::vector<long>(ndim));
+        if (npts == 0) throw std::runtime_error("zero number of points in a footprint.");
     }
 
     template <typename Container, typename = std::enable_if_t<std::is_convertible_v<typename Container::value_type, long>>>
     footprint & update(const Container & coord, const array<T> & arr, extend mode, const T & cval)
     {
-        this->data.clear();
+        data.clear();
 
-        for (size_t i = 0; i < this->npts; i++)
+        for (size_t i = 0; i < npts; i++)
         {
             bool extend = false;
 
-            for (size_t n = 0; n < this->ndim; n++)
+            for (size_t n = 0; n < ndim; n++)
             {
-                this->coords[i][n] = coord[n] + this->offsets[i][n];
-                extend |= (this->coords[i][n] >= static_cast<long>(arr.shape[n])) || (this->coords[i][n] < 0);
+                coords[i][n] = coord[n] + offsets[i][n];
+                extend |= (coords[i][n] >= static_cast<long>(arr.shape[n])) || (coords[i][n] < 0);
             }
 
             if (extend)
             {
-                auto val = extend_point(this->coords[i], arr, mode, cval);
-                this->data.push_back(val);
+                auto val = extend_point(coords[i], arr, mode, cval);
+                data.push_back(val);
             }
-            else
-            {
-                size_t index = arr.ravel_index(this->coords[i].begin(), this->coords[i].end());
-                this->data.push_back(arr[index]);
-            }
+            else data.push_back(arr.at(coords[i]));
         }
 
         return *this;

@@ -242,14 +242,17 @@ class ReadWorker(Protocol):
     def __call__(self, index: NDArray, ss_idxs: Indices, fs_idxs: Indices) -> NDArray:
         ...
 
+Processor = Callable[[NDArray], NDArray]
+
 @dataclass
 class CXIReader():
     protocol : CXIProtocol
 
     @staticmethod
-    def initializer(reader: ReadWorker, ss_idxs: NDIntArray, fs_idxs: NDIntArray):
+    def initializer(reader: ReadWorker, ss_idxs: NDIntArray, fs_idxs: NDIntArray,
+                    proc: Optional[Processor]):
         global read_worker
-        read_worker = partial(reader, ss_idxs=ss_idxs, fs_idxs=fs_idxs)
+        read_worker = partial(reader, ss_idxs=ss_idxs, fs_idxs=fs_idxs, proc=proc)
 
     @staticmethod
     def read_item(index: NDArray) -> NDArray:
@@ -257,28 +260,33 @@ class CXIReader():
         return dset[index[2]]
 
     @staticmethod
-    def read_frame(index: NDArray, ss_idxs: Indices, fs_idxs: Indices) -> NDArray:
+    def read_frame(index: NDArray, ss_idxs: Indices, fs_idxs: Indices,
+                   proc: Optional[Processor]) -> NDArray:
         dset : h5py.Dataset = cast(h5py.Dataset, h5py.File(index[0])[index[1]])
-        return dset[index[2]][..., ss_idxs, fs_idxs]
+        data = dset[index[2]][..., ss_idxs, fs_idxs]
+        if proc is not None:
+            data = proc(data)
+        return data
 
     @staticmethod
     def read_worker(index: NDArray) -> NDArray:
         return read_worker(index)
 
-    def load_stack(self, attr: str, idxs: NDArray, ss_idxs: Indices,
-                   fs_idxs: Indices, processes: int, verbose: bool) -> NDArray:
+    def load_stack(self, attr: str, idxs: NDArray, ss_idxs: Indices, fs_idxs: Indices,
+                   proc: Optional[Processor], processes: int, verbose: bool) -> NDArray:
         stack = []
 
         with Pool(processes=processes, initializer=type(self).initializer,
-                  initargs=(type(self).read_frame, ss_idxs, fs_idxs)) as pool:
+                  initargs=(type(self).read_frame, ss_idxs, fs_idxs, proc)) as pool:
             for frame in tqdm(pool.imap(CXIReader.read_worker, idxs), total=idxs.shape[0],
                               disable=not verbose, desc=f'Loading {attr:s}'):
                 stack.append(frame)
 
         return np.stack(stack, axis=0)
 
-    def load_frame(self, index: NDArray, ss_idxs: Indices, fs_idxs: Indices) -> NDArray:
-        return self.read_frame(index, ss_idxs, fs_idxs)
+    def load_frame(self, index: NDArray, ss_idxs: Indices, fs_idxs: Indices,
+                   proc: Optional[Processor]) -> NDArray:
+        return self.read_frame(index, ss_idxs, fs_idxs, proc)
 
     def load_sequence(self, idxs: NDArray) -> NDArray:
         return np.array([self.read_item(index) for index in idxs])
@@ -364,7 +372,8 @@ class FileStore():
         raise NotImplementedError
 
     def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
-             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> NDArray:
+             fs_idxs: Indices=slice(None), proc: Optional[Processor]=None, processes: int=1,
+             verbose: bool=True) -> NDArray:
         raise NotImplementedError
 
     def read_frame_shape(self) -> Tuple[int, int]:
@@ -448,7 +457,8 @@ class CXIStore(FileStore):
             self.files[fname] = None
 
     def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
-             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> NDArray:
+             fs_idxs: Indices=slice(None), proc: Optional[Processor]=None, processes: int=1,
+             verbose: bool=True) -> NDArray:
         """Load a data attribute from the files.
 
         Args:
@@ -475,11 +485,11 @@ class CXIStore(FileStore):
 
         if kind == Kinds.STACK:
             return reader.load_stack(attr=attr, idxs=self.indices[attr][idxs],
-                                        processes=processes, ss_idxs=ss_idxs,
-                                        fs_idxs=fs_idxs, verbose=verbose)
+                                     processes=processes, ss_idxs=ss_idxs,
+                                     fs_idxs=fs_idxs, proc=proc, verbose=verbose)
         elif kind == Kinds.FRAME:
             return reader.load_frame(index=self.indices[attr][0], ss_idxs=ss_idxs,
-                                     fs_idxs=fs_idxs)
+                                     fs_idxs=fs_idxs, proc=proc)
         elif kind == Kinds.SCALAR:
             return reader.load_sequence(idxs=self.indices[attr][0])
         elif kind == Kinds.SEQUENCE:
@@ -651,8 +661,6 @@ class ExtraProtocol(DataContainer):
 
         return np.unique(np.concatenate(tids), axis=0)
 
-Processor = Callable[[NDArray], NDArray]
-
 @dataclass
 class ExtraReader():
     protocol : ExtraProtocol
@@ -707,17 +715,8 @@ class ExtraStore(FileStore):
         return list(self.protocol.data_paths)
 
     def load(self, attr: str, idxs: Optional[Indices]=None, ss_idxs: Indices=slice(None),
-             fs_idxs: Indices=slice(None), processes: int=1, verbose: bool=True) -> NDArray:
-        if idxs is None:
-            idxs = np.arange(self.size)
-
-        reader = ExtraReader(self.protocol, self.protocol.detector_geometry())
-        return reader.load(attr, self.indices[idxs], ss_idxs, fs_idxs, processes,
-                           None, verbose)
-
-    def process(self, proc: Processor, attr: str, idxs: Optional[Indices]=None,
-                ss_idxs: Indices=slice(None), fs_idxs: Indices=slice(None),
-                processes: int=1, verbose: bool=True) -> NDArray:
+             fs_idxs: Indices=slice(None), proc: Optional[Processor]=None, processes: int=1,
+             verbose: bool=True) -> NDArray:
         if idxs is None:
             idxs = np.arange(self.size)
 

@@ -31,7 +31,7 @@ by minimising one of two criteria (see :func:`fitness <cbclib.IntensityScaler.fi
    where the likelihood :math:`\mathrm{P}` follows the Poisson distribution :math:`\log \mathrm{P}(I, \lambda) = I \log \lambda - I`.
 
 2. The latter one is **the least-squares criterion**:
-   
+
    .. math:: \varepsilon^{LS} = \sum_{ni} \varepsilon_n^{LS}(\mathbf{x}_i) = \sum_{ni} f\left( \frac{I_n(\mathbf{x}_i) - \hat{I}_n(\mathbf{x}_i)}{\sigma_I} \right),
 
    where :math:`f(x)` is either l2, l1, or Huber loss function, and :math:`\sigma_I` is the standard deviation of measured photon counts for a given diffraction
@@ -54,7 +54,7 @@ next step, the projection mapping are calculated based on the new estimates of c
 where :math:`K(\mathbf{x})` is the kernel function, and :math:`h` is the kernel bandwidth, and :math:`\hat{I}^{hkl}_n` is the estimate of the intensity measurements
 pertaining to a certain Bragg reflection:
 
-.. math:: 
+.. math::
 
    \hat{I}^{hkl}_n(\mathbf{x}_i) = \frac{(I_n(\mathbf{x}_i) - I_{bgd}(\mathbf{x}_i)) I_{hkl}(\mathbf{x}_i)}{\sum_{hkl} I_{hkl}(\mathbf{x}_i)}.
 

@@ -25,10 +25,10 @@ from .annotations import (Indices, IntSequence, IntTuple, NDArray, NDBoolArray, 
                           NDRealArray, ROIType, Shape)
 from .src import median, robust_mean, robust_lsq, Structure
 
-def read(input_file: FileStore, attributes: Union[str, List[str]],
-         idxs: Optional[IntSequence]=None, transform: Optional[Transform] = None,
-         processes: int=1, update: bool=True, verbose: bool=True
-         ) -> Union[CrystData, CrystDataPart, CrystDataFull]:
+def read_hdf(input_file: FileStore, attributes: Union[str, List[str]],
+             idxs: Optional[IntSequence]=None, transform: Optional[Transform] = None,
+             processes: int=1, update: bool=True, verbose: bool=True
+             ) -> Union[CrystData, CrystDataPart, CrystDataFull]:
     """Load data attributes from the input files in `files` file handler object.
 
     Args:
@@ -77,10 +77,10 @@ def read(input_file: FileStore, attributes: Union[str, List[str]],
         return CrystDataPart(**data_dict)
     return CrystData(**data_dict)
 
-def write(container: Union[CrystData, CrystDataPart, CrystDataFull], output_file: FileStore,
-          attributes: Union[str, List[str], None]=None, good_frames: Optional[Indices]=None,
-          transform: Optional[Transform] = None, input_file: Optional[FileStore]=None,
-          mode: str='append', idxs: Optional[Indices]=None):
+def write_hdf(container: Union[CrystData, CrystDataPart, CrystDataFull], output_file: FileStore,
+              attributes: Union[str, List[str], None]=None, good_frames: Optional[Indices]=None,
+              transform: Optional[Transform] = None, input_file: Optional[FileStore]=None,
+              mode: str='append', idxs: Optional[Indices]=None):
     """Save data arrays of the data attributes contained in the container to an output file.
 
     Args:
@@ -126,7 +126,7 @@ def write(container: Union[CrystData, CrystDataPart, CrystDataFull], output_file
             output_file.save(attr, data, mode=mode, idxs=idxs)
 
 @dataclass
-class CrystData(CrystProtocol, DataContainer):
+class CrystDataBase(CrystProtocol, DataContainer):
     """Convergent beam crystallography data container class. Takes a :class:`cbclib.CXIStore` file
     handler. Provides an interface to work with the detector images and detect the diffraction
     streaks. Also provides an interface to load from a file and save to a file any of the data
@@ -147,10 +147,10 @@ class CrystData(CrystProtocol, DataContainer):
     """
     frames      : NDIntArray
 
-    data        : Optional[NDRealArray] = field(default=None)
-    mask        : Optional[NDBoolArray] = field(default=None)
+    data        : Optional[NDRealArray]
+    whitefield  : Optional[NDRealArray]
 
-    whitefield  : Optional[NDRealArray] = field(default=None)
+    mask        : Optional[NDBoolArray] = field(default=None)
     std         : Optional[NDRealArray] = field(default=None)
     snr         : Optional[NDRealArray] = field(default=None)
     scales      : Optional[NDRealArray] = field(default=None)
@@ -199,16 +199,16 @@ class CrystData(CrystProtocol, DataContainer):
                 data_dict[attr] = self.get(attr)[idxs]
         return self.replace(**data_dict)
 
-Self = TypeVar("Self", bound="CrystDataPart")
+Self = TypeVar("Self", bound="CrystDataPartBase")
 
 @dataclass
-class CrystDataPart(CrystData):
+class CrystDataPartBase(CrystDataBase):
     data        : NDRealArray
     mask        : NDBoolArray = field(default_factory=lambda: np.array([], dtype=bool))
 
     def __post_init__(self):
-        if self.mask.shape != self.shape:
-            self.mask = np.ones(self.shape, dtype=bool)
+        if self.mask.shape != self.shape[1:]:
+            self.mask = np.ones(self.shape[1:], dtype=bool)
 
     def mask_region(self: Self, roi: ROIType) -> Self:
         """Return a new :class:`CrystData` object with the updated mask. The region
@@ -263,7 +263,7 @@ class CrystDataPart(CrystData):
         Returns:
             New :class:`CrystData` object with the default ``mask``.
         """
-        return self.replace(mask=np.ones(self.shape[1:], dtype=bool))
+        return self.replace(mask=np.array([], dtype=bool))
 
     def update_mask(self: Self, method: str='no-bad', vmin: int=0, vmax: int=65535,
                     snr_max: float=3.0, roi: Optional[ROIType]=None) -> Self:
@@ -354,26 +354,41 @@ class CrystDataPart(CrystData):
         """
         if frames is None:
             frames = np.arange(self.shape[0])
+        std = self.std
 
         if method == 'median':
-            whitefield = median(inp=self.data[frames] * self.mask[frames], axis=0,
+            whitefield = median(inp=self.data[frames] * self.mask, axis=0,
                                 num_threads=self.num_threads)
         elif method == 'robust-mean':
-            whitefield = robust_mean(inp=self.data[frames] * self.mask[frames],
-                                     axis=0, r0=r0, r1=r1, n_iter=n_iter, lm=lm,
+            whitefield = robust_mean(inp=self.data[frames] * self.mask, axis=0, r0=r0,
+                                     r1=r1, n_iter=n_iter, lm=lm,
                                      num_threads=self.num_threads)
+        elif method == 'robust-mean-scale':
+            whitefield, std = robust_mean(inp=self.data[frames] * self.mask, axis=0,
+                                          r0=r0, r1=r1, n_iter=n_iter, lm=lm,
+                                          return_std=True, num_threads=self.num_threads)
         else:
             raise ValueError('Invalid method argument')
 
-        return CrystDataFull(**dict(self, whitefield=whitefield))
+        return CrystDataFull(**dict(self.to_dict(), whitefield=whitefield, std=std))
 
 @dataclass
-class CrystDataFull(CrystDataPart):
+class CrystData(CrystDataBase):
+    data        : Optional[NDRealArray] = field(default=None)
+    whitefield  : Optional[NDRealArray] = field(default=None)
+
+@dataclass
+class CrystDataPart(CrystDataPartBase):
+    data        : NDRealArray
+    whitefield  : Optional[NDRealArray] = field(default=None)
+
+@dataclass
+class CrystDataFull(CrystDataPartBase):
     whitefield  : NDRealArray
     scales      : NDRealArray = field(default_factory=lambda: np.array([]))
 
     def __post_init__(self):
-        if self.scales.size != self.frames.size:
+        if self.scales.shape != (self.frames.size,):
             self.scales = np.ones(self.frames.size)
 
     def line_detector(self, structure: Structure) -> LineDetector:
@@ -423,8 +438,8 @@ class CrystDataFull(CrystDataPart):
             frames = np.arange(self.shape[0])
 
         if method == "robust-scale":
-            _, std = robust_mean(inp=(self.data * self.mask)[frames],
-                                 axis=0, r0=r0, r1=r1, n_iter=n_iter, lm=lm,
+            _, std = robust_mean(inp=self.data[frames] * self.mask, axis=0, r0=r0, r1=r1,
+                                 n_iter=n_iter, lm=lm, return_std=True,
                                  num_threads=self.num_threads)
         elif method == "poisson":
             std = np.sqrt(self.whitefield)
@@ -446,7 +461,7 @@ class CrystDataFull(CrystDataPart):
         if self.std is None:
             raise ValueError("No snr in the container")
 
-        whitefields = np.sum(self.scales[..., None, None] * self.whitefield, axis=1)
+        whitefields = self.scales[:, None, None] * self.whitefield
         snr = np.where(self.std, (self.data * self.mask - whitefields) / self.std, 0.0)
         return self.replace(snr=snr)
 
@@ -489,12 +504,12 @@ class CrystDataFull(CrystDataPart):
         if method == "robust-lsq":
             scales = robust_lsq(W=W, y=y, axis=1, r0=r0, r1=r1, n_iter=n_iter, lm=lm,
                                 num_threads=self.num_threads)
-            return self.replace(scales=scales)
+            return self.replace(scales=scales.ravel())
 
         if method == "median":
             scales = median(y * W, axis=1, num_threads=self.num_threads)[:, None] / \
                      median(W * W, axis=1, num_threads=self.num_threads)[:, None]
-            return self.replace(scales=scales)
+            return self.replace(scales=scales.ravel())
 
         raise ValueError(f"Invalid method argument: {method}")
 

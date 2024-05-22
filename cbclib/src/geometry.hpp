@@ -102,7 +102,7 @@ public:
     const std::array<T, 2> & to_array() const & {return pt;}
     std::array<T, 2> && to_array() && {return std::move(pt);}
 
-    Point<T> round() const {return {std::round(x()), std::round(y())};}
+    Point<T> round() const {return {static_cast<T>(std::round(x())), static_cast<T>(std::round(y()))};}
 
 private:
     std::array<T, 2> pt;
@@ -154,7 +154,7 @@ template <typename Pt, typename = void>
 struct is_point : std::false_type {};
 
 template <typename Pt>
-struct is_point <Pt, 
+struct is_point <Pt,
     typename std::enable_if_t<std::is_base_of_v<Point<typename Pt::value_type>, std::remove_cvref_t<Pt>>>
 > : std::true_type {};
 

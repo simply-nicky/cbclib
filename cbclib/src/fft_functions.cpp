@@ -100,7 +100,7 @@ auto fftn(py::array_t<Inp> inp, std::optional<Shape> shape, std::optional<Axis> 
     auto iarr = array<Inp>(inp.request());
 
     auto ax = iarr.ndim - seq.size();
-    
+
     if (!shape)
     {
         std::copy(std::next(iarr.shape.begin(), ax), iarr.shape.end(), std::back_inserter(*shape_seq));
@@ -317,7 +317,7 @@ void gauss_filter(array<T> & out, array<T> input, const std::vector<F> & sigma, 
 {
     thread_exception e;
 
-    py::gil_scoped_release release;    
+    py::gil_scoped_release release;
 
     for (size_t axis = 0; axis < input.ndim; axis++)
     {
@@ -427,7 +427,7 @@ py::array_t<T> gaussian_gradient_magnitude(py::array_t<T> inp, U sigma, std::str
     if (iarr.ndim > 1)
     {
         std::transform(oarr.begin(), oarr.end(), oarr.begin(), [](T out){return out * out;});
-        
+
         auto buffer = vector_array<T>(iarr.shape);
         auto add_buffer = [](T out, T buf){return out + std::pow(buf, 2);};
 

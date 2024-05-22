@@ -826,7 +826,7 @@ class IntensityScaler(DataContainer):
             The Poisson negative log-likelihood criterion is given by:
 
             .. math::
-                \varepsilon^{NLL} = \sum_{ni} \varepsilon_n^{NLL}(\mathbf{x}_i) = 
+                \varepsilon^{NLL} = \sum_{ni} \varepsilon_n^{NLL}(\mathbf{x}_i) =
                 \sum_{ni} \log \mathrm{P}(I_n(\mathbf{x}_i), \hat{I}_n(\mathbf{x}_i)),
 
             where the likelihood :math:`\mathrm{P}` follows the Poisson distribution

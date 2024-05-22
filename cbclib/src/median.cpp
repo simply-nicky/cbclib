@@ -3,13 +3,13 @@
 namespace cbclib {
 
 template <typename T, typename U>
-py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
-                      std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
-                      U axis, unsigned threads)
+py::array_t<double> median(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
+                           std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> mask,
+                           U axis, unsigned threads)
 {
     assert(PyArray_API);
 
-    check_optional("mask", inp, mask, true);
+    check_optional("mask", inp.shape(), inp.shape() + inp.ndim(), mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(inp.ndim());
@@ -19,7 +19,7 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
     auto ibuf = inp.request();
     auto ax = ibuf.ndim - seq.size();
     auto out_shape = std::vector<py::ssize_t>(ibuf.shape.begin(), std::next(ibuf.shape.begin(), ax));
-    auto out = py::array_t<T>(out_shape);
+    auto out = py::array_t<double>(out_shape);
 
     if (!out.size()) return out;
 
@@ -28,7 +28,7 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
     inp = inp.reshape(new_shape);
     mask = mask.value().reshape(new_shape);
 
-    auto oarr = array<T>(out.request());
+    auto oarr = array<double>(out.request());
     auto iarr = array<T>(inp.request());
     auto marr = array<bool>(mask.value().request());
 
@@ -55,7 +55,7 @@ py::array_t<T> median(py::array_t<T, py::array::c_style | py::array::forcecast> 
 
                 for (auto idx : idxs) if (miter[idx]) buffer.push_back(iiter[idx]);
 
-                if (buffer.size()) oarr[i] = *wirthmedian(buffer.begin(), buffer.end(), std::less<T>());
+                if (buffer.size()) oarr[i] = median_1d(buffer.begin(), buffer.end(), std::less<T>());
                 else oarr[i] = T();
             });
         }
@@ -73,7 +73,7 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & fprint,
                                    std::optional<py::array_t<bool, py::array::c_style | py::array::forcecast>> & mask)
 {
-    check_optional("mask", inp, mask, true);
+    check_optional("mask", inp.shape(), inp.shape() + inp.ndim(), mask, true);
 
     if (!size && !fprint)
         throw std::invalid_argument("size or fprint must be provided");
@@ -86,7 +86,7 @@ py::array_t<T> filter_preprocessor(py::array_t<T, py::array::c_style | py::array
     }
     py::buffer_info fbuf = fprint.value().request();
     if (fbuf.ndim != ibuf.ndim)
-        throw std::invalid_argument("fprint must have the same number of dimensions (" + std::to_string(fbuf.ndim) + 
+        throw std::invalid_argument("fprint must have the same number of dimensions (" + std::to_string(fbuf.ndim) +
                                     ") as the input (" + std::to_string(ibuf.ndim) + ")");
 
     return py::array_t<T>(ibuf.shape);
@@ -210,7 +210,7 @@ auto robust_mean(py::array_t<T, py::array::c_style | py::array::forcecast> inp,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    check_optional("mask", inp, mask, true);
+    check_optional("mask", inp.shape(), inp.shape() + inp.ndim(), mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(inp.ndim());
@@ -324,7 +324,7 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
     using D = std::common_type_t<T, float>;
     assert(PyArray_API);
 
-    check_optional("mask", y, mask, true);
+    check_optional("mask", y.shape(), y.shape() + y.ndim(), mask, true);
 
     sequence<long> seq (axis);
     seq = seq.unwrap(y.ndim());
@@ -440,7 +440,7 @@ auto robust_lsq(py::array_t<T, py::array::c_style | py::array::forcecast> W,
                     }
                     cumsum += err[idxs[j]];
                 }
-                
+
                 std::transform(sums.begin(), sums.end(), oarr.line_begin(ax, i), get_x);
             });
         }

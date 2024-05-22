@@ -134,7 +134,7 @@ static int compare_node(const void *a, const void *b, void *arg)
 static kd_node kd_build_node(kd_node *nodes, int l, int r, int dir, int dim)
 {
     kd_node node;
-    
+
     // Empty node if empty partition
     if (r <= l) node = NULL;
     // Creating leaf node
@@ -154,7 +154,7 @@ static kd_node kd_build_node(kd_node *nodes, int l, int r, int dir, int dim)
         node->left = kd_build_node(nodes, l, k, (dir + 1) % dim, dim);
         node->right = kd_build_node(nodes, k + 1, r, (dir + 1) % dim, dim);
     }
-    
+
     return node;
 }
 
@@ -418,7 +418,7 @@ void stack_push(query_stack *stack, kd_query query)
             // Find where to insert the node
             query_stack temp = *stack;
             while(temp->next && (temp->next->query->dist < query->dist)) temp = temp->next;
-            
+
             // Insert the node
             node->next = temp->next;
             temp->next = node;

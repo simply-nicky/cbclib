@@ -203,7 +203,7 @@ public:
     template <
         typename CoordIter,
         typename = std::enable_if_t<
-            std::is_integral_v<typename std::iterator_traits<CoordIter>::value_type> || 
+            std::is_integral_v<typename std::iterator_traits<CoordIter>::value_type> ||
             std::is_same_v<typename std::iterator_traits<CoordIter>::iterator_category, std::output_iterator_tag>
         >
     >
@@ -235,9 +235,9 @@ struct ArrayHasher
     size_t operator()(const std::array<T, N> & arr) const
     {
         size_t h = 0;
-        for (auto elem : arr) h = hash_combine(h, elem); 
+        for (auto elem : arr) h = hash_combine(h, elem);
         return h;
-    }   
+    }
 };
 
 // Recursive template code derived from Matthieu M.
@@ -317,6 +317,8 @@ public:
     using pointer = typename traits::pointer;
     using reference = typename traits::reference;
 
+    strided_iterator() : ptr(nullptr), stride(1) {}
+
     // This is templated so that we can allow constructing a const iterator from
     // a nonconst iterator...
     template <bool RHIsConst, typename = std::enable_if_t<IsConst || !RHIsConst>>
@@ -351,7 +353,7 @@ public:
     reference operator[] (size_t index) const {return ptr[index * stride];}
     reference operator*() const {return *(ptr);}
     pointer operator->() const {return ptr;}
-    
+
 private:
     T * ptr;
     size_t stride;
@@ -419,6 +421,11 @@ public:
         return array<T>(std::move(new_shape), std::move(new_strides), ptr + ravel_index(coord.begin(), coord.end()));
     }
 
+    /* Line slice iterators:
+        Take a slice of an array 'array' as follows:
+        - array[..., :, ...] slice, where ':' is at 'axis'-th axis
+        - ravel_index(i_0, i_1, ..., i_axis-1, i_axis+1, ...., i_n-1) = index
+    */
     iterator line_begin(size_t axis, size_t index)
     {
         check_index(axis, index);
@@ -449,6 +456,54 @@ public:
         size_t lsize = shape[axis] * strides[axis];
         T * iter = ptr + lsize * (index / strides[axis]) + index % strides[axis];
         return {iter + lsize, strides[axis]};
+    }
+
+    template <typename CoordIter, typename = std::enable_if_t<is_input_iterator_v<CoordIter>>>
+    const T & at(CoordIter first, CoordIter last) const
+    {
+        return ptr[ravel_index(first, last)];
+    }
+
+    template <typename CoordIter, typename = std::enable_if_t<is_input_iterator_v<CoordIter>>>
+    T & at(CoordIter first, CoordIter last)
+    {
+        return ptr[ravel_index(first, last)];
+    }
+
+    template <typename Container, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+    const T & at(const Container & coord) const
+    {
+        return ptr[ravel_index(coord)];
+    }
+
+    template <typename Container, typename = std::enable_if_t<std::is_integral_v<typename Container::value_type>>>
+    T & at(const Container & coord)
+    {
+        return ptr[ravel_index(coord)];
+    }
+
+    template <typename I, typename = std::enable_if_t<std::is_integral_v<I>>>
+    const T & at(const std::initializer_list<I> & coord) const
+    {
+        return ptr[ravel_index(coord)];
+    }
+
+    template <typename I, typename = std::enable_if_t<std::is_integral_v<I>>>
+    T & at(const std::initializer_list<I> & coord)
+    {
+        return ptr[ravel_index(coord)];
+    }
+
+    template <typename... Ix, typename = std::enable_if_t<(std::is_integral_v<Ix> && ...)>>
+    const T & at(Ix... index) const
+    {
+        return ptr[ravel_index(index...)];
+    }
+
+    template <typename... Ix, typename = std::enable_if_t<(std::is_integral_v<Ix> && ...)>>
+    T & at(Ix... index)
+    {
+        return ptr[ravel_index(index...)];
     }
 
     const T * data() const {return ptr;}
@@ -528,7 +583,7 @@ public:
 
 /*---------------------------------------------------------------------------
     Function :  kth_smallest()
-    In       :  array of elements, n elements in the array, rank k 
+    In       :  array of elements, n elements in the array, rank k
     Out      :  one element
     Job      :  find the kth smallest element in the array
     Notice   :  Buffer must be of size n
@@ -560,7 +615,7 @@ RandomIt wirthselect(RandomIt first, RandomIt last, typename std::iterator_trait
         if (j < key) l = i;
         if (key < i) m = j;
     }
-    
+
     return key;
 }
 
@@ -629,7 +684,7 @@ template <typename T>
 T parabolic(T x) {return T(0.75) * std::max<T>(1 - std::pow(x, 2), T());}
 
 template <typename T>
-T parabolic_grad(T x) 
+T parabolic_grad(T x)
 {
     if (std::abs(x) < T(1.0)) return T(0.75) * -2 * x;
     return T();
@@ -671,7 +726,7 @@ struct kernels
         {"triangular", kernel_type::triangular}
     };
 
-    static inline std::map<kernel_type, std::pair<kernel, kernel>> registered_kernels = 
+    static inline std::map<kernel_type, std::pair<kernel, kernel>> registered_kernels =
     {
         {kernel_type::biweight, {detail::biweight<T>, detail::biweight_grad<T>}},
         {kernel_type::gaussian, {detail::gaussian<T>, detail::gaussian_grad<T>}},

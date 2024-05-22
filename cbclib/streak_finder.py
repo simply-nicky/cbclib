@@ -13,8 +13,8 @@ StreakFinderResult = Union[StreakFinderResultDouble, StreakFinderResultFloat]
 
 class PatternStreakFinder:
     def __init__(self, data: NDRealArray, mask: NDBoolArray, structure: Structure,
-                 lookahead: int=0, nfa: int=0):
-        self.finder = StreakFinder(structure, lookahead, nfa)
+                 min_size: int, lookahead: int=0, nfa: int=0):
+        self.finder = StreakFinder(structure, min_size, lookahead, nfa)
         self.mask, self.data = mask, data
 
     @property
@@ -26,9 +26,8 @@ class PatternStreakFinder:
         peaks = detect_peaks(self.data, self.mask, self.finder.structure.rank, vmin)
         return filter_peaks(peaks, self.data, self.mask, connectivity, vmin, npts)[0]
 
-    def detect_streaks(self, peaks: Peaks, xtol: float, vmin: float, log_eps: float=0.0
-                       ) -> StreakFinderResult:
-        return self.finder.detect_streaks(self.data, self.mask, peaks, xtol, vmin, log_eps)
+    def detect_streaks(self, peaks: Peaks, xtol: float, vmin: float) -> StreakFinderResult:
+        return self.finder.detect_streaks(self.data, self.mask, peaks, xtol, vmin)
 
 @dataclass
 class PatternsStreakFinder(DataContainer):
@@ -71,8 +70,8 @@ class PatternsStreakFinder(DataContainer):
         return filter_peaks(peaks, self.data, self.mask, connectivity, vmin, npts,
                             num_threads=self.num_threads)
 
-    def detect_streaks(self, peaks: List[Peaks], xtol: float, vmin: float, log_eps: float=0.0,
-                       lookahead: int=0, min_size: int=0) -> Streaks:
+    def detect_streaks(self, peaks: List[Peaks], xtol: float, vmin: float, min_size: int,
+                       lookahead: int=0, nfa: int=0) -> Streaks:
         """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
         extended with a connectivity structure.
 
@@ -82,18 +81,15 @@ class PatternsStreakFinder(DataContainer):
                 streak is no more than ``xtol``.
             vmin : Value threshold. A new linelet is added to a streak if it's value at the center
                 of mass is above ``vmin``.
-            log_eps : Detection threshold. A streak is added to the final list if it's number of
-                false alarms (NFA) is above ``log_eps``.
-            max_iter : Maximum number of iterations of the streak growing stage.
+            min_size : Minimum number of linelets required in a detected streak.
             lookahead : Number of linelets considered at the ends of a streak to be added to the
                 streak.
-            min_size : Minimum number of linelets required in a detected streak.
-            
+
         Returns:
             A list of detected streaks.
         """
-        streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, log_eps,
-                                 lookahead, min_size, num_threads=self.num_threads)
+        streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, min_size,
+                                 lookahead, nfa, num_threads=self.num_threads)
         x0, y0, x1, y1 = np.concatenate(streaks).T
         idxs = np.concatenate([np.full((len(val),), idx) for idx, val in enumerate(streaks)])
 

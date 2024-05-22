@@ -67,7 +67,7 @@ void test_tree(size_t npts, F range)
         std::cout << "{";
         std::copy(found->point().begin(), found->point().end(), std::experimental::make_ostream_joiner(std::cout, ", "));
         std::cout << "} found\n";
-    
+
         auto removed = tree.erase(found);
         std::cout << "erase returned {";
         std::copy(removed->point().begin(), removed->point().end(), std::experimental::make_ostream_joiner(std::cout, ", "));

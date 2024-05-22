@@ -29,7 +29,7 @@ auto rmat_to_euler(const std::array<T, 9> & r)
     }
     if (alpha < T()) alpha += 2 * M_PI;
     if (gamma < T()) gamma += 2 * M_PI;
-    
+
     return std::make_tuple(alpha, beta, gamma);
 }
 
@@ -142,9 +142,9 @@ auto euler_to_rmat_vjp(const std::array<T, 9> & ct, const std::array<T, 3> & a)
     std::array<T, 3> s {std::sin(a[0]), std::sin(a[1]), std::sin(a[2])};
     return std::make_tuple(-s[0] * ( ct[0] * c[2]        + ct[1] * s[2] * c[1] - ct[3] * s[2]        + ct[4] * c[2] * c[1] - ct[7] * s[1]) +
                             c[0] * (-ct[0] * s[2] * c[1] + ct[1] * c[2]        - ct[3] * c[2] * c[1] - ct[4] * s[2]        + ct[6] * s[1]),
-                           -s[1] * (-ct[0] * s[0] * s[2] + ct[1] * c[0] * s[2] - ct[3] * s[0] * c[2] + ct[4] * c[0] * c[2] + ct[8]       ) + 
+                           -s[1] * (-ct[0] * s[0] * s[2] + ct[1] * c[0] * s[2] - ct[3] * s[0] * c[2] + ct[4] * c[0] * c[2] + ct[8]       ) +
                             c[1] * ( ct[2] * s[2]        + ct[5] * c[2]        + ct[6] * s[0]        - ct[7] * c[0]                      ),
-                           -s[2] * ( ct[0] * c[0]        + ct[1] * s[0]        - ct[3] * s[0] * c[1] + ct[4] * c[0] * c[1] + ct[5] * s[1]) + 
+                           -s[2] * ( ct[0] * c[0]        + ct[1] * s[0]        - ct[3] * s[0] * c[1] + ct[4] * c[0] * c[1] + ct[5] * s[1]) +
                             c[2] * (-ct[0] * s[0] * c[1] + ct[1] * c[0] * c[1] + ct[2] * s[1]        - ct[3] * c[0]        - ct[4] * s[0]));
 }
 
@@ -326,7 +326,7 @@ auto tilts_to_rmat(const std::array<T, 3> & ang)
 {
     std::array<T, 4> v {std::cos(ang[0] / 2),
                         -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::cos(ang[2]),
-                        -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::sin(ang[2]), 
+                        -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::sin(ang[2]),
                         -std::sin(ang[0] / 2) * std::cos(ang[1])};
 
     return std::make_tuple(v[0] * v[0] + v[1] * v[1] - v[2] * v[2] - v[3] * v[3], 2 * (v[1] * v[2] + v[0] * v[3]), 2 * (v[1] * v[3] - v[0] * v[2]),
@@ -341,34 +341,34 @@ auto tilts_to_rmat_vjp(const std::array<T, 9> & ct, const std::array<T, 3> & ang
     std::array<T, 3> s {std::sin(ang[0] / 2), std::sin(ang[1]), std::sin(ang[2])};
     std::array<T, 4> v {std::cos(ang[0] / 2),
                         -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::cos(ang[2]),
-                        -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::sin(ang[2]), 
+                        -std::sin(ang[0] / 2) * std::sin(ang[1]) * std::sin(ang[2]),
                         -std::sin(ang[0] / 2) * std::cos(ang[1])};
 
     return std::make_tuple(ct[0] * 2 * v[0] * (-s[1] * s[1] * s[2] * s[2] + s[1] * s[1] - 1) * s[0] +
                            ct[1] * (-2 * v[0] * v[1] * s[1] * s[2] - 2 * v[3] * s[0] - c[1]) +
                            ct[2] * (2 * s[0] * c[0] * c[1] * c[2] + s[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] +
                            ct[3] * (-2 * v[0] * v[1] * s[1] * s[2] + 2 * v[3] * s[0] + c[1]) +
-                           ct[4] * 2 * v[0] * (s[1] * s[1] * s[2] * s[2] - 1) * s[0] + 
-                           ct[5] * (2 * s[0] * c[0] * s[2] * c[1] - c[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] + 
-                           ct[6] * (2 * s[0] * c[0] * c[1] * c[2] - s[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] + 
-                           ct[7] * (2 * s[0] * c[0] * s[2] * c[1] + c[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] + 
+                           ct[4] * 2 * v[0] * (s[1] * s[1] * s[2] * s[2] - 1) * s[0] +
+                           ct[5] * (2 * s[0] * c[0] * s[2] * c[1] - c[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] +
+                           ct[6] * (2 * s[0] * c[0] * c[1] * c[2] - s[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] +
+                           ct[7] * (2 * s[0] * c[0] * s[2] * c[1] + c[2] * (c[0] * c[0] - s[0] * s[0])) * s[1] +
                            ct[8] * v[0] * (c[1] * c[1] - s[1] * s[1] - 1) * s[0],
                            ct[0] * 4 * v[1] * v[3] * c[2] +
                            ct[1] * 2 * (v[0] - 2 * v[3] * s[2] * c[2]) * s[0] * s[1] +
                            ct[2] * 2 * (v[0] * s[2] * c[1] + 2 * v[1] * s[1] + s[0] * c[2]) * s[0] +
                            ct[3] * 2 * (-v[0] - 2 * v[3] * s[2] * c[2]) * s[0] * s[1] +
-                           ct[4] * 4 * v[2] * v[3] * s[2] + 
-                           ct[5] * 2 * (-v[0] * c[1] * c[2] + 2 * v[2] * s[1] + s[0] * s[2]) * s[0] + 
-                           ct[6] * 2 * (-v[0] * s[2] * c[1] + 2 * v[1] * s[1] + s[0] * c[2]) * s[0] + 
-                           ct[7] * 2 * (v[0] * c[1] * c[2] + 2 * v[2] * s[1] + s[0] * s[2]) * s[0] + 
+                           ct[4] * 4 * v[2] * v[3] * s[2] +
+                           ct[5] * 2 * (-v[0] * c[1] * c[2] + 2 * v[2] * s[1] + s[0] * s[2]) * s[0] +
+                           ct[6] * 2 * (-v[0] * s[2] * c[1] + 2 * v[1] * s[1] + s[0] * c[2]) * s[0] +
+                           ct[7] * 2 * (v[0] * c[1] * c[2] + 2 * v[2] * s[1] + s[0] * s[2]) * s[0] +
                            ct[8] * 4 * v[3] * s[0] * s[1],
                            ct[0] * (-4 * v[1] * v[2]) +
                            ct[1] * 2 * s[0] * s[0] * s[1] * s[1] * (c[2] * c[2] - s[2] * s[2]) +
                            ct[2] * 2 * (v[0] * c[2] + v[3] * s[2]) * s[0] * s[1] +
                            ct[3] * 2 * s[0] * s[0] * s[1] * s[1] * (c[2] * c[2] - s[2] * s[2]) +
-                           ct[4] * 4 * v[1] * v[2] + 
+                           ct[4] * 4 * v[1] * v[2] +
                            ct[5] * 2 * (v[0] * s[2] - v[3] * c[2]) * s[0] * s[1] +
-                           ct[6] * 2 * (-v[0] * c[2] + v[3] * s[2]) * s[0] * s[1] + 
+                           ct[6] * 2 * (-v[0] * c[2] + v[3] * s[2]) * s[0] * s[1] +
                            ct[7] * 2 * (-v[0] * s[2] - v[3] * c[2]) * s[0] * s[1]);
 }
 
@@ -464,21 +464,21 @@ auto det2k_vjp(const std::array<T, 3> & ct, std::tuple<T &, T &, T &> ct_src, T 
     auto d = amplitude(v);
     auto divisor = d * d * d;
 
-    std::get<0>(ct_src) += ct[0] * (-v[2] * v[2] - v[1] * v[1]) / divisor + 
-                           ct[1] * v[0] * v[1] / divisor + 
+    std::get<0>(ct_src) += ct[0] * (-v[2] * v[2] - v[1] * v[1]) / divisor +
+                           ct[1] * v[0] * v[1] / divisor +
                            ct[2] * v[2] * v[0] / divisor;
-    std::get<1>(ct_src) += ct[0] * v[0] * v[1] / divisor + 
-                           ct[1] * (-v[2] * v[2] - v[0] * v[0]) / divisor + 
+    std::get<1>(ct_src) += ct[0] * v[0] * v[1] / divisor +
+                           ct[1] * (-v[2] * v[2] - v[0] * v[0]) / divisor +
                            ct[2] * v[2] * v[1] / divisor;
-    std::get<2>(ct_src) += ct[0] * v[2] * v[0] / divisor + 
-                           ct[1] * v[2] * v[1] / divisor + 
+    std::get<2>(ct_src) += ct[0] * v[2] * v[0] / divisor +
+                           ct[1] * v[2] * v[1] / divisor +
                            ct[2] * (-v[0] * v[0] - v[1] * v[1]) / divisor;
 
-    return std::make_tuple(-ct[0] * (-v[2] * v[2] - v[1] * v[1]) / divisor + 
-                           -ct[1] * v[0] * v[1] / divisor + 
+    return std::make_tuple(-ct[0] * (-v[2] * v[2] - v[1] * v[1]) / divisor +
+                           -ct[1] * v[0] * v[1] / divisor +
                            -ct[2] * v[2] * v[0] / divisor,
-                           -ct[0] * v[0] * v[1] / divisor + 
-                           -ct[1] * (-v[2] * v[2] - v[0] * v[0]) / divisor + 
+                           -ct[0] * v[0] * v[1] / divisor +
+                           -ct[1] * (-v[2] * v[2] - v[0] * v[0]) / divisor +
                            -ct[2] * v[2] * v[1] / divisor);
 }
 
@@ -503,7 +503,7 @@ py::array_t<F> det_to_k(py_array_t<F> x, py_array_t<F> y, py_array_t<F> src, std
         std::copy(xbuf.shape.begin(), xbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
         std::copy(ybuf.shape.begin(), ybuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
         std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss3, ", "));
-        throw std::invalid_argument("x, y, and idxs have incompatible shapes: {" + oss1.str() + 
+        throw std::invalid_argument("x, y, and idxs have incompatible shapes: {" + oss1.str() +
                                     "}, {" + oss2.str() + "}, and {" + oss3.str() + "}");
     }
 
@@ -560,7 +560,7 @@ auto det_to_k_vjp(py_array_t<F> cotangents, py_array_t<F> x, py_array_t<F> y, py
         std::copy(xbuf.shape.begin(), xbuf.shape.end(), std::experimental::make_ostream_joiner(oss1, ", "));
         std::copy(ybuf.shape.begin(), ybuf.shape.end(), std::experimental::make_ostream_joiner(oss2, ", "));
         std::copy(ibuf.shape.begin(), ibuf.shape.end(), std::experimental::make_ostream_joiner(oss3, ", "));
-        throw std::invalid_argument("x, y, and idxs have incompatible shapes: {" + oss1.str() + 
+        throw std::invalid_argument("x, y, and idxs have incompatible shapes: {" + oss1.str() +
                                     "}, {" + oss2.str() + "}, and {" + oss3.str() + "}");
     }
 
@@ -1039,7 +1039,7 @@ auto matmul_vjp(py_array_t<F> cotangents, py_array_t<F> vecs, py_array_t<F> mats
 
     auto ct_v = py::array_t<F>(vbuf.shape);
     auto ct_m = py::array_t<F>(mbuf.shape);
-    
+
     fill_array(ct_v, F());
     fill_array(ct_m, F());
 
@@ -1087,7 +1087,7 @@ auto matmul_vjp(py_array_t<F> cotangents, py_array_t<F> vecs, py_array_t<F> mats
 
 /*----------------------------------------------------------------------
     Rectangular bounds consist of four lines in (x, y) plane defined as:
-    
+
     r = s + t * e
 
     Solving an equation for the plane of source points intersecting with
@@ -1180,24 +1180,24 @@ auto find_intersection_vjp(const std::array<F, 3> & ct, std::tuple<F &, F &, F &
         ct_abc[2] = -ct_t / (2 * delta);
     }
 
-    std::get<0>(ct_e) += ct_abc[0] * (-2 * q[0] * f2 - 2 * q[2] * q[2] * edge.tau[0]) + 
+    std::get<0>(ct_e) += ct_abc[0] * (-2 * q[0] * f2 - 2 * q[2] * q[2] * edge.tau[0]) +
                          ct_abc[1] * (-q[0] * f2 - q[0] * f1 + q[2] * q[2] * (2 * edge.pt0[0] - edge.pt1[0])) +
                          ct_abc[2] * (-2 * q[0] * f1 + 2 * q[2] * q[2] * edge.pt0[0]);
     std::get<1>(ct_e) += ct_abc[0] * (-2 * q[1] * f2 - 2 * q[2] * q[2] * edge.tau[1]) +
                          ct_abc[1] * (-q[1] * f2 - q[1] * f1 + q[2] * q[2] * (2 * edge.pt0[1] - edge.pt1[1])) +
                          ct_abc[2] * (-2 * q[1] * f1 + 2 * q[2] * q[2] * edge.pt0[1]);
-    std::get<2>(ct_e) += ct_abc[0] * (2 * q[0] * f2 + 2 * q[2] * q[2] * edge.tau[0]) + 
+    std::get<2>(ct_e) += ct_abc[0] * (2 * q[0] * f2 + 2 * q[2] * q[2] * edge.tau[0]) +
                          ct_abc[1] * (q[0] * f1 - q[2] * q[2] * edge.pt0[0]);
-    std::get<3>(ct_e) += ct_abc[0] * (2 * q[1] * f2 + 2 * q[2] * q[2] * edge.tau[1]) + 
+    std::get<3>(ct_e) += ct_abc[0] * (2 * q[1] * f2 + 2 * q[2] * q[2] * edge.tau[1]) +
                          ct_abc[1] * (q[1] * f1 - q[2] * q[2] * edge.pt0[1]);
 
     std::get<0>(ct_q) += ct_abc[0] * 2 * edge.tau[0] * f2 +
-                         ct_abc[1] * ((-q[0] - edge.pt0[0]) * f2 + edge.tau[0] * f1) + 
+                         ct_abc[1] * ((-q[0] - edge.pt0[0]) * f2 + edge.tau[0] * f1) +
                          ct_abc[2] * 2 * (-q[0] - edge.pt0[0]) * f1;
-    std::get<1>(ct_q) += ct_abc[0] * 2 * edge.tau[1] * f2 + 
+    std::get<1>(ct_q) += ct_abc[0] * 2 * edge.tau[1] * f2 +
                          ct_abc[1] * ((-q[1] - edge.pt0[1]) * f2 + edge.tau[1] * f1) +
                          ct_abc[2] * 2 * (-q[1] - edge.pt0[1]) * f1;
-    std::get<2>(ct_q) += ct_abc[0] * 2 * q[2] * magnitude(edge.tau) + 
+    std::get<2>(ct_q) += ct_abc[0] * 2 * q[2] * magnitude(edge.tau) +
                          ct_abc[1] * (-q[2] * f2 - 2 * q[2] * dot(edge.pt0, edge.tau)) +
                          ct_abc[2] * (-2 * q[2] * (1 - magnitude(edge.pt0)) - 2 * q[2] * f1);
 }
@@ -1423,7 +1423,7 @@ PYBIND11_MODULE(geometry, m)
             matmul_indices(vsize, msize, vidxs, midxs);
             return std::make_tuple(vidxs, midxs);
         }, py::arg("vsize"), py::arg("msize"), py::arg("vidxs") = nullptr, py::arg("midxs") = nullptr);
-    m.def("matmul_indices", 
+    m.def("matmul_indices",
         [](size_t vsize, size_t msize, std::optional<py_array_t<long>> vidxs, std::optional<py_array_t<long>> midxs)
         {
             matmul_indices(vsize, msize, vidxs, midxs);

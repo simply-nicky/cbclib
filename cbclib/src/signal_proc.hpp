@@ -12,8 +12,8 @@ namespace cbclib {
    coordinates (float) follow the convention:   [x, y, z, ...]
  */
 
-template <typename T>
-T bilinear(const array<T> & arr, const std::vector<array<T>> & grid, const std::vector<T> & coord)
+template <typename T, typename U>
+T bilinear(const array<T> & arr, const std::vector<array<U>> & grid, const std::vector<U> & coord)
 {
     std::vector<size_t> lbound, ubound;
     std::vector<T> dx;
@@ -64,7 +64,15 @@ T bilinear(const array<T> & arr, const std::vector<array<T>> & grid, const std::
 
         }
 
-        out += factor * arr[arr.ravel_index(point.begin(), point.end())];
+        if (arr.is_inbound(point)) out += factor * arr.at(point);
+        else
+        {
+            std::ostringstream oss;
+            oss << "Invalid index: {";
+            std::copy(point.begin(), point.end(), std::experimental::make_ostream_joiner(std::cout, ", "));
+            oss << "}";
+            throw std::runtime_error(oss.str());
+        }
     }
 
     return out;

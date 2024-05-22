@@ -14,13 +14,13 @@ footprint init_footprint(int ndim, size_t item_size, size_t *fsize, unsigned cha
     for (int i = 0; i < (int)farr->size; i++) if (fmask[i]) fpt->npts++;
 
     if (fpt->npts == 0) {ERROR("new_footprint: zerro number of points in a footprint."); return NULL;}
-    
+
     fpt->offsets = MALLOC(int, fpt->npts * fpt->ndim);
     fpt->coordinates = MALLOC(int, fpt->npts * fpt->ndim);
 
     fpt->item_size = item_size;
     fpt->data = malloc(fpt->npts * fpt->item_size);
-    
+
     if (!fpt || !fpt->offsets || !fpt->coordinates || !fpt->data)
     {ERROR("new_footprint: not enough memory."); return NULL;}
 
@@ -123,7 +123,7 @@ int median(void *out, void *inp, unsigned char *mask, int ndim, const size_t *di
                 }
             }
 
-            if (len) 
+            if (len)
             {
                 key = wirthmedian(buffer, len, iline->item_size, compar);
                 memcpy(out + i * iline->item_size, key, iline->item_size);
@@ -360,7 +360,7 @@ int robust_fit(float *out, float *W, void *y, int nf, int ndim, const size_t *yd
         {
             UPDATE_LINE(yline, i);
 
-            for (k = 0; k < nf; k++) 
+            for (k = 0; k < nf; k++)
             {
                 Ysum[k] = Wsum[k] = 0.0f;
                 for (j = 0; j < (int)yline->npts; j++)

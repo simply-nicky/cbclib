@@ -485,7 +485,7 @@ int unmerge_sgn(float *I_hat, float *x, unsigned *ij, size_t *dims, unsigned *I0
     {
         int i, j;
         float ratio;
-        
+
         float *img = calloc(dims[0] * dims[1], sizeof(float));
         float *intercept = calloc(dims[0] * dims[1], sizeof(float));
 

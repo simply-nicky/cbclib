@@ -52,14 +52,11 @@ def kr_grid(y: np.ndarray, x: np.ndarray, grid: Tuple[np.ndarray, ...], sigma: f
     Args:
         y : The data to fit.
         x : Coordinates array.
-        step : Grid sampling interval.
+        grid : A tuple of grid coordinates along each dimension (`x`, `y`, `z`, ...).
         sigma : Kernel bandwidth.
         w : A set of weights, unitary weights are assumed if it's not provided.
         return_roi : Return region of interest of the sampling grid if True.
         num_threads : Number of threads used in the calculations.
-
-    Raises:
-        ValueError : If ``step`` is negative.
 
     Returns:
         The regression result and the region of interest if ``return_roi`` is True.

@@ -40,8 +40,7 @@ template <typename T, typename Pt, typename I = std::remove_cvref_t<Pt>::value_t
 >
 pixel_t<T> make_pixel(Pt && point, const array<T> & data)
 {
-    auto index = data.ravel_index(point.coordinate());
-    return std::make_tuple(std::forward<Pt>(point), data[index]);
+    return std::make_tuple(std::forward<Pt>(point), data.at(point.coordinate()));
 }
 
 // Image moments class
@@ -271,7 +270,7 @@ struct Structure : public PointsContainer<std::set<point_t>>
 
     std::string info() const
     {
-        return "<Structure, radius = " + std::to_string(radius) + ", rank = " + std::to_string(rank) + 
+        return "<Structure, radius = " + std::to_string(radius) + ", rank = " + std::to_string(rank) +
                          ", points = <Points, size = " + std::to_string(points.size()) + ">>";
     }
 };
@@ -315,7 +314,7 @@ struct PointsSet : public PointsContainer<std::set<point_t>>
     }
 
     PointsSet(point_type seed, const array<bool> & mask, const Structure & srt) :
-        PointsSet(seed, [&mask](point_type pt){return mask.is_inbound(pt.coordinate()) && mask[mask.ravel_index(pt.coordinate())];}, srt) {}
+        PointsSet(seed, [&mask](point_type pt){return mask.is_inbound(pt.coordinate()) && mask.at(pt.coordinate());}, srt) {}
 
     PointsSet filter(array<bool> & mask, const Structure & srt, size_t npts) const
     {
@@ -323,11 +322,11 @@ struct PointsSet : public PointsContainer<std::set<point_t>>
 
         for (const auto & point : points)
         {
-            if (mask.is_inbound(point.coordinate()) && mask[mask.ravel_index(point.coordinate())])
+            if (mask.is_inbound(point.coordinate()) && mask.at(point.coordinate()))
             {
                 PointsSet support {point, mask, srt};
 
-                for (auto pt : *support) mask[mask.ravel_index(pt.coordinate())] = false;
+                for (auto pt : *support) mask.at(pt.coordinate()) = false;
 
                 if (support->size() >= npts) result->merge(std::move(*support));
             }
@@ -341,7 +340,7 @@ struct PointsSet : public PointsContainer<std::set<point_t>>
     {
         for (auto pt : points)
         {
-            if (m.is_inbound(pt.coordinate())) m[m.ravel_index(pt.coordinate())] = true;
+            if (m.is_inbound(pt.coordinate())) m.at(pt.coordinate()) = true;
         }
         return std::forward<Mask>(m);
     }
@@ -429,7 +428,7 @@ struct Regions
     std::vector<PointsSet> regions;
 
     template <typename Shape, typename Rgn, typename I = std::remove_cvref_t<Shape>::value_type, typename = std::enable_if_t<
-        std::is_same_v<std::array<I, 2>, std::remove_cvref_t<Shape>> && 
+        std::is_same_v<std::array<I, 2>, std::remove_cvref_t<Shape>> &&
         std::is_same_v<std::vector<PointsSet>, std::remove_cvref_t<Rgn>> &&
         std::is_integral_v<I>
     >>

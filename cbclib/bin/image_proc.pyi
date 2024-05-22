@@ -297,12 +297,12 @@ def maximum_filter(inp: np.ndarray, size: Optional[Union[int, Sequence[int]]],
     """
     ...
 
-def robust_mean(inp: np.ndarray, axis: Union[int, Sequence[int]]]=0, r0: float=0.0,
+def robust_mean(inp: np.ndarray, axis: Union[int, Sequence[int]]=0, r0: float=0.0,
                 r1: float=0.5, n_iter: int=12, lm: float=9.0, num_threads: int=1) -> np.ndarray:
     """Calculate a mean along the `axis` by robustly fitting a Gaussian to input vector [RFG]_.
     The algorithm performs `n_iter` times the fast least kth order statistics (FLkOS [FLKOS]_)
     algorithm to fit a gaussian to data.
-    
+
     Args:
         inp : Input array. Must be one of the following types: np.float64, np.float32, np.int32,
             np.uint32, np.uint64.
@@ -529,7 +529,7 @@ def refine_pattern(inp: np.ndarray, lines: Dict[int, np.ndarray], dilation: floa
             * `tophat` : Top-hat (rectangular) function profile.
             * `linear` : Linear (triangular) function profile.
             * `quad` : Quadratic (parabola) function profile.
-            * `gauss` : Gaussian funtion profile.            
+            * `gauss` : Gaussian funtion profile.
 
         num_threads : Number of threads used in the calculations.
 

@@ -17,12 +17,12 @@ def euler_angles(np.ndarray rmats not None):
     if rmats.ndim == 2:
         new_dims = <np.npy_intp *>malloc(3 * sizeof(np.npy_intp))
         new_dims[0] = 1; new_dims[1] = rmats.shape[0]; new_dims[2] = rmats.shape[1]
-   
+
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 3
 
         rmats = np.PyArray_Newshape(rmats, new_shape, np.NPY_CORDER)
-        free(new_dims); free(new_shape)    
+        free(new_dims); free(new_shape)
 
     if rmats.ndim != 3 or (rmats.shape[1] != 3 or rmats.shape[2] != 3):
         raise ValueError('rmats has incompatible shape')
@@ -39,7 +39,7 @@ def euler_angles(np.ndarray rmats not None):
         fail = compute_euler_angles(e_ptr, rm_ptr, n_mats)
     if fail:
         raise RuntimeError('C backend exited with error.')
-    
+
     if rmats.shape[0] == 1:
         return angles[0]
     return angles
@@ -55,7 +55,7 @@ def euler_matrix(np.ndarray angles not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         angles = np.PyArray_Newshape(angles, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -87,12 +87,12 @@ def tilt_angles(np.ndarray rmats not None):
     if rmats.ndim == 2:
         new_dims = <np.npy_intp *>malloc(3 * sizeof(np.npy_intp))
         new_dims[0] = 1; new_dims[1] = rmats.shape[0]; new_dims[2] = rmats.shape[1]
-   
+
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 3
 
         rmats = np.PyArray_Newshape(rmats, new_shape, np.NPY_CORDER)
-        free(new_dims); free(new_shape)    
+        free(new_dims); free(new_shape)
 
     if rmats.ndim != 3 or (rmats.shape[1] != 3 or rmats.shape[2] != 3):
         raise ValueError('rmats has incompatible shape')
@@ -109,7 +109,7 @@ def tilt_angles(np.ndarray rmats not None):
         fail = compute_tilt_angles(e_ptr, rm_ptr, n_mats)
     if fail:
         raise RuntimeError('C backend exited with error.')
-    
+
     if rmats.shape[0] == 1:
         return angles[0]
     return angles
@@ -125,7 +125,7 @@ def tilt_matrix(np.ndarray angles not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         angles = np.PyArray_Newshape(angles, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -163,7 +163,7 @@ def det_to_k(np.ndarray x not None, np.ndarray y not None, np.ndarray src not No
         raise ValueError('idxs is not provided')
     if idxs[idxs.size - 1] + 1 > _ssize:
         raise ValueError('src is incompatible with idxs')
-    
+
     if <np.npy_intp>_ksize != y.size or <np.npy_intp>_ksize != idxs.size:
         raise ValueError('x, y, and idxs have incompatible shapes')
 
@@ -292,7 +292,7 @@ def rotate(np.ndarray vecs not None, np.ndarray rmats not None, np.ndarray idxs=
         raise ValueError('rmats is incompatible with idxs')
 
     if _vsize != idxs.size:
-        raise ValueError('vecs and idxs have incompatible shapes')  
+        raise ValueError('vecs and idxs have incompatible shapes')
 
     vecs = check_array(vecs, np.NPY_FLOAT32)
     idxs = check_array(idxs, np.NPY_UINT32)
@@ -324,7 +324,7 @@ def find_rotations(np.ndarray a not None, np.ndarray b not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         a = np.PyArray_Newshape(a, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -339,7 +339,7 @@ def find_rotations(np.ndarray a not None, np.ndarray b not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         b = np.PyArray_Newshape(b, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -375,7 +375,7 @@ def cartesian_to_spherical(np.ndarray vecs not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         vecs = np.PyArray_Newshape(vecs, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -393,7 +393,7 @@ def cartesian_to_spherical(np.ndarray vecs not None):
             _out[i, 0] = sqrt(_vecs[i, 0]**2 + _vecs[i, 1]**2 + _vecs[i, 2]**2)
             _out[i, 1] = acos(_vecs[i, 2] / _out[i, 0])
             _out[i, 2] = atan2(_vecs[i, 1], _vecs[i, 0])
-    
+
     if n_vecs == 1:
         return out[0]
     return out
@@ -409,7 +409,7 @@ def spherical_to_cartesian(np.ndarray vecs not None):
 
         new_shape = <np.PyArray_Dims *>malloc(sizeof(np.PyArray_Dims))
         new_shape[0].ptr = new_dims; new_shape[0].len = 2
-        
+
         vecs = np.PyArray_Newshape(vecs, new_shape, np.NPY_CORDER)
         free(new_dims); free(new_shape)
 
@@ -427,7 +427,7 @@ def spherical_to_cartesian(np.ndarray vecs not None):
             _out[i, 0] = _vecs[i, 0] * sin(_vecs[i, 1]) * cos(_vecs[i, 2])
             _out[i, 1] = _vecs[i, 0] * sin(_vecs[i, 1]) * sin(_vecs[i, 2])
             _out[i, 2] = _vecs[i, 0] * cos(_vecs[i, 1])
-    
+
     if n_vecs == 1:
         return out[0]
     return out
@@ -471,11 +471,11 @@ def gaussian_grid(np.float64_t[:, :, ::1] p_arr, np.float64_t[::1] x_arr, np.flo
     for i in range(3):
         vec_abs = basis[i, 0]**2 + basis[i, 1]**2 + basis[i, 2]**2
         if vec_abs:
-            n_min[i] = <int>(((x_arr[0] if basis[i, 0] > 0.0 else x_arr[Nx - 1]) * basis[i, 0] + 
-                              (y_arr[0] if basis[i, 1] > 0.0 else y_arr[Ny - 1]) * basis[i, 1] + 
+            n_min[i] = <int>(((x_arr[0] if basis[i, 0] > 0.0 else x_arr[Nx - 1]) * basis[i, 0] +
+                              (y_arr[0] if basis[i, 1] > 0.0 else y_arr[Ny - 1]) * basis[i, 1] +
                               (z_arr[0] if basis[i, 2] > 0.0 else z_arr[Nz - 1]) * basis[i, 2]) / vec_abs)
-            n_max[i] = <int>(((x_arr[0] if basis[i, 0] <= 0.0 else x_arr[Nx - 1]) * basis[i, 0] + 
-                              (y_arr[0] if basis[i, 1] <= 0.0 else y_arr[Ny - 1]) * basis[i, 1] + 
+            n_max[i] = <int>(((x_arr[0] if basis[i, 0] <= 0.0 else x_arr[Nx - 1]) * basis[i, 0] +
+                              (y_arr[0] if basis[i, 1] <= 0.0 else y_arr[Ny - 1]) * basis[i, 1] +
                               (z_arr[0] if basis[i, 2] <= 0.0 else z_arr[Nz - 1]) * basis[i, 2]) / vec_abs)
         else:
             n_min[i] = 0
@@ -496,7 +496,7 @@ def gaussian_grid(np.float64_t[:, :, ::1] p_arr, np.float64_t[::1] x_arr, np.flo
                 qs[3 * hkl_max + 2] = na * basis[0, 2] + nb * basis[1, 2] + nc * basis[2, 2] + center[2]
                 if (qs[3 * hkl_max]**2 + qs[3 * hkl_max + 1]**2 + qs[3 * hkl_max + 2]**2) < cutoff**2:
                     hkl[3 * hkl_max] = na; hkl[3 * hkl_max + 1] = nb; hkl[3 * hkl_max + 2] = nc; hkl_max += 1
-                
+
     cdef int nx, ny, nz, t
     cdef double q, x_min, x_max, y_min, y_max, z_min, z_max, entropy = 0.0
     cdef double grad_xx = 0.0, grad_xy = 0.0, grad_xz = 0.0
@@ -589,7 +589,7 @@ cdef int find_intersection(double *t_int, double *q, double *e, double *s, doubl
             return 1
 
         return 0
-    
+
     return 0
 
 def calc_source_lines(np.ndarray basis not None, np.ndarray hkl not None, np.ndarray kin_min not None,
@@ -650,7 +650,7 @@ def calc_source_lines(np.ndarray basis not None, np.ndarray hkl not None, np.nda
 
                 if j == 2:
                     _mask[n] = 1
-        
+
         free(q)
         free(q_sph)
 

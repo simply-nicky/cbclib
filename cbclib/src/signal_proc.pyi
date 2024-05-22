@@ -1,8 +1,7 @@
-from typing import Optional, Tuple, Union, overload
+from typing import List, Optional, Sequence, Tuple, Union, overload
 from ..annotations import NDIntArray, NDRealArray, IntSequence
 
-def unique_indices(array: NDIntArray) -> Tuple[NDIntArray, NDIntArray,
-                                                       NDIntArray]:
+def unique_indices(array: NDIntArray) -> Tuple[NDIntArray, NDIntArray, NDIntArray]:
     """Returns the sorted unique elements of a sorted array of integers. There are three optional
     outputs in addition to the unique elements:
 
@@ -21,8 +20,8 @@ def unique_indices(array: NDIntArray) -> Tuple[NDIntArray, NDIntArray,
     """
     ...
 
-def binterpolate(inp: NDRealArray, grid: Tuple[NDRealArray, ...], coords: NDRealArray,
-                 num_threads: int=1) -> NDRealArray:
+def binterpolate(inp: NDRealArray, grid: Sequence[Union[NDRealArray, NDIntArray]],
+                 coords: Union[NDRealArray, NDIntArray], num_threads: int=1) -> NDRealArray:
     """Perform bilinear multidimensional interpolation on regular grids. The integer grid starting
     from ``(0, 0, ...)`` to ``(inp.shape[0] - 1, inp.shape[1] - 1, ...)`` is implied.
 
@@ -74,6 +73,25 @@ def kr_predict(y: NDRealArray, x: NDRealArray, x_hat: NDRealArray, sigma: float,
         .. [KerReg] E. A. Nadaraya, “On estimating regression,” Theory Probab. & Its Appl. 9,
             141-142 (1964).
         .. [Krn]    Kernel (statictics), https://en.wikipedia.org/wiki/Kernel_(statistics).
+    """
+    ...
+
+def kr_grid(y: NDRealArray, x: NDRealArray, grid: Sequence[NDRealArray], sigma: float,
+            kernel: str='gaussian', w: Optional[NDRealArray]=None, num_threads: int=1
+            ) -> Tuple[NDRealArray, List[float]]:
+    """Perform the multi-dimensional Nadaraya-Watson kernel regression [KerReg]_ over a grid of
+    points.
+
+    Args:
+        y : The data to fit.
+        x : Coordinates array.
+        grid : A tuple of grid coordinates along each dimension (`x`, `y`, `z`, ...).
+        sigma : Kernel bandwidth.
+        w : A set of weights, unitary weights are assumed if it's not provided.
+        num_threads : Number of threads used in the calculations.
+
+    Returns:
+        The regression result and the region of interest.
     """
     ...
 

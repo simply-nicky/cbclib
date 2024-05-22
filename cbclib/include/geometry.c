@@ -228,7 +228,7 @@ int compute_rotations(float *rot_mats, float *as, float *bs, size_t n_mats)
 {
     /* check parameters */
     if (!as || !bs || !rot_mats) {ERROR("compute_rotations: one of the arguments is NULL."); return -1;}
-    
+
     if (n_mats == 0) return 0;
 
     size_t rm_dims[2] = {n_mats, 9};
@@ -651,7 +651,7 @@ int find_kins_vjp(float *bout, float *kout, float *vec, size_t N, int *hkl, unsi
             q_rho = q[2] * sqrtf(1.0f / q_sq - 0.25) + 0.5f * sqrtf(SQ(q[0]) + SQ(q[1]));
             if ((q_sq < 4.0) && (fabsf(q_rho) < NA))
             {
-                i = j = 0; 
+                i = j = 0;
                 for (k = 0; k < 9; k++) b_ctg[k] = 0.0f;
                 for (k = 0; k < 4; k++) k_ctg[k] = 0.0f;
 

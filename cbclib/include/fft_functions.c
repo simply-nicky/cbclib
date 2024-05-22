@@ -48,7 +48,7 @@ int rfft_convolve_np(double *out, double *inp, int ndim, const size_t *dims,
     array oarr = new_array(ndim, dims, sizeof(double), (void *)out);
     array iarr = new_array(ndim, dims, sizeof(double), (void *)inp);
     line kline = new_line(ksize, 1, sizeof(double), krn);
-    
+
     int fail = 0;
     size_t flen = good_size(iarr->dims[axis] + ksize - 1);
     size_t repeats = iarr->size / iarr->dims[axis];
@@ -77,7 +77,7 @@ int rfft_convolve_np(double *out, double *inp, int ndim, const size_t *dims,
 
         DEALLOC(iline); DEALLOC(oline);
         destroy_rfft_plan(plan);
-        DEALLOC(inpft); DEALLOC(krnft);    
+        DEALLOC(inpft); DEALLOC(krnft);
     }
 
     free_array(iarr);
@@ -101,7 +101,7 @@ int cfft_convolve_np(double complex *out, double complex *inp, int ndim, const s
     array oarr = new_array(ndim, dims, sizeof(double complex), (void *)out);
     array iarr = new_array(ndim, dims, sizeof(double complex), (void *)inp);
     line kline = new_line(ksize, 1, sizeof(double complex), krn);
-    
+
     int fail = 0;
     size_t flen = good_size(iarr->dims[axis] + ksize - 1);
     size_t repeats = iarr->size / iarr->dims[axis];
@@ -130,7 +130,7 @@ int cfft_convolve_np(double complex *out, double complex *inp, int ndim, const s
 
         DEALLOC(iline); DEALLOC(oline);
         destroy_cfft_plan(plan);
-        DEALLOC(inpft); DEALLOC(krnft);    
+        DEALLOC(inpft); DEALLOC(krnft);
     }
 
     free_array(iarr);
@@ -154,7 +154,7 @@ int rfft_convolve_fftw(double *out, double *inp, int ndim, const size_t *dims,
     array oarr = new_array(ndim, dims, sizeof(double), (void *)out);
     array iarr = new_array(ndim, dims, sizeof(double), (void *)inp);
     line kline = new_line(ksize, 1, sizeof(double), krn);
-    
+
     int fail = 0;
     size_t flen = next_fast_len_fftw(iarr->dims[axis] + ksize - 1);
     size_t repeats = iarr->size / iarr->dims[axis];
@@ -218,7 +218,7 @@ int cfft_convolve_fftw(double complex *out, double complex *inp, int ndim, const
     array oarr = new_array(ndim, dims, sizeof(double complex), (void *)out);
     array iarr = new_array(ndim, dims, sizeof(double complex), (void *)inp);
     line kline = new_line(ksize, 1, sizeof(double complex), krn);
-    
+
     int fail = 0;
     size_t flen = next_fast_len_fftw(iarr->dims[axis] + ksize - 1);
     size_t repeats = iarr->size / iarr->dims[axis];
@@ -297,7 +297,7 @@ int gauss_kernel1d(double *out, double sigma, unsigned order, size_t ksize, int 
                 {
                     idx = j + (order + 1) * i;
                     if ((idx % (order + 2)) == 1) qval += q0[j] * (idx / (order + 2) + 1);
-                    if ((idx % (order + 2)) == (order + 1)) qval -= q0[j] / sigma2; 
+                    if ((idx % (order + 2)) == (order + 1)) qval -= q0[j] / sigma2;
                 }
                 q1[i] = qval;
             }
@@ -426,7 +426,7 @@ int gauss_grad_mag_r(double *out, double *inp, int ndim, const size_t *dims, dou
         for (int n = 0; n < ndim; n++) order[n] = (n == m) ? 1 : 0;
         fail |= gauss_filter_r(tmp, inp, ndim, dims, sigma, order, mode,
                                cval, truncate, threads, fft_convolve);
-        
+
         #pragma omp parallel for num_threads(threads)
         for (int i = 0; i < (int)size; i++) out[i] += tmp[i] * tmp[i];
     }
@@ -461,7 +461,7 @@ int gauss_grad_mag_c(double *out, double complex *inp, int ndim, const size_t *d
         for (int n = 0; n < ndim; n++) order[n] = (n == m) ? 1 : 0;
         fail |= gauss_filter_c(tmp, inp, ndim, dims, sigma, order, mode,
                                cval, truncate, threads, fft_convolve);
-        
+
         #pragma omp parallel for num_threads(threads)
         for (int i = 0; i < (int)size; i++) out[i] += SQ(creal(tmp[i])) + SQ(cimag(tmp[i]));
     }

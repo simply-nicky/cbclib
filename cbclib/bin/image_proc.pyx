@@ -222,7 +222,7 @@ def gaussian_gradient_magnitude(np.ndarray inp not None, object sigma not None, 
                                         cval, truncate, num_threads, rfft_convolve_np)
             else:
                 raise ValueError('{:s} is invalid backend'.format(backend))
-    
+
     if fail:
         raise RuntimeError('C backend exited with error.')
     return out
@@ -738,7 +738,7 @@ def draw_line_table(np.ndarray lines not None, object shape=None, double dilatio
     with nogil:
         fail = draw_line_index(&_idx, &_x, &_y, &_val, &_n_idxs, _dims, _lines, _ldims, <float>dilation, _prof)
     if fail:
-        raise RuntimeError('C backend exited with error.')    
+        raise RuntimeError('C backend exited with error.')
 
     cdef np.ndarray idx = ArrayWrapper.from_ptr(<void *>_idx).to_ndarray(1, [_n_idxs,], np.NPY_UINT32)
     cdef np.ndarray x = ArrayWrapper.from_ptr(<void *>_x).to_ndarray(1, [_n_idxs,], np.NPY_UINT32)
@@ -865,8 +865,8 @@ def ce_criterion(np.ndarray ij not None, np.ndarray p not None, np.ndarray fidxs
 
     cdef unsigned long *_dims = [shape[0], shape[1]]
     cdef unsigned *_ij = <unsigned *>np.PyArray_DATA(ij)
-    cdef float *_p = <float *>np.PyArray_DATA(p)   
-    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs) 
+    cdef float *_p = <float *>np.PyArray_DATA(p)
+    cdef unsigned *_fidxs = <unsigned *>np.PyArray_DATA(fidxs)
 
     cdef int i, N = len(lines)
     cdef np.ndarray arr
