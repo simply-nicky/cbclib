@@ -64,10 +64,6 @@ class TestStreakFinder():
     def xtol(self, request: pytest.FixtureRequest) -> float:
         return request.param
 
-    @pytest.fixture(params=[-7])
-    def log_eps(self, request: pytest.FixtureRequest) -> float:
-        return request.param
-
     @pytest.fixture(params=[5])
     def npts(self, request: pytest.FixtureRequest) -> int:
         return request.param
@@ -97,19 +93,31 @@ class TestStreakFinder():
         radius, rank = request.param
         return Structure(radius, rank)
 
+    @pytest.fixture(params=[3])
+    def min_size(self, request: pytest.FixtureRequest) -> int:
+        return request.param
+
+    @pytest.fixture(params=[1])
+    def lookahead(self, request: pytest.FixtureRequest) -> int:
+        return request.param
+
+    @pytest.fixture(params=[1])
+    def nfa(self, request: pytest.FixtureRequest) -> int:
+        return request.param
+
     @pytest.fixture
-    def finder(self, image: NDRealArray, mask: NDBoolArray, structure: Structure
-               ) -> PatternStreakFinder:
-        return PatternStreakFinder(image, mask, structure)
+    def finder(self, image: NDRealArray, mask: NDBoolArray, structure: Structure,
+               min_size: int, lookahead: int, nfa: int) -> PatternStreakFinder:
+        return PatternStreakFinder(image, mask, structure, min_size, lookahead, nfa)
 
     @pytest.fixture
     def peaks(self, finder: PatternStreakFinder, vmin: float, npts: int) -> Peaks:
         return finder.detect_peaks(vmin, npts)
 
     @pytest.fixture
-    def result(self, finder: PatternStreakFinder, peaks: Peaks, vmin: float, xtol: float,
-               log_eps: float) -> StreakFinderResult:
-        return finder.detect_streaks(peaks, xtol, vmin, log_eps)
+    def result(self, finder: PatternStreakFinder, peaks: Peaks, vmin: float, xtol: float
+               ) -> StreakFinderResult:
+        return finder.detect_streaks(peaks, xtol, vmin)
 
     def get_pixels(self, x: int, y: int, finder: PatternStreakFinder) -> Tuple[NDIntArray, NDIntArray]:
         xs, ys = np.array(finder.structure.x) + x, np.array(finder.structure.y) + y

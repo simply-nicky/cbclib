@@ -723,7 +723,7 @@ class Streaks(DataContainer):
         table = draw_line_table(lines=self.to_lines(width), shape=shape,
                                 idxs=self.idxs, kernel=kernel)
         ids, idxs = np.array(list(table)).T
-        normalised_shape: Tuple[int, int, int] = (np.prod(shape[:-2], dtype=int),) + shape[-2:]
+        normalised_shape = (np.prod(shape[:-2], dtype=int),) + shape[-2:]
         frames, y, x = np.unravel_index(idxs, normalised_shape)
         vals = np.array(list(table.values()))
 

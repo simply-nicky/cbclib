@@ -33,7 +33,7 @@ class PatternStreakFinder:
 class PatternsStreakFinder(DataContainer):
     data        : NDRealArray
     structure   : Structure
-    mask        : NDBoolArray = field(default=np.array([], dtype=bool))
+    mask        : NDBoolArray = field(default_factory=lambda: np.array([], dtype=bool))
     num_threads : int = field(default_factory=cpu_count)
 
     def __post_init__(self):

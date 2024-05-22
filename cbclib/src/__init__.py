@@ -2,7 +2,7 @@ from .fft_functions import (next_fast_len, fftn, fft_convolve, gaussian_kernel, 
                             gaussian_gradient_magnitude, ifftn)
 from .geometry import (euler_angles, euler_matrix, tilt_angles, tilt_matrix, det_to_k,
                        k_to_det, k_to_smp, matmul, source_lines)
-from .image_proc import draw_line_mask, draw_line_image, draw_line_table
+from .image_proc import draw_line, draw_line_mask, draw_line_image, draw_line_table
 from .kd_tree import test_tree
 from .label import PointsSet, Structure, Regions, label
 from .median import median, median_filter, maximum_filter, robust_mean, robust_lsq

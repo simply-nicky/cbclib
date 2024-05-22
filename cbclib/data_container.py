@@ -34,7 +34,7 @@ class DataclassInstance(Protocol):
 D = TypeVar("D", bound="DataContainer")
 
 class DataContainer(DataclassInstance):
-    """Abstract data container class based on :class:`dataclass`. Has :class:`dict` intefrace,
+    """Abstract data container class based on :class:`dataclass`. Has :class:`dict` interface,
     and :func:`DataContainer.replace` to create a new obj with a set of data attributes replaced.
     """
     def __getitem__(self, attr: str) -> Any:
