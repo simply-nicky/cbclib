@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Iterator, List, Optional, Tuple, Union
+from typing import Iterator, List, Optional, Tuple, Union, overload
 from ..annotations import CPPIntSequence, Line, NDRealArray, NDBoolArray
 
 class PointsSet:
@@ -38,12 +38,22 @@ class Structure:
         ...
 
 class Regions:
+    x: List[int]
+    y: List[int]
     shape : List[int]
 
     def __init__(self, shape: CPPIntSequence, regions: List[PointsSet]=[]):
         ...
 
     def __delitem__(self, idxs: Union[int, slice]):
+        ...
+
+    @overload
+    def __getitem__(self, idxs: int) -> PointsSet:
+        ...
+
+    @overload
+    def __getitem__(self, idxs: slice) -> Regions:
         ...
 
     def __getitem__(self, idxs: Union[int, slice]) -> Union[PointsSet, Regions]:
@@ -53,6 +63,14 @@ class Regions:
         ...
 
     def __len__(self) -> int:
+        ...
+
+    @overload
+    def __setitem__(self, idxs: int, value: PointsSet):
+        ...
+
+    @overload
+    def __setitem__(self, idxs: slice, value: Regions):
         ...
 
     def __setitem__(self, idxs: Union[int, slice], value: Union[PointsSet, Regions]):

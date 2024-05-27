@@ -42,7 +42,7 @@ class PatternsStreakFinder(DataContainer):
         if self.data.shape[-2:] != self.mask.shape:
             self.mask = np.ones(self.data.shape[-2:], dtype=bool)
 
-    def __getitem__(self, idxs: Indices) -> PatternsStreakFinder:
+    def get_frames(self, idxs: Indices) -> PatternsStreakFinder:
         return self.replace(data=self.data[idxs])
 
     @property
@@ -88,9 +88,10 @@ class PatternsStreakFinder(DataContainer):
         Returns:
             A list of detected streaks.
         """
-        streaks = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, min_size,
+        result = detect_streaks(peaks, self.data, self.mask, self.structure, xtol, vmin, min_size,
                                  lookahead, nfa, num_threads=self.num_threads)
-        x0, y0, x1, y1 = np.concatenate(streaks).T
-        idxs = np.concatenate([np.full((len(val),), idx) for idx, val in enumerate(streaks)])
+        x0, y0, x1, y1 = np.concatenate([list(pattern.streaks.values()) for pattern in result]).T
+        idxs = np.concatenate([np.full((len(pattern.streaks),), idx)
+                               for idx, pattern in enumerate(result)])
 
         return Streaks(x0, y0, x1, y1, idxs)

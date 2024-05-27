@@ -725,16 +725,16 @@ class Streaks(DataContainer):
         ids, idxs = np.array(list(table)).T
         normalised_shape = (np.prod(shape[:-2], dtype=int),) + shape[-2:]
         frames, y, x = np.unravel_index(idxs, normalised_shape)
-        vals = np.array(list(table.values()))
 
         if self.hkl is not None:
+            vals = np.array(list(table.values()))
             h, k, l = self.hkl[ids].T
 
             if self.hkl_id is not None:
                 return PatternWithHKLID(ids, frames, y, x, vals, h, k, l,
                                         self.hkl_id[ids])
             return PatternWithHKL(ids, frames, y, x, vals, h, k, l)
-        return Pattern(ids, frames, y, x, vals)
+        return Pattern(ids, frames, y, x)
 
     def pattern_dataframe(self, width: float, shape: Shape,
                           kernel: str='rectangular') -> pd.DataFrame:

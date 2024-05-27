@@ -224,7 +224,8 @@ void declare_streak_finder_result(py::module & m, const std::string & typestr)
             for (auto [index, streak] : result.streaks) lines.emplace_hint(lines.end(), index, streak.line().to_array());
             return lines;
         }, nullptr)
-        .def_readonly("idxs", &StreakFinderResult<T>::idxs);
+        .def_readonly("idxs", &StreakFinderResult<T>::idxs)
+        .def("__repr__", &StreakFinderResult<T>::info);
 }
 
 }

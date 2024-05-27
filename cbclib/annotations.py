@@ -15,6 +15,7 @@ JaxRealArray = JaxArray
 JaxComplexArray = JaxArray
 
 NDArray = npt.NDArray[Any]
+NDArrayLike = npt.ArrayLike
 NDBoolArray = npt.NDArray[np.bool_]
 NDIntArray = npt.NDArray[np.integer[Any]]
 NDRealArray = npt.NDArray[np.floating[Any]]
@@ -47,7 +48,6 @@ class Pattern(NamedTuple):
     frames  : NDIntArray
     y       : NDIntArray
     x       : NDIntArray
-    rp      : NDRealArray
 
 class PatternWithHKL(NamedTuple):
     index   : NDIntArray

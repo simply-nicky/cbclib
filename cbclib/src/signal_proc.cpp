@@ -285,7 +285,7 @@ auto kr_grid(py::array_t<T, py::array::c_style | py::array::forcecast> y, py::ar
 
                     size_t index = W.ravel_index(coord);
 
-                    for (size_t j = 0; j < nf; j++) Y[index + j * wsize] += yarr[i] * warr[i] * rbf;
+                    for (size_t j = 0; j < nf; j++) Y[index + j * wsize] += yarr[i + j * npts] * warr[i] * rbf;
                     W[index] += warr[i] * warr[i] * rbf;
                 }
             });
@@ -299,7 +299,7 @@ auto kr_grid(py::array_t<T, py::array::c_style | py::array::forcecast> y, py::ar
         {
             for (size_t i = 0; i < wsize; i++)
             {
-                if (Wsum[i]) for (size_t j = 0; j < nf; j++) yharr[i + j * wsize] += Y[i + j * wsize] / Wsum[i];
+                if (W[i]) for (size_t j = 0; j < nf; j++) yharr[i + j * wsize] += Y[i + j * wsize] / Wsum[i];
             }
         }
     }
@@ -307,8 +307,6 @@ auto kr_grid(py::array_t<T, py::array::c_style | py::array::forcecast> y, py::ar
     py::gil_scoped_acquire acquire;
 
     e.rethrow();
-
-    if (yharr.shape[0] == 1) y_hat = y_hat.squeeze();
 
     return std::make_tuple(y_hat, roi);
 }

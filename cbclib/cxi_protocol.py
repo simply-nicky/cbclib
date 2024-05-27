@@ -70,34 +70,23 @@ class CXIProtocol(DataContainer):
         self.load_paths = {attr: paths for attr, paths in self.load_paths.items()
                            if CrystProtocol.get_kind(attr) != Kinds.NO_KIND}
 
-    @staticmethod
-    def initializer(load_paths: Dict[str, List[str]], attr: str):
-        global cxi_worker
-        protocol = CXIProtocol(load_paths)
+    def read_worker(self, fname: str, attr: str) -> Tuple[Any, Any, Any]:
         kind = CrystProtocol.get_kind(attr)
+        with h5py.File(fname) as cxi_file:
+            shapes = self.read_file_shapes(attr, cxi_file)
+            for cxi_path, shape in shapes.items():
+                if len(shape) not in self.get_ndim(attr):
+                    err_txt = f'Dataset at {cxi_file.filename}:'\
+                            f' {cxi_path} has invalid shape: {str(shape)}'
+                    raise ValueError(err_txt)
 
-        def _cxi_worker(fname: str) -> Tuple[Any, ...]:
-            with h5py.File(fname) as cxi_file:
-                shapes = protocol.read_file_shapes(attr, cxi_file)
-                for cxi_path, shape in shapes.items():
-                    if len(shape) not in protocol.get_ndim(attr):
-                        err_txt = f'Dataset at {cxi_file.filename}:'\
-                                f' {cxi_path} has invalid shape: {str(shape)}'
-                        raise ValueError(err_txt)
+                if kind in [Kinds.STACK, Kinds.SEQUENCE]:
+                    return (shape[0] * [cxi_file.filename,],
+                            shape[0] * [cxi_path,], range(shape[0]))
+                if kind in [Kinds.FRAME, Kinds.SCALAR]:
+                    return ([cxi_file.filename,], [cxi_path,], [tuple(),])
 
-                    if kind in [Kinds.STACK, Kinds.SEQUENCE]:
-                        return (shape[0] * [cxi_file.filename,],
-                                shape[0] * [cxi_path,], range(shape[0]))
-                    if kind in [Kinds.FRAME, Kinds.SCALAR]:
-                        return ([cxi_file.filename,], [cxi_path,], [tuple(),])
-
-                return ()
-
-        cxi_worker = _cxi_worker
-
-    @staticmethod
-    def read_worker(fname: str) -> Tuple[Any, ...]:
-        return cxi_worker(fname)
+            return ([], [], [])
 
     @classmethod
     def parser(cls, ext: str='ini') -> Parser:
@@ -211,7 +200,7 @@ class CXIProtocol(DataContainer):
 
         return shapes
 
-    def read_indices(self, attr: str, fnames: List[str], processes: int=1) -> NDArray:
+    def read_indices(self, attr: str, fnames: List[str]) -> NDArray:
         """Return a set of indices of the dataset containing the attribute's data inside a set
         of files.
 
@@ -226,13 +215,11 @@ class CXIProtocol(DataContainer):
         kind = CrystProtocol.get_kind(attr)
 
         if kind != Kinds.NO_KIND:
-            with Pool(processes=processes, initializer=type(self).initializer,
-                    initargs=(self.load_paths, attr)) as pool:
-                for idxs in pool.imap(CXIProtocol.read_worker, fnames):
-                    if len(idxs) >= 3:
-                        files.extend(idxs[0])
-                        cxi_paths.extend(idxs[1])
-                        fidxs.extend(idxs[2])
+            for fname in fnames:
+                new_files, new_cxi_paths, new_fidxs = self.read_worker(fname, attr)
+                files.extend(new_files)
+                cxi_paths.extend(new_cxi_paths)
+                fidxs.extend(new_fidxs)
 
             return np.array([files, cxi_paths, fidxs], dtype=object).T
 
@@ -242,7 +229,7 @@ class ReadWorker(Protocol):
     def __call__(self, index: NDArray, ss_idxs: Indices, fs_idxs: Indices) -> NDArray:
         ...
 
-Processor = Callable[[NDArray], NDArray]
+Processor = Callable[[NDArray], Union[NDArray, int, float]]
 
 @dataclass
 class CXIReader():
@@ -261,7 +248,7 @@ class CXIReader():
 
     @staticmethod
     def read_frame(index: NDArray, ss_idxs: Indices, fs_idxs: Indices,
-                   proc: Optional[Processor]) -> NDArray:
+                   proc: Optional[Processor]) -> Union[NDArray, int, float]:
         dset : h5py.Dataset = cast(h5py.Dataset, h5py.File(index[0])[index[1]])
         data = dset[index[2]][..., ss_idxs, fs_idxs]
         if proc is not None:
@@ -285,7 +272,7 @@ class CXIReader():
         return np.stack(stack, axis=0)
 
     def load_frame(self, index: NDArray, ss_idxs: Indices, fs_idxs: Indices,
-                   proc: Optional[Processor]) -> NDArray:
+                   proc: Optional[Processor]) -> Union[NDArray, int, float]:
         return self.read_frame(index, ss_idxs, fs_idxs, proc)
 
     def load_sequence(self, idxs: NDArray) -> NDArray:
@@ -383,7 +370,10 @@ class FileStore():
              idxs: Optional[Indices]=None):
         raise NotImplementedError
 
-    def update(self, processes: int=1):
+    def is_empty(self) -> bool:
+        raise NotImplementedError
+
+    def update(self):
         raise NotImplementedError
 
 @dataclass
@@ -488,8 +478,9 @@ class CXIStore(FileStore):
                                      processes=processes, ss_idxs=ss_idxs,
                                      fs_idxs=fs_idxs, proc=proc, verbose=verbose)
         elif kind == Kinds.FRAME:
-            return reader.load_frame(index=self.indices[attr][0], ss_idxs=ss_idxs,
-                                     fs_idxs=fs_idxs, proc=proc)
+            return np.asarray(reader.load_frame(index=self.indices[attr][0],
+                                                ss_idxs=ss_idxs, fs_idxs=fs_idxs,
+                                                proc=proc))
         elif kind == Kinds.SCALAR:
             return reader.load_sequence(idxs=self.indices[attr][0])
         elif kind == Kinds.SEQUENCE:
@@ -553,11 +544,14 @@ class CXIStore(FileStore):
 
             raise ValueError(f'Invalid kind: {kind:s}')
 
-    def update(self, processes: int=1):
+    def is_empty(self) -> bool:
+        return len(self.indices) == 0
+
+    def update(self):
         """Read the files for the data attributes contained in the protocol."""
         self.indices = {}
         for attr in self.protocol.load_paths:
-            idxs = self.protocol.read_indices(attr, list(self.files), processes)
+            idxs = self.protocol.read_indices(attr, list(self.files))
             if idxs.size:
                 self.indices[attr] = idxs
 
@@ -591,11 +585,10 @@ class ExtraProtocol(DataContainer):
 
     @classmethod
     def get_index(cls, fname: str) -> NDIntArray:
-        with h5py.File(fname) as file:
-            dset = file['INDEX/trainId']
-            if isinstance(dset, h5py.Dataset):
-                return dset[()]
-            raise ValueError("No index dataset in file " + str(fname))
+        with h5py.File(fname, 'r') as file:
+            index: NDIntArray = cast(h5py.Dataset, file['INDEX/trainId'])[()]
+
+        return index
 
     @classmethod
     def get_index_and_run(cls, fname: str) -> NDIntArray:
@@ -650,15 +643,10 @@ class ExtraProtocol(DataContainer):
     def read_frame_shape(self) -> Shape:
         return self.detector_geometry().output_array_for_position().shape
 
-    def read_indices(self, run: Union[int, List[int]], include: str='*',
-                     processes: int=1) -> NDIntArray:
+    def read_indices(self, run: Union[int, List[int]], include: str='*') -> NDIntArray:
         files = self.find_files(self.find_proposal(), run, include)
 
-        tids = []
-        with Pool(processes=processes) as pool:
-            for tid in pool.imap_unordered(ExtraProtocol.get_index_and_run, files):
-                tids.append(tid)
-
+        tids = [self.get_index_and_run(file) for file in files]
         return np.unique(np.concatenate(tids), axis=0)
 
 @dataclass
@@ -674,16 +662,16 @@ class ExtraReader():
                          attr=attr, ss_idxs=ss_idxs, fs_idxs=fs_idxs, proc=proc)
 
     @staticmethod
-    def read_worker(index: NDArray) -> NDArray:
+    def read_worker(index: NDArray) -> Union[NDArray, int, float]:
         return worker(index)
 
     def read_frame(self, index: NDArray, attr: str, ss_idxs: Indices,
-                   fs_idxs: Indices, proc: Optional[Processor]) -> NDArray:
+                   fs_idxs: Indices, proc: Optional[Processor]) -> Union[NDArray, int, float]:
         run = self.protocol.open_run(index[0])
         _, train_data = cast(Tuple[Any, Dict[str, Any]], run.train_from_id(index[1]))
         data = self.protocol.detector_data(attr, train_data)
         data = np.nan_to_num(data, nan=0, posinf=0, neginf=0)
-        data = np.nan_to_num(self.geom.position_modules(data)[0])[..., ss_idxs, fs_idxs]
+        data = np.nan_to_num(np.squeeze(self.geom.position_modules(data)[0]))[..., ss_idxs, fs_idxs]
         if proc is not None:
             data = proc(data)
         return data
@@ -707,9 +695,7 @@ class ExtraStore(FileStore):
 
     @property
     def size(self) -> int:
-        if self.indices is not None:
-            return self.indices.shape[0]
-        return 0
+        return self.indices.shape[0]
 
     def attributes(self) -> List[str]:
         return list(self.protocol.data_paths)
@@ -727,5 +713,8 @@ class ExtraStore(FileStore):
     def read_frame_shape(self) -> Shape:
         return self.protocol.read_frame_shape()
 
-    def update(self, processes: int=1):
-        self.indices = self.protocol.read_indices(self.runs, processes=processes)
+    def is_empty(self) -> bool:
+        return self.size == 0
+
+    def update(self):
+        self.indices = self.protocol.read_indices(self.runs)

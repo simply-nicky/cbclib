@@ -10,7 +10,8 @@ from .cbc_setup import Basis, Rotation, Sample, ScanSamples, ScanSetup, Streaks,
 from .cxi_protocol import CXIProtocol, CXIStore, ExtraProtocol, ExtraStore
 from .log_protocol import LogProtocol, LogContainer
 from .data_container import Transform, Crop, Downscale, Mirror, ComposeTransforms
-from .data_processing import read_hdf, write_hdf, CrystData, CrystDataPart, CrystDataFull, LineDetector, ModelDetector
+from .data_processing import (read_hdf, write_hdf, CrystData, CrystDataPart, CrystDataFull,
+                              StreakDetector, RegionDetector, ModelDetector)
 from .streak_finder import PatternStreakFinder, PatternsStreakFinder, StreakFinderResult
 from . import bin
 from . import src

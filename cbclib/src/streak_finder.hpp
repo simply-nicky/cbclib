@@ -398,8 +398,8 @@ struct StreakFinderResult
 
     std::string info() const
     {
-        return "<StreakFinderResult, mask.shape = (" + std::to_string(mask.shape[0]) + ", " + std::to_string(mask.shape[1]) +
-               "), idxs.size = " + std::to_string(idxs.size()) + ", streaks.size = " + std::to_string(streaks.size()) + ">";
+        return "<StreakFinderResult, mask = <array, shape = {" + std::to_string(mask.shape[0]) + ", " + std::to_string(mask.shape[1]) +
+               "}>, idxs = <list, size = " + std::to_string(idxs.size()) + ">, streaks = <dict, size = " + std::to_string(streaks.size()) + ">>";
     }
 
 private:
@@ -539,8 +539,8 @@ struct StreakFinder
 
     std::string info() const
     {
-        return "<StreakFinder, struct = " + structure.info() + ", lookahead = " + std::to_string(lookahead) +
-               ", nfa = " + std::to_string(nfa) + ">";
+        return "<StreakFinder, struct = " + structure.info() + ", min_size = " + std::to_string(min_size) +
+               ", lookahead = " + std::to_string(lookahead) + ", nfa = " + std::to_string(nfa) + ">";
     }
 
 private:

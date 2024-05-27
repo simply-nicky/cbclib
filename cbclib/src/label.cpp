@@ -127,13 +127,13 @@ PYBIND11_MODULE(label, m)
         .def_readonly("shape", &Regions::shape)
         .def("__delitem__", [](Regions & regions, size_t i)
         {
-                 if (i >= regions.regions.size()) throw py::index_error();
-                 regions.regions.erase(std::next(regions.regions.begin(), i));
+            if (i >= regions.regions.size()) throw py::index_error();
+            regions.regions.erase(std::next(regions.regions.begin(), i));
         })
         .def("__getitem__", [](const Regions & regions, size_t i)
         {
-                 if (i >= regions.regions.size()) throw py::index_error();
-                 return regions.regions[i];
+            if (i >= regions.regions.size()) throw py::index_error();
+            return regions.regions[i];
         })
         .def("__setitem__", [](Regions & regions, size_t i, PointsSet region)
         {
@@ -226,7 +226,27 @@ PYBIND11_MODULE(label, m)
         .def("moments", [](Regions & regions, py::array_t<float> data)
         {
             return regions.moments(array<float>{data.request()});
-        }, py::arg("data"));
+        }, py::arg("data"))
+        .def_property("x", [](const Regions & regions)
+        {
+            std::vector<typename PointsSet::value_type> x;
+            for (auto region : regions.regions)
+            {
+                auto x_vec = region.x();
+                std::copy(std::make_move_iterator(x_vec.begin()), std::make_move_iterator(x_vec.end()), std::back_inserter(x));
+            }
+            return x;
+        }, nullptr)
+        .def_property("y", [](const Regions & regions)
+        {
+            std::vector<typename PointsSet::value_type> y;
+            for (auto region : regions.regions)
+            {
+                auto y_vec = region.y();
+                std::copy(std::make_move_iterator(y_vec.begin()), std::make_move_iterator(y_vec.end()), std::back_inserter(y));
+            }
+            return y;
+        }, nullptr);
 
     m.def("label", &label<float>, py::arg("mask"), py::arg("structure"), py::arg("npts") = 1, py::arg("axes") = std::nullopt, py::arg("num_threads") = 1);
     m.def("label", &label<double>, py::arg("mask"), py::arg("structure"), py::arg("npts") = 1, py::arg("axes") = std::nullopt, py::arg("num_threads") = 1);

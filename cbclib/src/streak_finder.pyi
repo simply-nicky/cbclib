@@ -125,7 +125,7 @@ class StreakFinder:
 def detect_streaks(peaks: List[Peaks], data: NDRealArray, mask: NDBoolArray,
                    structure: Structure, xtol: float, vmin: float, min_size: int,
                    lookahead: int=0, nfa: int=0, axes: Optional[Tuple[int, int]]=None,
-                   num_threads: int=1) -> List[List[Line]]:
+                   num_threads: int=1) -> List[StreakFinderResult]:
     """Streak finding algorithm. Starting from the set of seed peaks, the lines are iteratively
     extended with a connectivity structure.
 
